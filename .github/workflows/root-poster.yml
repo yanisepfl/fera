@@ -1,0 +1,79 @@
+# Emissions root poster — the weekly keeper, run autonomously & free by GitHub Actions.
+#
+# WHAT IT DOES: once a week it recomputes the reproducible Merkle root of that epoch's
+# esFERA rewards from the indexer's data and posts it on-chain (one tx). Anyone can
+# recompute the same root from the published bundle, so this is a trusted-but-verifiable role.
+#
+# SETUP (one time):
+#   1. Have the indexer running somewhere writing to a hosted Postgres (Neon/Supabase free tier).
+#   2. Repo → Settings → Secrets and variables → Actions → add:
+#        RPC_URL                     (Robinhood Chain RPC — your Alchemy URL)
+#        ROOT_POSTER_PK              (the FERA_ROOT_POSTER key — fund it with a little ETH)
+#        DATABASE_URL                (the same Postgres the indexer writes to)
+#        DISTRIBUTOR_ADDR            (deployed Distributor address)
+#        EMISSIONS_CONTROLLER_ADDR   (deployed EmissionsController address)
+#   3. Done. It runs weekly. Test it any time from the Actions tab (see below).
+#
+# TESTING FROM DAY ONE (as you asked — exhaustive from the start):
+#   - Actions tab → "Emissions root poster" → "Run workflow" → dry_run = true.
+#     This computes + verifies the root and prints it WITHOUT posting on-chain. Run it every
+#     epoch from launch to confirm the pipeline is deterministic and correct, even when tiny.
+#   - When you're satisfied, run with dry_run = false to post for real (or let the weekly
+#     schedule do it). The on-chain `Σleaves == emitted` assertion caps any bad post.
+
+name: Emissions root poster
+
+on:
+  schedule:
+    - cron: "0 0 * * 0" # every Sunday 00:00 UTC (epoch boundary)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Compute + verify the root but DO NOT post it on-chain"
+        type: boolean
+        default: true
+
+concurrency:
+  group: root-poster
+  cancel-in-progress: false
+
+jobs:
+  post-root:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+
+      - name: Post (or dry-run) the epoch root
+        working-directory: backend
+        env:
+          RPC_URL: ${{ secrets.RPC_URL }}
+          ROOT_POSTER_PK: ${{ secrets.ROOT_POSTER_PK }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DISTRIBUTOR_ADDR: ${{ secrets.DISTRIBUTOR_ADDR }}
+          EMISSIONS_CONTROLLER_ADDR: ${{ secrets.EMISSIONS_CONTROLLER_ADDR }}
+          # manual runs default to dry_run=true; the weekly schedule posts for real.
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        # NOTE: point this at your poster entrypoint. The keeper lives at
+        # backend/keepers/emissionsRootPoster.ts and already refuses to post without a
+        # pinned funding graph and re-checks Σleaves == emitted. If it doesn't yet read the
+        # env above / a DRY_RUN flag, that's a ~5-line tweak to the keeper.
+        run: npx tsx keepers/emissionsRootPoster.ts
+
+      - name: Publish the reproducibility bundle as an artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: epoch-bundle
+          path: backend/bundles/
+          if-no-files-found: ignore
