@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
+import { Logo } from "@/components/ui/Logo";
 import { ConnectButton } from "./ConnectButton";
 
 /**
@@ -27,12 +28,7 @@ export function TopNav() {
     <header className="sticky top-0 z-30 border-b border-line bg-well/80 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-app items-center gap-6 px-4 md:px-6">
         <Link href="/app" className="flex items-center gap-2 shrink-0">
-          <span
-            className="grid h-6 w-6 place-items-center rounded-md text-[13px] font-bold"
-            style={{ background: "var(--accent)", color: "var(--on-accent)" }}
-          >
-            F
-          </span>
+          <Logo className="h-6 w-6" />
           <span className="text-heading font-semibold tracking-tight">FERA</span>
         </Link>
 

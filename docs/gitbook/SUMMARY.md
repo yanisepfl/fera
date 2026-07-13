@@ -9,6 +9,10 @@
 * [How the dynamic fee works](how-fees-work.md)
 * [Rewards & vesting](rewards-and-vesting.md)
 
+## For Projects
+
+* [Bootstrapping your token's liquidity](for-projects.md)
+
 ## Tokenomics & Transparency
 
 * [Emissions & tokenomics](emissions-and-tokenomics.md)

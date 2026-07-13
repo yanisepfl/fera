@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/ui/Logo";
 
 /**
  * Marketing landing (front door, "/"). alphix-family aesthetic: dark-first,
@@ -42,12 +43,7 @@ function MarketingHeader() {
     <header className="sticky top-0 z-30 border-b border-line bg-well/80 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-app items-center gap-6 px-4 md:px-6">
         <Link href="/" className="flex items-center gap-2 shrink-0">
-          <span
-            className="grid h-6 w-6 place-items-center rounded-md text-[13px] font-bold"
-            style={{ background: "var(--accent)", color: "var(--on-accent)" }}
-          >
-            F
-          </span>
+          <Logo className="h-6 w-6" />
           <span className="text-heading font-semibold tracking-tight">FERA</span>
         </Link>
 
@@ -362,12 +358,7 @@ function MarketingFooter() {
         <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
           <div className="max-w-sm">
             <div className="flex items-center gap-2">
-              <span
-                className="grid h-6 w-6 place-items-center rounded-md text-[13px] font-bold"
-                style={{ background: "var(--accent)", color: "var(--on-accent)" }}
-              >
-                F
-              </span>
+              <Logo className="h-6 w-6" />
               <span className="text-heading font-semibold tracking-tight">FERA</span>
             </div>
             <p className="mt-3 text-body-sm text-dim">
@@ -392,6 +383,11 @@ function MarketingFooter() {
                 {
                   href: "https://fera-3.gitbook.io/fera/",
                   label: "Docs",
+                  external: true,
+                },
+                {
+                  href: "https://fera-3.gitbook.io/fera/for-projects",
+                  label: "For projects",
                   external: true,
                 },
               ]}

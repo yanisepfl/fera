@@ -1,0 +1,24 @@
+<!--
+  Next.js app-router metadata file convention: co-located here as `icon.svg`,
+  it's auto-detected and injected as the favicon/tab icon (no manifest or
+  <link> tag needed). Content is copied verbatim from
+  public/brand/mark-on-dark.svg (the mark pre-set on a Void rounded square —
+  see BRAND.md), since a favicon needs an opaque backing the transparent
+  mark.svg doesn't have.
+
+  TODO (future, non-blocking): for older browsers/platforms that don't honor
+  SVG favicons (legacy Safari pinned-tab, some Android launchers), generate a
+  raster fallback (favicon.ico / apple-icon.png) from this same source —
+  public/brand/mark-on-dark.svg — at 32x32 / 180x180 etc. Not done here since
+  this environment has no raster export tooling available.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <rect width="100" height="100" rx="20" fill="#0A0A0B" />
+  <g transform="translate(6 6) scale(0.88) skewX(-8)" fill="#E7B84B">
+    <rect x="25" y="14" width="13" height="74" />
+    <rect x="38" y="14" width="32" height="13" />
+    <polygon points="70,14 70,27 86,20.5" />
+    <rect x="38" y="42" width="22" height="12" />
+    <polygon points="60,42 60,54 72,48" />
+  </g>
+</svg>
