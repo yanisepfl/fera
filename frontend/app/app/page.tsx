@@ -9,7 +9,7 @@ export default function EarnPage() {
       <PageHeader
         eyebrow="Earn"
         title="LP where every flow pays you"
-        subtitle="Regime-aware fees turn toxic, bot, and weekend-drift volume into LP income. Deposit into a managed vault, hold a normal ERC-20 share, earn fee-yield plus esFERA."
+        subtitle="Regime-aware fees turn toxic, bot, and weekend-drift volume into LP income. Deposit into a managed vault, hold a normal ERC-20 share, and earn fee yield plus esFERA."
       />
 
       <FeaturedHero />
@@ -39,7 +39,7 @@ export default function EarnPage() {
           },
           {
             t: "Emissions ≤ revenue",
-            d: "esFERA issuance can never exceed protocol revenue (β-bounded), split 85/5/10. A dividend of activity, not a subsidy.",
+            d: "esFERA issuance can never exceed protocol revenue (β-bounded), split 85/5/10. A share of real activity, not a subsidy.",
           },
         ].map((x) => (
           <div

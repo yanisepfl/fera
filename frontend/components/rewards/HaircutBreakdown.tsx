@@ -60,7 +60,7 @@ export function HaircutBreakdown({
         </div>
       </div>
 
-      {/* forfeiture routing — INV-9 */}
+      {/* forfeiture routing, INV-9 */}
       {!compact ? (
         <div className="rounded-lg border border-line bg-card p-3">
           <div className="overline mb-2">

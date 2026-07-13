@@ -10,7 +10,7 @@ export default function SwapPage() {
       <PageHeader
         eyebrow="Swap"
         title="Every fee, explained"
-        subtitle="FERA pools are ordinary flagless Uniswap v4 pools — any router reaches them. The only thing that moves is the LP fee, and it always tells you why it is what it is."
+        subtitle="FERA pools are ordinary flagless Uniswap v4 pools, so any router reaches them. The only thing that moves is the LP fee, and it always tells you why it is what it is."
       />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_0.8fr]">
@@ -38,7 +38,7 @@ export default function SwapPage() {
             <p className="text-body-sm text-dim">
               You are never charged a protocol fee, never allow-listed, never paused
               (INV-2 / INV-11). The dynamic fee is the LPs&apos; compensation for
-              taking the other side of your flow — nothing is skimmed to FERA.
+              taking the other side of your flow. Nothing is skimmed to FERA.
             </p>
           </div>
         </aside>

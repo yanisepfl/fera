@@ -14,7 +14,7 @@ export default function RewardsPage() {
       <PageHeader
         eyebrow="Rewards"
         title="Your epoch, your esFERA"
-        subtitle="Emissions are a dividend of activity: 80% to LPs (pro-rata to fees earned), 10% to traders (pro-rata to fees paid), 10% to treasury — capped so issuance can never exceed revenue (INV-7). Claim, vest, or stake for real revenue share."
+        subtitle="Emissions track real activity: 85% to LPs (pro-rata to fees earned), 5% to traders (pro-rata to fees paid), and 10% to treasury, capped so issuance can never exceed revenue (INV-7). Claim, vest, or stake for a real revenue share."
       />
 
       {/* current epoch: countdown + fees paid/earned + projected esFERA */}

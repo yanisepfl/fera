@@ -12,7 +12,7 @@ import type { PoolSummary, Position } from "@/lib/types";
 
 /**
  * Withdraw dialog. Its whole reason to exist beyond a plain "burn shares" flow is to make the
- * early-exit fee-forfeiture penalty (INV-1″ / D-14) impossible to miss BEFORE confirm — the
+ * early-exit fee-forfeiture penalty (INV-1″ / D-14) impossible to miss BEFORE confirm, the
  * same rigor as the esFERA instant-exit haircut. If the position is inside its JIT window the
  * user sees, live, exactly how much accrued fee they'd forfeit and must tick an ack.
  */
@@ -98,7 +98,7 @@ export function WithdrawDialog({
 
               <p className="text-caption text-mute">
                 Principal is returned in full and a withdrawal is never blocked (INV-11). Any
-                pending esFERA keeps vesting — withdrawing shares doesn&apos;t forfeit it.
+                pending esFERA keeps vesting. Withdrawing shares doesn&apos;t forfeit it.
               </p>
 
               {needsAck ? (

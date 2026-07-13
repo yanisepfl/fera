@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { usdCompact, usd } from "@/lib/format";
 
 /**
- * RevenueDistributor split — GET /transparency/revenue (§8). Every inflow is split
+ * RevenueDistributor split, from GET /transparency/revenue (§8). Every inflow is split
  * exactly 50/25/25 (stakers / treasury / ops) with no rounding dust escaping (INV-10).
  */
 export function RevenueFlows() {
@@ -22,21 +22,21 @@ export function RevenueFlows() {
       pct: 50,
       amount: data.toStakers,
       color: "var(--pos)",
-      note: "50% — real revenue share (sFERA)",
+      note: "Real revenue share, paid to sFERA stakers",
     },
     {
       label: "Treasury",
       pct: 25,
       amount: data.toTreasury,
       color: "var(--rwa)",
-      note: "25% — 48h timelocked sink",
+      note: "48h timelocked sink",
     },
     {
       label: "Ops",
       pct: 25,
       amount: data.toOps,
       color: "var(--text-mute)",
-      note: "25% — operations",
+      note: "Operations",
     },
   ];
 

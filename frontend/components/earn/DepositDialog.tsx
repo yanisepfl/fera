@@ -17,7 +17,7 @@ import type { PoolSummary, RiskClass } from "@/lib/types";
  * 2-click deposit:  [Deposit] → set amount + Confirm.
  * RWA pools pass through the config-driven geo-fence (config/geo.ts): blocked
  * regions can't deposit; ack regions must tick a risk box first. Swaps are never
- * gated by this (INV-2) — only the LP affordance is.
+ * gated by this (INV-2); only the LP affordance is.
  */
 export function DepositDialog({
   pool,
@@ -113,7 +113,7 @@ export function DepositDialog({
               </p>
               <p className="text-caption text-mute">
                 You now hold vault shares (ERC-20). Fees + esFERA emissions accrue to them
-                automatically — emissions are the vault&apos;s exclusive reward (INV-14).
+                automatically. Emissions are the vault&apos;s exclusive reward (INV-14).
               </p>
               <Button className="w-full" onClick={reset}>
                 Done
@@ -148,7 +148,7 @@ export function DepositDialog({
                 variant="compact"
               />
 
-              {/* APY split preview — fee-yield vs emissions, for the CHOSEN profile */}
+              {/* APY split preview: fee yield vs emissions, for the CHOSEN profile */}
               <div className="grid grid-cols-3 gap-2 rounded-lg border border-line bg-card p-3 text-center">
                 <div>
                   <div className="overline mb-1">Fee APR</div>
@@ -173,10 +173,10 @@ export function DepositDialog({
               <p className="text-caption text-mute">
                 Live fee {feePipsToPct(pool.currentFeePips)} · TVL{" "}
                 {usdCompact(pool.tvlUsd)} · 10% performance fee applies only to fees
-                you earn, never to principal.
+                you earn, never to principal. Half of it flows back to stakers.
               </p>
 
-              {/* early-exit fee-forfeiture window — impossible to miss before confirm */}
+              {/* early-exit fee-forfeiture window, impossible to miss before confirm */}
               <JitPenaltyNotice regime={pool.regime} mode="deposit" />
 
               {geo.needsAck ? (

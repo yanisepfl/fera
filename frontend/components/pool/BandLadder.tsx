@@ -25,7 +25,7 @@ function relPct(k?: number): { lo: number; hi: number } {
 /**
  * MEME band ladder (VAULT_ARCHITECTURE §2.1). Renders the discrete principal bands
  * (Core / Mid / Tail) plus fee-drip bands on a shared log-price axis centered on spot, so a
- * depositor can SEE that liquidity is shaped — concentrated at price, fat tails for crashes —
+ * depositor can SEE that liquidity is shaped: concentrated at price, fat tails for crashes,
  * not a single full-range blob and not something that churns principal.
  */
 export function BandLadder({ pool }: { pool: PoolDetail }) {
@@ -51,7 +51,7 @@ export function BandLadder({ pool }: { pool: PoolDetail }) {
         eyebrow="MEME strategy · shaped liquidity"
         title="The band ladder"
         action={
-          <InfoTip text="Principal is minted once as a ladder of discrete bands — concentrated near price (wins routing), fat tails for crash coverage. Weights 30/40/30 (Core/Mid/Tail). Fee income drips into new bands at spot to follow price; principal bands are never closed or swapped (INV-5″)." />
+          <InfoTip text="Principal is minted once as a ladder of discrete bands: concentrated near price (wins routing), fat tails for crash coverage. Weights 30/40/30 (Core/Mid/Tail). Fee income drips into new bands at spot to follow price; principal bands are never closed or swapped (INV-5″)." />
         }
       />
       <div className="px-5 pb-5 space-y-4">
@@ -87,7 +87,7 @@ export function BandLadder({ pool }: { pool: PoolDetail }) {
                     background: rm.wash,
                     borderColor: rm.color,
                   }}
-                  title={`${rm.label} — ${b.isPrincipal ? "principal" : "fee-drip"}`}
+                  title={`${rm.label}: ${b.isPrincipal ? "principal" : "fee-drip"}`}
                 >
                   <span
                     className="absolute left-1.5 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-semibold"
@@ -130,7 +130,7 @@ export function BandLadder({ pool }: { pool: PoolDetail }) {
                   {b.weightBps ? `${(b.weightBps / 100).toFixed(0)}%` : "fee income"}
                 </span>
                 <span className="w-14 text-right font-mono tnum text-text">
-                  {b.depthMult ? `${multiple(b.depthMult, 1)}` : "—"}
+                  {b.depthMult ? `${multiple(b.depthMult, 1)}` : "-"}
                 </span>
               </div>
             );
@@ -144,7 +144,7 @@ export function BandLadder({ pool }: { pool: PoolDetail }) {
         </div>
 
         <p className="text-caption text-mute">
-          Weighted at-spot depth is ≈4.1× a single full-range position per dollar — before a
+          Weighted at-spot depth is ≈4.1× a single full-range position per dollar, before a
           single extra deposit. <span className="text-pos">Solid</span> bands are principal
           (never churned); <span className="text-pos">dashed</span> are fee-drip bands the
           vault mints at spot from collected fees.

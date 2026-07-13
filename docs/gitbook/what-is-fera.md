@@ -1,11 +1,11 @@
 # What is FERA?
 
-FERA is a way to **provide liquidity** — to be the counterparty that traders swap against — on
-Robinhood Chain, and get paid better for it than a plain liquidity pool would pay you.
+FERA is a way to **provide liquidity** (to be the counterparty that traders swap against) on
+Robinhood Chain, and get paid better for it than a plain liquidity pool would.
 
 It has two parts:
 
-1. **A smart fee (the hook).** FERA runs on a Uniswap v4 "hook" — a small piece of code that sets
+1. **A smart fee (the hook).** FERA runs on a Uniswap v4 "hook", a small piece of code that sets
    the swap fee *per trade, based on live market conditions*. When flow is dangerous to liquidity
    providers (violent memecoin moves, bots, weekend stock-token drift), the fee goes up. When flow
    is benign, the fee goes down. Traders always get to swap; they just pay what the moment is worth.
@@ -19,7 +19,7 @@ Ordinary liquidity providers lose money to two things: **volatile flow** (bots a
 moves pick them off) and **structural arbitrage** (tokenized stocks drift from their real price over
 the weekend, and someone arbitrages that gap at the liquidity provider's expense).
 
-FERA's bet is simple: **that flow isn't the enemy — it's underpriced.** Instead of trying to block
+FERA's bet is simple: **that flow isn't the enemy. It's underpriced.** Instead of trying to block
 bots or fight arbitrageurs, FERA charges them a fee that matches how toxic their flow is, and that
 fee goes to you, the liquidity provider.
 
@@ -34,7 +34,7 @@ fee goes to you, the liquidity provider.
 The exact formulas, with worked numbers, are in [How the dynamic fee works](how-fees-work.md).
 
 FERA does **not** change your impermanent loss. Over the same price path, your IL is the same as it
-would be in a vanilla pool. The entire difference FERA makes is **fee capture** — you collect more
+would be in a vanilla pool. The entire difference FERA makes is **fee capture**: you collect more
 of the fees on the flow that matters. (See [Risks](risks.md) for what impermanent loss is and why it
 still applies.)
 
@@ -44,13 +44,13 @@ You already LP the hot WETH/memecoin pairs and chase emissions. FERA gives you:
 
 - **Higher fee capture on violent pairs.** The fee scales up exactly when the action is craziest. A
   dump that would bleed a vanilla LP instead pays an elevated (asymmetric) fee.
-- **A token to farm — honestly.** Depositing into the vault makes you eligible for FERA emissions
-  (paid as esFERA). Directly LPing the same pool does *not* earn emissions — the vault is the only
+- **A token to farm, honestly.** Depositing into the vault makes you eligible for FERA emissions
+  (paid as esFERA). Directly LPing the same pool does *not* earn emissions. The vault is the only
   door to them. But read [Emissions](emissions-and-tokenomics.md) first: early emissions are
   **small** by design, because emissions are capped by real protocol revenue. We are not selling you
   a fat emission APR.
 - **The "Active" risk profile.** On memecoin pools, your liquidity sits concentrated near the price
-  for maximum fee capture (and maximum IL — that's the trade-off).
+  for maximum fee capture (and maximum IL, which is the trade-off).
 
 ## For someone LPing NVDA
 
@@ -59,7 +59,7 @@ the shares you already hold, without becoming a market maker. FERA gives you:
 
 - **The weekend-drift story, in your favour.** Your stock tokens drift from the cash price over the
   weekend and snap back at Monday's open. In a normal pool, that reconciliation is a recurring
-  *loss* to you — you're the one being arbitraged. FERA's RWA fee turns that same drift into
+  *loss* to you: you're the one being arbitraged. FERA's RWA fee turns that same drift into
   recurring *income*: the arbitrageur pays a widened fee to close the gap.
 - **The "Steady" risk profile.** Your liquidity sits in a wide range that stays in-range through
   crashes and rebounds, so less impermanent loss is realized. You earn a thinner but steadier slice
@@ -76,7 +76,7 @@ jurisdiction (swaps are never gated). See [Risks](risks.md#rwa-and-geo-fencing).
   and volatility, both of which vary.
 - **Not a way to beat a professional market maker.** A skilled person hand-managing a tight range
   will typically capture more fees per dollar than the vault. The vault sells *management,
-  emissions-eligibility, simplicity, and a risk-profile choice* — not higher yield than a pro. We're
+  emissions-eligibility, simplicity, and a risk-profile choice*, not higher yield than a pro. We're
   explicit about this because it's the easiest thing to overstate.
 - **Not an MEV solution (yet).** v1 *prices* toxic swap flow through fees. It does not auction the
   block or "capture the MEV." That's a v2 roadmap idea, not a v1 claim.
@@ -85,7 +85,7 @@ jurisdiction (swaps are never gated). See [Risks](risks.md#rwa-and-geo-fencing).
 
 ## Where FERA runs
 
-Robinhood Chain — a permissionless Arbitrum Orbit L2 with ~100ms blocks, ETH for gas, and Chainlink
+Robinhood Chain is a permissionless Arbitrum Orbit L2 with ~100ms blocks, ETH for gas, and Chainlink
 as the chain's oracle infrastructure. Uniswap (v2/v3/v4) is the chain's primary AMM, and ~95
 Robinhood-issued stock tokens trade there 24/7 alongside memecoins. FERA deploys pools for pairs
 that are *already trading*, so there's real flow to price from day one.

@@ -19,10 +19,10 @@ function useNow(intervalMs = 1000) {
 }
 
 /**
- * Current (unfinalized) weekly epoch — GET /epochs/current (§8).
+ * Current (unfinalized) weekly epoch, from GET /epochs/current (§8).
  * Shows the countdown to close, the account's fees PAID (drives the 5% trader
  * bucket) vs fees EARNED (drives the 85% LP bucket), and the projected esFERA at
- * the current pro-rata. Nothing here is claimable yet — that happens once the
+ * the current pro-rata. Nothing here is claimable yet. That happens once the
  * epoch finalizes and a Merkle root is posted (see ClaimsCard).
  */
 export function EpochPanel() {
@@ -54,7 +54,7 @@ export function EpochPanel() {
           </div>
           <p className="text-caption text-mute">
             Weekly epochs. At close, Backend snapshots events, computes the Merkle
-            root (§9), and a keeper posts it on-chain — then rewards become claimable.
+            root (§9), and a keeper posts it on-chain. Then rewards become claimable.
           </p>
         </div>
 

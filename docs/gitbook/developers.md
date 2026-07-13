@@ -1,7 +1,7 @@
 # Developers
 
 This page orients a developer or integrator in the FERA repository. It points at the authoritative
-specs rather than restating them — those documents are the source of truth and are kept in the repo.
+specs rather than restating them. Those documents are the source of truth and are kept in the repo.
 
 ## Architecture in one picture
 
@@ -36,11 +36,11 @@ market-hours, RWA strategy, oracle-staleness, event-calendar, and root-posting j
 
 | Path | Contents |
 |------|----------|
-| `contracts/` | Foundry project — the hook, vault, token, emissions, staking, treasury. Money-path Solidity. |
+| `contracts/` | Foundry project: the hook, vault, token, emissions, staking, treasury. Money-path Solidity. |
 | `backend/` | Ponder indexer, REST/JSON API, the consensus-critical emissions pipeline, keepers, ops. |
 | `frontend/` | Next.js app + design system (`frontend/DESIGN.md`). |
 | `docs/gitbook/` | This documentation set (GitBook-synced). |
-| `docs/` | Reference specs — `MASTER_SPEC.md`, `mechanism/MECHANISM_SPEC.md` + `PARAMS.md`, `VAULT_ARCHITECTURE.md`, `CHAIN.md`, `RISK_REGISTER.md`, `deployment/`. |
+| `docs/` | Reference specs: `MASTER_SPEC.md`, `mechanism/MECHANISM_SPEC.md` + `PARAMS.md`, `VAULT_ARCHITECTURE.md`, `CHAIN.md`, `RISK_REGISTER.md`, `deployment/`. |
 | `security/` | The security review reports (see [Security](security.md)). |
 
 ## The contracts
@@ -49,14 +49,14 @@ Ten money-path contracts under `contracts/src/`:
 
 | Contract | Role |
 |----------|------|
-| `FeraHook.sol` | Uniswap v4 hook — sets the per-swap dynamic fee, checkpoints fees, enforces the anti-JIT forfeiture. |
-| `FeraVault.sol` | Managed vault — shaped band ladders, risk profiles, deposit/withdraw, drip/recenter strategy. |
+| `FeraHook.sol` | Uniswap v4 hook: sets the per-swap dynamic fee, checkpoints fees, enforces the anti-JIT forfeiture. |
+| `FeraVault.sol` | Managed vault: shaped band ladders, risk profiles, deposit/withdraw, drip/recenter strategy. |
 | `FeraShare.sol` | ERC-20 share token per pool/profile. |
-| `FeraToken.sol` | FERA — fixed 1,000,000,000 supply, no inflation knob. |
-| `EsFera.sol` | Escrowed FERA — linear 6-month vest, 50% instant-exit haircut with the 3-way forfeit split. |
+| `FeraToken.sol` | FERA: fixed 1,000,000,000 supply, no inflation knob. |
+| `EsFera.sol` | Escrowed FERA: linear 6-month vest, 50% instant-exit haircut with the 3-way forfeit split. |
 | `EmissionsController.sol` | Enforces `emitted ≤ min(cap(t), β × revenue)` each epoch. |
 | `Distributor.sol` | Merkle-root emission claims; caps cumulative claims at the funded envelope. |
-| `AnchorStaking.sol` | Staking (sFERA) — LP-emission boost + multi-token revenue share (curated allowlist). |
+| `AnchorStaking.sol` | Staking (sFERA): LP-emission boost + multi-token revenue share (curated allowlist). |
 | `RevenueDistributor.sol` | Splits the 10% performance-fee revenue 50/25/25 (stakers/treasury/ops). |
 | `Treasury.sol` | Protocol treasury behind a 48-hour timelock. |
 
@@ -71,7 +71,7 @@ Full setup is in `contracts/SETUP.md`. Short version (Foundry, Solidity 0.8.26, 
 
 ```bash
 cd contracts
-git submodule update --init --recursive   # deps are pinned submds — do NOT run `forge install`
+git submodule update --init --recursive   # deps are pinned submds; do NOT run `forge install`
 forge build                                # ~120s first build (canonical v4 optimizer_runs)
 forge test                                 # unit + hook + integration + invariant suites
 forge test --gas-report                    # hook beforeSwap+afterSwap ≤ 40k gas budget
@@ -92,7 +92,7 @@ budget, hook-address check, static analysis) are in `.github/workflows/`.
 
 ## Chain & deployment
 
-FERA targets **Robinhood Chain** (mainnet chain ID **4663**, testnet **46630**) — an Arbitrum Orbit
+FERA targets **Robinhood Chain** (mainnet chain ID **4663**, testnet **46630**), an Arbitrum Orbit
 L2, ETH for gas, ~100 ms soft blocks, FCFS sequencing, Chainlink as the chain's oracle infra.
 
 - **Chain facts, canonical Uniswap/Chainlink addresses, and the confidence tags** are in

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { shortHex } from "@/lib/format";
 
 /**
- * Wallet connect — RainbowKit's modal (family-standard WalletConnect UX) triggered by a
+ * Wallet connect via RainbowKit's modal (family-standard WalletConnect UX) triggered by a
  * button rendered in the FERA design system, so the connect affordance stays calm and
  * in-aesthetic (DESIGN.md) instead of RainbowKit's stock chrome. Same export name as
  * before, so TopNav and the landing import it unchanged.

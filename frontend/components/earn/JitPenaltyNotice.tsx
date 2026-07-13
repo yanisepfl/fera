@@ -12,8 +12,8 @@ import { cn } from "@/lib/cn";
  * user must not be able to miss that removing liquidity inside the penalty window forfeits
  * their *accrued fees* (never principal) to the LPs still in range.
  *
- *   mode="deposit"  — forward-looking rule that WILL apply to this fresh position.
- *   mode="withdraw" — LIVE: given the position's last add + accrued fees, show exactly what
+ *   mode="deposit"  is a forward-looking rule that WILL apply to this fresh position.
+ *   mode="withdraw" is LIVE: given the position's last add + accrued fees, show exactly what
  *                     an exit right now would forfeit, ticking down as the window lapses.
  */
 export function JitPenaltyNotice({
@@ -56,7 +56,7 @@ export function JitPenaltyNotice({
         <p className="mt-1 text-caption text-dim">
           If you withdraw within{" "}
           <span className="font-semibold text-text">{win}</span> of a deposit, you forfeit the
-          swap fees this position accrued in that window — donated to the LPs still in range.
+          swap fees this position accrued in that window. They go to the LPs still in range.
           The penalty decays linearly to zero across the window. Your{" "}
           <span className="font-semibold text-text">principal is never touched and a
           withdrawal is never blocked</span> (INV-11).
@@ -69,7 +69,7 @@ export function JitPenaltyNotice({
     );
   }
 
-  // withdraw — live
+  // withdraw, live
   const s = jitState(regime, lastAddTs);
   const forfeit = feesForfeited(accruedFeesUsd, s);
 
@@ -126,7 +126,7 @@ export function JitPenaltyNotice({
         </span>
       </div>
       <p className="mt-2 text-caption text-mute">
-        Wait it out to keep 100% of your fees. The window decays linearly — every second you
+        Wait it out to keep 100% of your fees. The window decays linearly. Every second you
         hold, less is at risk.
       </p>
     </div>

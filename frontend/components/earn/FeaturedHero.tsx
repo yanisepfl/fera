@@ -5,7 +5,7 @@ import type { PoolId } from "@/lib/types";
 import { LiveFeeHero } from "./LiveFeeHero";
 import { Skeleton } from "@/components/ui/Skeleton";
 
-/** Flagship pool for the Earn hero (NVDA/USDG — the depth showcase). */
+/** Flagship pool for the Earn hero (NVDA/USDG, the depth showcase). */
 const FEATURED: PoolId =
   "0x0000000000000000000000000000000000000000000000000000000000000001";
 

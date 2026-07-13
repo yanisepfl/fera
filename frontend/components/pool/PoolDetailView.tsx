@@ -57,13 +57,13 @@ export function PoolDetailView({ poolId }: { poolId: PoolId }) {
             label="Fee-yield APR"
             value={apr(pool.feeApr)}
             accent="var(--pos)"
-            tip="Trailing LP fee yield, net of the 10% performance fee."
+            tip="Trailing LP fee yield, net of the 10% performance fee. Half of that fee flows to stakers."
           />
           <Stat
             label="Emissions APR"
             value={apr(pool.emissionsApr)}
             accent="var(--accent)"
-            tip="esFERA emissions — a separate stream, never blended into fee yield."
+            tip="esFERA emissions, a separate stream, never blended into fee yield."
           />
           <Stat label="TVL" value={usdCompact(pool.tvlUsd)} />
           <Stat
@@ -74,7 +74,7 @@ export function PoolDetailView({ poolId }: { poolId: PoolId }) {
         </div>
       </Card>
 
-      {/* risk-profile picker (Active / Steady) — RWA shows both, MEME shows Active only */}
+      {/* risk-profile picker (Active / Steady): RWA shows both, MEME shows Active only */}
       <RiskClassSelector pool={pool} value={riskClass} onChange={setRiskClass} />
 
       {/* two-column body */}

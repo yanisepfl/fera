@@ -9,11 +9,11 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { apr, tokenAmt, num, multiple } from "@/lib/format";
 
-const MAX_BOOST = 2; // §7 "Max boost ~2x" — on the staker's OWN emissions only.
+const MAX_BOOST = 2; // §7 "Max boost ~2x", on the staker's OWN emissions only.
 
 /**
  * sFERA staking (AnchorStaking). Stake FERA → earn TWO distinct things:
- *   1. REVENUE-SHARE APR — real yield, the 50% staker cut of protocol revenue
+ *   1. REVENUE-SHARE APR: real yield, the 50% staker cut of protocol revenue
  *      (RevenueDistributor, INV-10). Paid in actual fee tokens. Shown in green.
  *   2. A BOOST (≤2x) on your OWN trader/LP emissions, accrued via multiplier points.
  * The two are rendered separately on purpose: real yield is NOT a token-emission APR
@@ -28,9 +28,9 @@ export function StakingPanel() {
     <Card>
       <CardHeader
         eyebrow="Stake"
-        title="sFERA — stake for real yield + boost"
+        title="sFERA: real yield plus a boost"
         action={
-          <InfoTip text="Staking FERA mints sFERA. It earns the 50% staker cut of real protocol revenue (revenue-share APR) and boosts your own emissions up to ~2x. Boost never mints new tokens — it re-weights a fixed capped pool (INV-7 / PT-5)." />
+          <InfoTip text="Staking FERA mints sFERA. It earns the 50% staker cut of real protocol revenue (revenue-share APR) and boosts your own emissions up to ~2x. Boost never mints new tokens. It re-weights a fixed capped pool (INV-7 / PT-5)." />
         }
       />
 
@@ -106,7 +106,7 @@ export function StakingPanel() {
               <div>
                 <div className="mb-1 flex items-center gap-1">
                   <span className="overline">Multiplier points</span>
-                  <InfoTip text="Accrue while staked and decay linearly on unstake — they carry the boost. Longer stakes hold a higher boost." />
+                  <InfoTip text="They accrue while staked and decay linearly on unstake, and they carry the boost. Longer stakes hold a higher boost." />
                 </div>
                 <div className="font-mono tnum text-heading font-semibold text-text">
                   {num(staking.multiplierPoints)}

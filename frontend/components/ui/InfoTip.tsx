@@ -4,7 +4,7 @@ import { useId, useState } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * Minimal accessible info tooltip — hover/focus reveals a short explanation.
+ * Minimal accessible info tooltip. Hover or focus reveals a short explanation.
  * Every "why" in FERA (fee reasons, boost, haircut) attaches one of these so the
  * data-dense surface stays legible without a manual.
  */

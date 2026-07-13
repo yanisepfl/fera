@@ -13,13 +13,13 @@ import { apr } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 /**
- * Risk-profile selector (D-12 risk classes; user-facing terms per D-18 — NEVER "tranche").
+ * Risk-profile selector (D-12 risk classes; user-facing terms per D-18, NEVER "tranche").
  * RWA pools offer Active + Steady; MEME offers Active only (D-16). Shows each class's
  * fee-capture ↔ impermanent-loss trade-off in plain language + its own APR when the pool
  * carries per-class `tranches[]` data.
  *
- * `variant="cards"` — the standalone Pool-page picker (full trade-off copy).
- * `variant="compact"` — the segmented control inside the Deposit dialog.
+ * `variant="cards"` is the standalone Pool-page picker (full trade-off copy).
+ * `variant="compact"` is the segmented control inside the Deposit dialog.
  */
 export function RiskClassSelector({
   pool,
@@ -186,7 +186,7 @@ function TradeoffRow({ label, color, text }: { label: string; color: string; tex
   );
 }
 
-/** MEME pools ship a single (Active) profile — D-16. Explain why, honestly. */
+/** MEME pools ship a single (Active) profile, D-16. Explain why, honestly. */
 function SingleClassNote({
   rc,
   regime,
@@ -206,7 +206,7 @@ function SingleClassNote({
             {m.label}
           </span>{" "}
           profile only. A wide/steady profile on a memecoin is barely distinguishable from
-          not LPing it — the steadier profile ships on stock-token (RWA) pools where it fits.
+          not LPing it. The steadier profile ships on stock-token (RWA) pools where it fits.
         </>
       ) : (
         <>Only the {m.label} profile is available for this pool.</>

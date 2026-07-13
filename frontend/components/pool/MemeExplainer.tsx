@@ -16,7 +16,7 @@ export function MemeExplainer() {
         <p>
           Your principal is minted once as a{" "}
           <strong className="text-text">shaped band ladder</strong> (Core / Mid / Tail) and is{" "}
-          <strong className="text-text">never churned</strong> — no strategy action closes or
+          <strong className="text-text">never churned</strong>. No strategy action closes or
           swaps a principal band (INV-5″). What moves is fee <em>income</em>: collected fees
           drip into fresh no-swap bands at the current price, so the shape&apos;s center of
           mass follows the market without ever realizing your principal&apos;s impermanent
@@ -51,7 +51,7 @@ export function MemeExplainer() {
             The one exception: a rare, guarded recenter
           </div>
           <p className="mt-1 text-caption text-mute">
-            Drip alone can lag a fast trend. So principal <em>may</em> recenter — but only when{" "}
+            Drip alone can lag a fast trend. So principal <em>may</em> recenter, but only when{" "}
             <strong className="text-dim">every</strong> on-chain condition holds, checked and
             enforced by the contract (the keeper can only trigger, never override):
           </p>
@@ -59,7 +59,7 @@ export function MemeExplainer() {
             <li className="flex gap-2">
               <span className="text-accent">1.</span> at-spot depth stayed{" "}
               <span className="text-dim">below the full-range-equivalent floor for ≥ 24h</span>{" "}
-              (depth actually degraded — not a blip);
+              (depth actually degraded, not a blip);
             </li>
             <li className="flex gap-2">
               <span className="text-accent">2.</span>{" "}
@@ -74,15 +74,15 @@ export function MemeExplainer() {
           </ul>
           <p className="mt-2 text-caption text-mute">
             If a recenter ever fired outside these bounds the transaction would revert. Worst
-            case if it never fires: the ladder simply holds — degraded depth, never a loss
+            case if it never fires: the ladder simply holds, with degraded depth but never a loss
             beyond the passive full-range outcome (INV-5″/INV-6).
           </p>
         </div>
 
         <p className="text-caption text-mute">
           Every drip, consolidation and recenter is an on-chain{" "}
-          <code className="font-mono text-dim">StrategyAction</code> with a justification hash —
-          see the strategy log for this pool&apos;s actual history.
+          <code className="font-mono text-dim">StrategyAction</code> with a justification hash.
+          See the strategy log for this pool&apos;s actual history.
         </p>
       </div>
     </Card>

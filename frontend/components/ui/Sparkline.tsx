@@ -1,7 +1,7 @@
 import { cn } from "@/lib/cn";
 
 /**
- * Tiny inline SVG sparkline — cheap enough to render per pool-list row (no
+ * Tiny inline SVG sparkline, cheap enough to render per pool-list row (no
  * lightweight-charts overhead). Greyscale-forward; pass an accent color for
  * the live series.
  */

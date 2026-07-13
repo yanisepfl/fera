@@ -21,9 +21,9 @@ function fromWei(amount: string): number {
 }
 
 /**
- * Merkle claim for the most recently FINALIZED epoch — GET /epochs/:id/proof/:account (§8).
+ * Merkle claim for the most recently FINALIZED epoch, from GET /epochs/:id/proof/:account (§8).
  * The current epoch (EpochPanel) is still accruing; the claimable root is the prior
- * epoch. Claiming is idempotent per (epochId, account, kind) — INV-8.
+ * epoch. Claiming is idempotent per (epochId, account, kind), INV-8.
  */
 export function ClaimsCard() {
   const { address, isConnected } = useAccount();

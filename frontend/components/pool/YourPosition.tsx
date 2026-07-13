@@ -60,7 +60,7 @@ export function YourPosition({
               <Stat
                 label="Vault shares"
                 value={pos.shares.toLocaleString("en-US", { maximumFractionDigits: 2 })}
-                tip="Fungible ERC-20 vault shares — usable across the chain's DeFi."
+                tip="Fungible ERC-20 vault shares, usable across the chain's DeFi."
               />
               <Stat label="Value" value={usd(pos.valueUsd)} />
               <Stat

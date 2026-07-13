@@ -14,7 +14,7 @@ export default function TransparencyPage() {
       <PageHeader
         eyebrow="Transparency"
         title="The numbers, and where they come from"
-        subtitle="Emissions capped by revenue and split 85/5/10 to LPs/traders/treasury, real revenue split 50/25/25, a performance fee that only bites when LPs win — each backed by an on-chain invariant test. Nothing here is a projection you have to take on faith."
+        subtitle="Emissions are capped by revenue and split 85/5/10 to LPs, traders, and treasury. Real revenue splits 50/25/25. The performance fee only bites when LPs win. Each of these is backed by an on-chain invariant test, so nothing here is a projection you have to take on faith."
       />
 
       {/* the tokenomics-pitch chart: emissions vs cap AND vs β-bound */}

@@ -2,7 +2,7 @@ import Link from "next/link";
 
 /**
  * Marketing landing (front door, "/"). alphix-family aesthetic: dark-first,
- * typography-led, one accent (Fera Gold), calm and precise — no hype. Reuses the
+ * typography-led, one accent (Fera Gold), calm and precise, no hype. Reuses the
  * in-family tokens (DESIGN.md). Copy is drawn from docs/gtm/POSITIONING.md and holds
  * the load-bearing honest-framing constraints (D-M13 / D-18 / R-8): the vault is sold
  * as managed + emissions-eligible + simple, NEVER as higher-yield than a self-managed
@@ -85,7 +85,7 @@ function MarketingHeader() {
 function Hero() {
   return (
     <section className="relative overflow-hidden border-b border-line">
-      {/* soft top-crown glow — the lifted premium-dark trait, static/reduced-motion-safe */}
+      {/* soft top-crown glow, the lifted premium-dark trait, static/reduced-motion-safe */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
@@ -189,23 +189,23 @@ const NARRATIVES = [
   {
     tag: "Comparative fee capture",
     t: "Our pool vs a vanilla pool, on the same path.",
-    d: "Given the same position over the same price path, impermanent loss is identical between a FERA pool and a vanilla one — so the entire difference is fee capture, and the regime fee captures more on the flow that matters.",
+    d: "Take the same position over the same price path. Impermanent loss is identical in a FERA pool and a vanilla one, so the whole difference comes down to fees. The regime fee captures more of the flow that actually matters.",
     honest:
-      "This compares our pool against a vanilla pool (the fee mechanism), net of the 10% performance fee — not the vault against a self-managed LP. Any comparative number ships only once it is reproducible on real chain data.",
+      "This compares our pool to a vanilla pool (the fee mechanism), net of the 10% performance fee. It is not the vault against a self-managed LP. Any comparison ships only once anyone can reproduce it on real chain data.",
   },
   {
     tag: "Weekend drift → yield",
     t: "Your LP position earns the arbitrage instead of feeding it.",
-    d: "Tokenized stocks trade 24/7 but the underlying equities don't, so they drift over the weekend and reconcile at Monday's open. For a vanilla LP that reconciliation is a recurring, structural loss. The RWA regime re-prices it into LP income.",
+    d: "Tokenized stocks trade 24/7, but the real equities don't. Prices drift over the weekend and snap back at Monday's open. For a vanilla LP, that snap-back is a steady, structural loss. The RWA regime turns it into LP income instead.",
     honest:
-      "Recurring, but not guaranteed: a quiet weekend earns little, and a large Monday gap still costs the position. We say “earns the arbitrage,” never “earns you X%.”",
+      "Steady, but not guaranteed. A quiet weekend earns little, and a large Monday gap still costs the position. We say “earns the arbitrage,” never “earns you X%.”",
   },
   {
     tag: "Bot monetization",
     t: "We don't fight bots. We invoice them.",
-    d: "On a first-come-first-served chain with no priority-fee auction, wash, volume, and MEV bots are just flow. The MEME regime prices them: the more violent and one-sided the flow, the higher the fee. Bots become fee fountains by design.",
+    d: "On a first-come-first-served chain with no priority-fee auction, wash, volume, and MEV bots are just flow. The MEME regime prices them. The more violent and one-sided the flow, the higher the fee. Bots become fee fountains by design.",
     honest:
-      "We price toxic swap flow via fees — we do not claim to capture the MEV. Top-of-block MEV internalization is explicitly v2 roadmap, not v1.",
+      "We price toxic swap flow through fees. We do not claim to capture the MEV itself. Internalizing top-of-block MEV is a v2 goal, not v1.",
   },
 ];
 
@@ -252,7 +252,7 @@ function Narratives() {
 const CLAIMS = [
   {
     t: "The vault is managed, not magic.",
-    d: "We sell management, emissions-eligibility, simplicity, and a risk-profile choice — not a claim that the vault out-yields a competent self-managed LP. It provably does not, and we don't pretend otherwise.",
+    d: "What you get is management, emissions eligibility, simplicity, and a risk profile to pick. What you don't get is a promise that the vault beats a skilled self-managed LP. It doesn't, and we won't pretend otherwise.",
   },
   {
     t: "No tranches, no dividends, no fixed yield.",
@@ -260,7 +260,7 @@ const CLAIMS = [
   },
   {
     t: "Emissions can't out-print revenue.",
-    d: "Weekly esFERA issuance is bounded by protocol revenue (β-cap, INV-7) and split 85/5/10 across LPs, traders, and treasury. Issuance follows activity — it is not a subsidy.",
+    d: "Weekly esFERA issuance is capped by protocol revenue (β-cap, INV-7) and split 85/5/10 across LPs, traders, and treasury. Issuance follows activity. It is not a subsidy.",
   },
   {
     t: "If we can't point to the transaction, we don't say it.",
@@ -277,8 +277,8 @@ function HonestFraming() {
           Precise beats loud.
         </h2>
         <p className="mt-3 max-w-2xl text-body text-dim">
-          The copy discipline below is load-bearing, not decoration. Bunni, Gamma, and
-          Cork all shipped and still died — humility is the credible posture.
+          The discipline below is load-bearing, not decoration. Bunni, Gamma, and
+          Cork all shipped and still died. Humility is the only credible posture.
         </p>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2">
@@ -311,9 +311,9 @@ function Transparency() {
           <p className="mt-3 max-w-2xl text-body text-dim">
             Hook <span className="font-mono text-dim">afterSwap</span> events and vault
             fee-collection events flow through an indexer into weekly Merkle roots posted
-            on-chain. Anyone can recompute a root and check the split — 50 / 25 / 25 of
-            real revenue to stakers, treasury, and ops; 85 / 5 / 10 of emissions to LPs,
-            traders, and treasury. Posted epochs are never hotfixed.
+            on-chain. Anyone can recompute a root and check the split for themselves: 50 / 25 / 25
+            of real revenue to stakers, treasury, and ops, and 85 / 5 / 10 of emissions to LPs,
+            traders, and treasury. Once an epoch is posted, it is never hotfixed.
           </p>
           <div className="mt-6">
             <Link
@@ -339,8 +339,8 @@ function CtaBand() {
           LP where every flow pays you.
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-body text-dim">
-          Deposit into a managed vault, hold a normal ERC-20 share, and earn fee-yield
-          plus esFERA — on the pools you already believe in.
+          Deposit into a managed vault, hold a normal ERC-20 share, and earn fee yield
+          plus esFERA on the pools you already believe in.
         </p>
         <div className="mt-8 flex justify-center">
           <Link href="/app" className={btnPrimary}>
@@ -417,10 +417,10 @@ function MarketingFooter() {
         <div className="hr my-8" />
 
         <p className="max-w-3xl text-caption text-mute">
-          FERA is LP-first infrastructure — it provides liquidity tooling, not
-          securities. Swaps are never gated and never charged a protocol fee (INV-2);
+          FERA is LP-first infrastructure. It provides liquidity tooling, not
+          securities. Swaps are never gated and never charged a protocol fee (INV-2).
           RWA-pool deposits are geo-fenced by config. Nothing here is an offer, a
-          solicitation, or investment advice. No guaranteed yield. Numbers are
+          solicitation, or investment advice. There is no guaranteed yield. Every number is
           reproducible from on-chain data via the Transparency page (MASTER_SPEC §9).
         </p>
       </div>

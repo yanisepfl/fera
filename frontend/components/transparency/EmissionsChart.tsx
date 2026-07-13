@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { num } from "@/lib/format";
 
-// Concrete token values (from globals.css) — lightweight-charts renders on canvas
+// Concrete token values (from globals.css). lightweight-charts renders on canvas
 // and cannot resolve CSS custom properties, so we pass resolved hex/rgba here.
 const C = {
   accent: "#e7b84b", // emitted (primary)
@@ -71,7 +71,7 @@ export function EmissionsChart() {
         eyebrow="Emissions"
         title="Emissions vs cap vs β-bound"
         action={
-          <InfoTip text="emitted = min(cap(t), β × revenueValuedInFera). β = 0.8. The gold area can only ever touch the LOWER of the two dashed lines — issuance never exceeds revenue (INV-7)." />
+          <InfoTip text="emitted = min(cap(t), β × revenueValuedInFera). β = 0.8. The gold area can only ever touch the LOWER of the two dashed lines, so issuance never exceeds revenue (INV-7)." />
         }
       />
       <div className="px-3 pb-2">
@@ -79,14 +79,14 @@ export function EmissionsChart() {
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 pb-4">
         <Legend color={C.accent} label="Emitted = min(cap, β·rev)" solid />
-        <Legend color={C.grid3} label="Logistic cap(t) — supply schedule" />
+        <Legend color={C.grid3} label="Logistic cap(t), supply schedule" />
         <Legend color={C.rwa} label="β × revenue bound (β = 0.8)" />
       </div>
       <div className="border-t border-line px-5 py-4">
         <p className="text-body-sm text-dim">
           <span className="font-medium text-text">This is the whole tokenomics
           promise:</span>{" "}
-          esFERA is a dividend of real activity, not a subsidy. Emissions are pinned
+          esFERA is a share of real activity, not a subsidy. Emissions are pinned
           to the lower of a fixed supply schedule and 0.8× the revenue the protocol
           actually earned. Latest epoch #{last.epochId}: cap{" "}
           <span className="font-mono tnum text-text">{num(last.cap)}</span>, β-bound{" "}

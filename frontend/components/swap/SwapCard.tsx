@@ -14,14 +14,14 @@ import { InfoTip } from "@/components/ui/InfoTip";
 import { feePipsToPct, feePipsToFraction, tokenAmt } from "@/lib/format";
 import type { PoolId } from "@/lib/types";
 
-/** PEPE/WETH MEME pool — the elevated-vol default so the fee reason is legible. */
+/** PEPE/WETH MEME pool, the elevated-vol default so the fee reason is legible. */
 const DEFAULT_POOL: PoolId =
   "0x0000000000000000000000000000000000000000000000000000000000000002";
 
 /**
  * Minimal router-backed swap. Swaps are permissionless and pay the protocol NOTHING
  * (INV-2): the LP fee shown is the dynamic regime fee, and it accrues entirely to LPs.
- * The card's whole job is honesty about that live fee — it prints the number AND the
+ * The card's whole job is honesty about that live fee: it prints the number AND the
  * reason ("fee is 2.10%: volatility elevated" / "fee widened: market closed").
  */
 export function SwapCard() {
@@ -101,7 +101,7 @@ export function SwapCard() {
           </div>
         </label>
 
-        {/* the live regime fee + WHY — the core of the page */}
+        {/* the live regime fee + WHY, the core of the page */}
         {reason ? (
           <div
             className="rounded-lg border p-4"
@@ -141,7 +141,7 @@ export function SwapCard() {
         <div className="rounded-lg border border-line bg-card p-3 text-body-sm">
           <Row
             label="LP fee"
-            tip="The dynamic fee, charged in the input token. It goes 100% to LPs — the protocol takes nothing from swaps (INV-2)."
+            tip="The dynamic fee, charged in the input token. It goes 100% to LPs. The protocol takes nothing from swaps (INV-2)."
             value={`${tokenAmt(lpFee, 4)} ${pool.token0.symbol}`}
           />
           <Row
@@ -152,7 +152,7 @@ export function SwapCard() {
           <Row
             label="Route"
             value="Universal Router → FERA v4"
-            sub="flagless hook — routers reach it permissionlessly"
+            sub="flagless hook, routers reach it permissionlessly"
           />
         </div>
 
