@@ -153,7 +153,7 @@ const STEPS = [
   {
     n: "03",
     t: "Earn",
-    d: "Collect interest plus esFERA emissions on your vault shares. A 10% performance fee applies only to fees you actually earn, never on principal, deposits, withdrawals, or swaps. Half of it flows back to FERA stakers.",
+    d: "Collect yield plus esFERA emissions on your vault shares. A 10% performance fee applies only to fees you actually earn, never on principal, deposits, withdrawals, or swaps. Half of it flows back to FERA stakers.",
   },
 ];
 
@@ -390,7 +390,7 @@ function MarketingFooter() {
                 { href: "#how", label: "How it works" },
                 { href: "#narratives", label: "Narratives" },
                 {
-                  href: "https://github.com/yanisepfl/fera/tree/main/docs/gitbook",
+                  href: "https://fera-3.gitbook.io/fera/",
                   label: "Docs",
                   external: true,
                 },
