@@ -1,0 +1,145 @@
+name: mainnet-deploy
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# PROTECTED. Robinhood Chain (4663) production deploy of the FERA contracts via
+# contracts/script/Deploy.s.sol (DEPLOY_ORDER.md). This is manual-only, requires a typed
+# confirmation, and is gated on the `mainnet` GitHub Environment — which MUST be configured in
+# repo settings with **2 required reviewers** (2-person approval) drawn from Deployment + Security,
+# plus a wait timer. The environment also holds the KMS/signer secrets, so no job can touch a
+# production key until both reviewers approve.
+#
+# HARD PRECONDITIONS (checked by the preflight job; a red here blocks the deploy job entirely):
+#   - D-7 / C-1: every Uniswap v4 core address VERIFIED on-chain (CHAIN.md §8 B5–B8). A wrong
+#     PoolManager byte bricks hook+vault — this is the single biggest deploy-time risk.
+#   - V1/V2 (routing) PASS memo published (Pressure-Test 8) — R-1.
+#   - External audit closed + Security written sign-off (SEC-1..6) — R-14/R-18/R-19..R-23.
+#   - CREATE2 factory present (§8 D16); Safes (timelock/keeper/root-poster/ops) exist.
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "DEPLOY-MAINNET-4663" to arm the deploy'
+        required: true
+        type: string
+      chain_diligence_run_url:
+        description: "URL of the green CHAIN.md §8 checklist run (D-7 evidence)"
+        required: true
+        type: string
+      audit_signoff_url:
+        description: "URL of Security §14 written sign-off + external audit close-out"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mainnet-deploy # never two production deploys at once
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: preflight gates (D-7 / audit / arming phrase)
+    runs-on: ubuntu-latest
+    outputs:
+      armed: ${{ steps.arm.outputs.armed }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - name: Validate arming phrase
+        id: arm
+        run: |
+          if [ "${{ inputs.confirm }}" != "DEPLOY-MAINNET-4663" ]; then
+            echo "::error::Arming phrase mismatch — refusing to proceed."; exit 1
+          fi
+          echo "armed=true" >> "$GITHUB_OUTPUT"
+      - name: Require evidence links present
+        run: |
+          test -n "${{ inputs.chain_diligence_run_url }}" || { echo "::error::CHAIN.md §8 evidence URL required (D-7)."; exit 1; }
+          test -n "${{ inputs.audit_signoff_url }}" || { echo "::error::Audit/Security sign-off URL required."; exit 1; }
+      - name: Block if CHAIN.md still tags Uniswap core as LIKELY/UNVERIFIED (D-7 tripwire)
+        # A coarse guard: the deploy must not run while §0 still tags the v4 PoolManager row LIKELY.
+        # This is a tripwire, not a substitute for the on-chain §8 B5–B8 confirmation linked above.
+        run: |
+          if grep -E "v4 \*\*PoolManager\*\*|PoolManager \(4663\)" docs/CHAIN.md | grep -qi "LIKELY"; then
+            echo "::error::CHAIN.md still marks the v4 PoolManager LIKELY — D-7 not closed. Update CHAIN.md to VERIFIED after §8 B5, then re-run."
+            exit 1
+          fi
+          echo "::notice::CHAIN.md PoolManager row no longer LIKELY (verify the §8 evidence link manually)."
+
+  contracts-green:
+    name: contracts CI must be green
+    needs: preflight
+    uses: ./.github/workflows/contracts.yml
+
+  deploy:
+    name: broadcast to mainnet 4663
+    needs: [preflight, contracts-green]
+    runs-on: ubuntu-latest
+    # 2-person approval + secrets live here. Configure required reviewers on this environment.
+    environment:
+      name: mainnet
+      url: https://robinhoodchain.blockscout.com
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: {version: stable}
+
+      - name: Build
+        run: forge build
+
+      - name: Simulate (no broadcast) — final dry-run against mainnet state
+        run: forge script script/Deploy.s.sol:Deploy --rpc-url "$ALCHEMY_RH_MAINNET" -vvvv
+        env:
+          ALCHEMY_RH_MAINNET: ${{ secrets.ALCHEMY_RH_MAINNET }}
+          FERA_DEPLOYER_PK: ${{ secrets.FERA_DEPLOYER_PK }} # KMS-backed; environment-scoped
+          FERA_POOL_MANAGER: ${{ vars.FERA_POOL_MANAGER }}
+          FERA_TIMELOCK_SAFE: ${{ vars.FERA_TIMELOCK_SAFE }}
+          FERA_EMISSIONS_KEEPER_SAFE: ${{ vars.FERA_EMISSIONS_KEEPER_SAFE }}
+          FERA_ROOT_POSTER_SAFE: ${{ vars.FERA_ROOT_POSTER_SAFE }}
+          FERA_VAULT_KEEPER: ${{ vars.FERA_VAULT_KEEPER }}
+          FERA_OPS_SINK: ${{ vars.FERA_OPS_SINK }}
+          FERA_WETH: ${{ vars.FERA_WETH }}
+          FERA_USDG: ${{ vars.FERA_USDG }}
+
+      - name: Broadcast + verify (Blockscout)
+        run: |
+          forge script script/Deploy.s.sol:Deploy \
+            --rpc-url "$ALCHEMY_RH_MAINNET" \
+            --broadcast --slow \
+            --verify --verifier blockscout \
+            --verifier-url https://robinhoodchain.blockscout.com/api/ \
+            -vvvv
+        env:
+          ALCHEMY_RH_MAINNET: ${{ secrets.ALCHEMY_RH_MAINNET }}
+          FERA_DEPLOYER_PK: ${{ secrets.FERA_DEPLOYER_PK }}
+          FERA_POOL_MANAGER: ${{ vars.FERA_POOL_MANAGER }}
+          FERA_TIMELOCK_SAFE: ${{ vars.FERA_TIMELOCK_SAFE }}
+          FERA_EMISSIONS_KEEPER_SAFE: ${{ vars.FERA_EMISSIONS_KEEPER_SAFE }}
+          FERA_ROOT_POSTER_SAFE: ${{ vars.FERA_ROOT_POSTER_SAFE }}
+          FERA_VAULT_KEEPER: ${{ vars.FERA_VAULT_KEEPER }}
+          FERA_OPS_SINK: ${{ vars.FERA_OPS_SINK }}
+          FERA_WETH: ${{ vars.FERA_WETH }}
+          FERA_USDG: ${{ vars.FERA_USDG }}
+
+      - name: Archive broadcast + address book
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mainnet-broadcast-${{ github.run_id }}
+          path: |
+            contracts/broadcast/**
+            contracts/out/**/*.json
+          retention-days: 90
+
+      - name: Post-deploy reminder (Safe actions are NOT automated)
+        run: |
+          echo "::notice::Deploy done. Remaining role-gated steps (DEPLOY_ORDER §4) run on the Safes:"
+          echo "  1) TIMELOCK: AnchorStaking.addRewardToken(FERA/WETH/USDG/...) — 48h delay, BEFORE revenue routes."
+          echo "  2) VAULT KEEPER: vault.createPool(...) per pool (regime binds inside createPool)."
+          echo "  3) Record address book + mined hook salt + start nonce into CHAIN.md + secret store."

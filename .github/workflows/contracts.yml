@@ -1,0 +1,156 @@
+name: contracts
+
+# Monorepo-level contracts CI (Agent 5). Supersedes contracts/.github/workflows/contracts.yml by
+# wiring the previously-TODO gas-budget assertion (hook swap path ≤ 40k, §5 / GAS-1 — measured
+# ~15.1k) and the money-path coverage gate. All jobs run from the contracts/ subtree.
+on:
+  push:
+    branches: [master, main]
+    paths: ["contracts/**", ".github/workflows/contracts.yml"]
+  pull_request:
+    paths: ["contracts/**", ".github/workflows/contracts.yml"]
+
+permissions:
+  contents: read
+  security-events: write # slither SARIF upload
+
+concurrency:
+  group: contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: contracts
+
+env:
+  FOUNDRY_PROFILE: ci
+  # Hook swap-path (beforeSwap+afterSwap) combined gas budget — MASTER_SPEC §5. Currently ~15.1k.
+  HOOK_GAS_BUDGET: "40000"
+
+jobs:
+  build:
+    name: build (+ INV-12 no-proxy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: {version: stable}
+      - run: forge --version
+      - name: Build (sizes)
+        run: forge build --sizes
+      - name: Verify no upgradeable-proxy import on money paths (INV-12)
+        run: |
+          if grep -RIlE "TransparentUpgradeableProxy|ERC1967|UUPSUpgradeable|Initializable" src/; then
+            echo "::error::Upgradeable-proxy pattern found on a money-path contract (INV-12)."; exit 1
+          fi
+      - name: Deploy script compiles (DEPLOY-1 skeleton)
+        run: forge build script/Deploy.s.sol
+
+  test:
+    name: test (unit + hook + integration + invariant)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: {version: stable}
+      - name: Forge test
+        run: forge test -vvv
+        env:
+          FOUNDRY_FUZZ_RUNS: 512
+          FOUNDRY_INVARIANT_RUNS: 256
+          FOUNDRY_INVARIANT_DEPTH: 64
+
+  gas:
+    name: gas-budget (hook swap path ≤ 40k, §5)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: {version: stable}
+      - name: Gas report
+        run: forge test --gas-report | tee gas-report.txt
+      - name: Assert beforeSwap+afterSwap ≤ HOOK_GAS_BUDGET
+        # Parses the FeraHook section of the forge --gas-report table and sums the median (col 4) of
+        # the beforeSwap + afterSwap rows. Fails if the combined swap-path gas exceeds the §5 budget
+        # OR if either row is missing (hook not exercised ⇒ the gate is not actually measuring).
+        run: |
+          python3 - "$HOOK_GAS_BUDGET" <<'PY'
+          import re, sys
+          budget = int(sys.argv[1])
+          rows = {}
+          # gas-report rows look like: | beforeSwap | 1234 | 5678 | 5700 | 9000 | 12 |
+          for line in open("gas-report.txt"):
+              m = re.match(r"\s*\|\s*(beforeSwap|afterSwap)\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|", line)
+              if m:
+                  fn = m.group(1)
+                  median = int(m.group(4).replace(",", ""))  # median column
+                  rows[fn] = max(rows.get(fn, 0), median)
+          missing = [f for f in ("beforeSwap", "afterSwap") if f not in rows]
+          if missing:
+              print(f"::error::gas-report has no rows for {missing} — hook swap path not exercised; gate cannot verify §5.")
+              sys.exit(1)
+          total = rows["beforeSwap"] + rows["afterSwap"]
+          print(f"hook swap-path gas: beforeSwap={rows['beforeSwap']} + afterSwap={rows['afterSwap']} = {total} (budget {budget})")
+          if total > budget:
+              print(f"::error::Hook swap-path gas {total} exceeds §5 budget {budget}.")
+              sys.exit(1)
+          print("::notice::hook swap-path within §5 budget.")
+          PY
+      - name: Upload gas report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: {name: gas-report, path: contracts/gas-report.txt}
+
+  slither:
+    name: slither (fail-on high)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: {version: stable}
+      - name: Run Slither
+        uses: crytic/slither-action@v0.4.0
+        id: slither
+        continue-on-error: true
+        with:
+          target: "contracts/"
+          slither-config: "contracts/slither.config.json"
+          fail-on: high
+          sarif: results.sarif
+      - name: Upload SARIF
+        if: always() && steps.slither.outputs.sarif != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.slither.outputs.sarif }}
+      - name: Fail on new highs
+        if: steps.slither.outcome == 'failure'
+        run: echo "::error::Slither reported high-severity findings." && exit 1
+
+  coverage:
+    name: coverage (money-path branches)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: recursive}
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: {version: stable}
+      - name: Coverage (ir-minimum; via_ir coverage on v4 deps is heavy)
+        run: forge coverage --ir-minimum --report summary --report lcov | tee coverage.txt
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            contracts/coverage.txt
+            contracts/lcov.info
+      # TODO(Contracts): flip to a hard 100%-branch gate on money-path files (SHARED_CONTEXT eng
+      # rules) once the scaffold TODOs (oracle/EWMA wiring) are complete. Reported, not yet blocking.

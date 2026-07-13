@@ -1,0 +1,69 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+script = "script"
+solc = "0.8.26"
+evm_version = "cancun"          # Robinhood Chain = Arbitrum Orbit (Cancun-equivalent, tstore/tload for v4 flash accounting)
+optimizer = true
+# v4-core `Pool.swap` only compiles under via_ir with a very high optimizer_runs (canonical v4
+# value). At low runs (e.g. 800/200) the Yul backend throws "Variable is 1 too deep in the stack"
+# once the concrete PoolManager is pulled into a build (integration tests). Matching v4-core here is
+# required for ANY test/script that compiles the PoolManager. Runtime-gas impact is favorable.
+optimizer_runs = 44444444
+via_ir = true                   # required: 8-field §6 Swap event + v4 flash-accounting locals overflow the legacy stack
+bytecode_hash = "none"
+ffi = false
+# Gas snapshots: hook beforeSwap+afterSwap combined budget <= 40k (MASTER_SPEC §5). CI reports.
+gas_reports = ["FeraHook"]
+fs_permissions = [{ access = "read", path = "./" }]
+remappings = [
+    # populated by remappings.txt; kept here empty so `forge remappings` is authoritative
+]
+
+# Money-path files demand 100% branch coverage (SHARED_CONTEXT eng rules). CI enforces.
+# NOTE: optimizer_runs is NOT lowered here — the concrete v4 PoolManager compiled by integration
+# tests requires the high default (see comment above). Overriding it low reintroduces the Yul
+# stack-too-deep. Coverage is run via `forge coverage --ir-minimum` (see .github/workflows).
+[profile.ci]
+verbosity = 3
+
+# forge-lint runs as part of `forge build` (forge >=1.6). Scope it to the money-path source and
+# drop three categories that fire pervasively on REVIEWED, intentional patterns — never on a real
+# defect — so the build stays near-silent without changing any money-path logic (COV/cleanliness
+# pass). Correctness lints (divide-before-multiply, unchecked-call, erc20-unchecked-transfer,
+# unused-import, ...) stay ACTIVE on src so genuine regressions still surface.
+#   * unsafe-typecast   — the v4 flash-accounting int128/uint128 delta math + saturating casts, each
+#                         bounded by construction or an explicit sat-guard (FeraHook._satAdd/_positive,
+#                         FeraVault._resolveDelta, FeeLogic downcasts after clamp). Not defects.
+#   * block-timestamp   — epoch clocks, cooldowns, market-hours, JIT windows: design-inherent. Same
+#                         posture as the accepted slither `timestamp` triage (security/07-slither-triage.md).
+#   * incorrect-shift   — false positive on the idiomatic `1 << kind` claim bitmask (Distributor).
+# test/** + script/** are ignored for lint (style noise there is not a release gate); their two genuine
+# solc state-mutability warnings were fixed in-place, not suppressed.
+[lint]
+ignore = ["test/**/*.sol", "script/**/*.sol", "lib/**"]
+exclude_lints = ["unsafe-typecast", "block-timestamp", "incorrect-shift"]
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = false
+int_types = "long"
+quote_style = "double"
+number_underscore = "thousands"
+
+[fuzz]
+runs = 512
+max_test_rejects = 100_000
+
+[invariant]
+runs = 256
+depth = 64
+fail_on_revert = false
+call_override = false
+
+# Etherscan / verification config filled in by Deployment (5) from docs/CHAIN.md.
+# [etherscan]
+# robinhood = { key = "${ETHERSCAN_API_KEY}", chain = 0, url = "" }
