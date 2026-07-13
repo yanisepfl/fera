@@ -54,6 +54,51 @@ int_types = "long"
 quote_style = "double"
 number_underscore = "thousands"
 
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# FORMAL VERIFICATION — solc built-in SMTChecker (Agent 6 / security depth pass).
+# Engine: CHC (Constrained Horn Clauses — unbounded, inductive) with the z3 solver that is BUNDLED
+# in the foundry svm solc 0.8.26 build (verified: `--model-checker-engine chc` proves VCs safe with
+# NO external install; z3 is also on PATH at /usr/local/bin/z3). Targets the money-path arithmetic:
+# proves assert / overflow / divByZero on the small self-contained value contracts (RevenueDistributor
+# 50/25/25 split, Distributor R-19 cap, EmissionsController INV-7 envelope, EsFera INV-9 conservation).
+#   Run:  FOUNDRY_PROFILE=smt forge build
+# The per-query `timeout` bounds wall-clock (ANTI-HANG). FeraVault/FeraHook are intentionally EXCLUDED:
+# they route every value move through v4 `poolManager.unlock` external calls + inline assembly, which
+# CHC models as havoc — the checker would emit only noise, so those paths are covered by the symbolic
+# `test/formal/*.t.sol` (Halmos) proofs + the stateful invariants instead.
+# CHC (unbounded, inductive) over the LOOP-FREE money contracts — terminates in seconds and PROVES
+# the division-by-zero + envelope/cap assertions safe. `forge build` under this profile exits 0
+# (SMTChecker findings are warnings). EsFera has a `while` loop (`_consumeLocked`) that makes CHC's
+# fixpoint non-terminating under a wall-clock bound, so it is checked with the BMC engine instead —
+# see `[profile.smtbmc]` below and `security/hardening/03-formal-verification.md` for the direct-solc
+# reproducer that captured the recorded results.
+[profile.smt]
+src = "src"
+[profile.smt.model_checker]
+engine = "chc"
+targets = ["assert", "overflow", "divByZero"]
+timeout = 3000            # per-SMT-query wall-clock (ms) — bounds the run (ANTI-HANG)
+show_unproved = true
+div_mod_no_slacks = false
+contracts = { "src/RevenueDistributor.sol" = [
+    "RevenueDistributor",
+], "src/Distributor.sol" = [
+    "Distributor",
+], "src/EmissionsController.sol" = [
+    "EmissionsController",
+] }
+
+# BMC (bounded, always-terminating) for the looping EsFera — proves the vest/forfeit arithmetic
+# straight-line-safe. Run: FOUNDRY_PROFILE=smtbmc forge build
+[profile.smtbmc]
+src = "src"
+[profile.smtbmc.model_checker]
+engine = "bmc"
+targets = ["assert", "overflow", "divByZero"]
+timeout = 3000
+show_unproved = true
+contracts = { "src/EsFera.sol" = ["EsFera"] }
+
 [fuzz]
 runs = 512
 max_test_rejects = 100_000

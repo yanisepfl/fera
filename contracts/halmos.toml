@@ -1,0 +1,20 @@
+# Halmos configuration — symbolic proofs of the FERA money-path invariants.
+# Halmos (github.com/a16z/halmos) symbolically executes every `check_*` test with fully symbolic
+# arguments and discharges the assertions to an SMT solver (bundled z3) — an `unsat` on the negated
+# assertion is a PROOF for all inputs, not a fuzz sample.
+#
+#   pip install halmos          # brings its own z3; no other install
+#   cd contracts
+#   halmos                      # runs every check_* in test/formal (this config)
+#   halmos --contract FormalMoneyInvariants
+#   halmos --function check_INV16_roundTripNeverProfits
+#
+# The `default` profile is what a bare `halmos` uses.
+[global]
+# Only the symbolic proof suite (forge unit/fuzz/invariant tests are run by `forge test`, not halmos).
+contract = "FormalMoneyInvariants"
+# Match Foundry's solc/remappings so the same bytecode is analyzed.
+solver-timeout-assertion = 0    # 0 = no per-assertion timeout; let z3 run each proof to completion
+loop = 4                        # unroll bound; the check_* here are loop-free, so 4 is ample headroom
+# Storage model: symbolic (default). Fresh contract deploys inside check_ are supported.
+statistics = true

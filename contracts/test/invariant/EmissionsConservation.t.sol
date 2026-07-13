@@ -235,4 +235,19 @@ contract EmissionsConservationInvariant is StdInvariant, Test {
     function invariant_totalEmittedUnderCap() public view {
         assertLe(ec.totalEmitted(), FeraConstants.CAP_LOGISTIC_L, "totalEmitted exceeded logistic L");
     }
+
+    /// NEW cross-contract invariant (Agent 6) — INV-9 DOWNSTREAM forfeit-routing solvency. Every
+    /// instant-exit routes its 50% haircut into three sinks: burn + AnchorStaking (stakers third) +
+    /// RevenueDistributor (revenue third). This asserts the two NON-burn sinks are ALWAYS solvent for
+    /// the routed FERA — i.e. every wei the split credited to them is physically held, so treasury/ops
+    /// can always `pull` and stakers can always accrue. Ties EsFera → RevenueDistributor → AnchorStaking
+    /// forfeit routing into one solvency law that no prior suite asserted (escrowSolvent covers only the
+    /// EsFera side). Because no actor stakes in this suite (totalStaked == 0), the stakers-third is held
+    /// in `pendingForfeitFera`; it must always be backed by real FERA balance.
+    function invariant_forfeitSinksSolvent() public view {
+        uint256 revPendingFera = rev.pending(treasury, address(fera)) + rev.pending(ops, address(fera))
+            + rev.pending(address(staking), address(fera));
+        assertGe(fera.balanceOf(address(rev)), revPendingFera, "RevenueDistributor FERA insolvent (forfeit)");
+        assertGe(fera.balanceOf(address(staking)), staking.pendingForfeitFera(), "AnchorStaking forfeit insolvent");
+    }
 }
