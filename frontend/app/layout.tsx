@@ -3,15 +3,14 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { Providers } from "./providers";
-import { TopNav } from "@/components/layout/TopNav";
 
 export const metadata: Metadata = {
   title: {
-    default: "FERA — Regime-aware liquidity",
+    default: "FERA — the liquidity layer that prices what others bleed",
     template: "%s · FERA",
   },
   description:
-    "LP-first, regime-aware liquidity on Robinhood Chain. Earn more per dollar by monetizing every flow through fees that price toxicity.",
+    "A Uniswap v4 hook on Robinhood Chain that charges toxic, mechanical, and weekend-arbitrage flow the fee it's actually worth — so the volatility that drains ordinary LPs pays FERA's LPs instead.",
 };
 
 export const viewport: Viewport = {
@@ -31,6 +30,10 @@ export default function RootLayout({
     "--font-mono": GeistMono.style.fontFamily,
   } as React.CSSProperties;
 
+  // Root layout is intentionally chrome-free: the marketing landing ("/") and the app
+  // ("/app/*") each render their own header/footer. Providers (wagmi + RainbowKit +
+  // React Query) wrap everything so the wallet is available on the landing CTA and in
+  // the app alike.
   return (
     <html
       lang="en"
@@ -39,20 +42,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-screen antialiased">
-        <Providers>
-          <TopNav />
-          <main className="mx-auto w-full max-w-app px-4 py-6 md:px-6 md:py-10">
-            {children}
-          </main>
-          <footer className="mx-auto max-w-app px-4 md:px-6 pb-10 pt-4">
-            <div className="hr mb-4" />
-            <p className="text-caption text-mute">
-              FERA is LP-first infrastructure. Swaps are never gated and never
-              charged a protocol fee (INV-2). Numbers shown are reproducible from
-              on-chain data via Backend&apos;s published bundle (MASTER_SPEC §9).
-            </p>
-          </footer>
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

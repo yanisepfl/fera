@@ -14,11 +14,11 @@ const FEATURED_POOL =
   "0x0000000000000000000000000000000000000000000000000000000000000001";
 
 const NAV: { href: string; label: string; match: (p: string) => boolean }[] = [
-  { href: "/", label: "Earn", match: (p) => p === "/" },
-  { href: `/pool/${FEATURED_POOL}`, label: "Pool", match: (p) => p.startsWith("/pool") },
-  { href: "/rewards", label: "Rewards", match: (p) => p.startsWith("/rewards") },
-  { href: "/swap", label: "Swap", match: (p) => p.startsWith("/swap") },
-  { href: "/transparency", label: "Transparency", match: (p) => p.startsWith("/transparency") },
+  { href: "/app", label: "Earn", match: (p) => p === "/app" },
+  { href: `/app/pool/${FEATURED_POOL}`, label: "Pool", match: (p) => p.startsWith("/app/pool") },
+  { href: "/app/rewards", label: "Rewards", match: (p) => p.startsWith("/app/rewards") },
+  { href: "/app/swap", label: "Swap", match: (p) => p.startsWith("/app/swap") },
+  { href: "/app/transparency", label: "Transparency", match: (p) => p.startsWith("/app/transparency") },
 ];
 
 export function TopNav() {
@@ -26,7 +26,7 @@ export function TopNav() {
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-well/80 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-app items-center gap-6 px-4 md:px-6">
-        <Link href="/" className="flex items-center gap-2 shrink-0">
+        <Link href="/app" className="flex items-center gap-2 shrink-0">
           <span
             className="grid h-6 w-6 place-items-center rounded-md text-[13px] font-bold"
             style={{ background: "var(--accent)", color: "var(--on-accent)" }}

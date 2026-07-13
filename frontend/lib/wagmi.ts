@@ -1,65 +1,57 @@
-import { createConfig, http, cookieStorage, createStorage } from "wagmi";
-import { injected, walletConnect } from "wagmi/connectors";
-import { robinhoodChain } from "@/config/chains";
+import { http } from "wagmi";
+import { getDefaultConfig } from "@rainbow-me/rainbowkit";
+import { robinhoodChain, robinhoodTestnet } from "@/config/chains";
 
 /**
- * wagmi config. Connectors:
- *   - injected  : MetaMask / Rabby / browser wallets (works with zero config).
- *   - walletConnect : mobile + QR — only registered when a projectId is present,
- *     otherwise WalletConnect init would throw. Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID.
- *   - Robinhood Wallet : deep-link, handled separately (see ROBINHOOD_WALLET_DEEPLINK +
- *     components/layout/ConnectButton.tsx). Not a wagmi connector until RH ships one.
+ * wagmi + RainbowKit config.
  *
- * ssr:true + cookieStorage so `next build`/RSC never touch a wallet at render time.
+ * Wallet UX is RainbowKit (the alphix-family idiom is a WalletConnect-based modal —
+ * alphix's own frontend uses Reown AppKit; we use RainbowKit, the family standard, so
+ * the modal layers *additively* on top of the existing wagmi v2 config, degrades to
+ * injected-only with zero env, and themes cleanly to the Fera-Gold dark surface. See
+ * app/providers.tsx for the theme wiring and components/layout/ConnectButton.tsx for
+ * the in-aesthetic trigger).
+ *
+ * getDefaultConfig bundles the curated connector set (injected/MetaMask, WalletConnect,
+ * Coinbase, Rainbow, …). Injected wallets — incl. the Robinhood Wallet in-app browser
+ * if it injects window.ethereum — work with NO env. WalletConnect (mobile + QR) needs
+ * NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID; until it is set we pass a non-empty placeholder
+ * so config creation + `next build`/SSR never throw (the WC client is created lazily on
+ * connect, not at module load).
+ *
+ * ssr:true → getDefaultConfig uses cookieStorage, so RSC/`next build` never touch a
+ * wallet at render time.
  */
-const wcProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
+const wcProjectId =
+  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ||
+  "FERA_SET_NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID";
 
-const connectors = [
-  injected({ shimDisconnect: true }),
-  ...(wcProjectId
-    ? [
-        walletConnect({
-          projectId: wcProjectId,
-          showQrModal: true,
-          metadata: {
-            name: "FERA",
-            description: "Regime-aware liquidity on Robinhood Chain",
-            url: "https://fera.example",
-            icons: [],
-          },
-        }),
-      ]
-    : []),
-];
-
-export const wagmiConfig = createConfig({
-  chains: [robinhoodChain],
-  connectors,
-  storage: createStorage({ storage: cookieStorage }),
-  ssr: true,
+export const wagmiConfig = getDefaultConfig({
+  appName: "FERA",
+  appDescription: "Regime-aware liquidity on Robinhood Chain",
+  appUrl: "https://fera.fi",
+  appIcon: "https://fera.fi/icon.png",
+  projectId: wcProjectId,
+  chains: [robinhoodChain, robinhoodTestnet],
   transports: {
     [robinhoodChain.id]: http(),
+    [robinhoodTestnet.id]: http(),
   },
+  ssr: true,
 });
 
 /**
- * ROBINHOOD WALLET DEEP-LINK — investigation note.
- * -------------------------------------------------
- * As of build time, Robinhood Wallet exposes no public WalletConnect projectId
- * allow-list entry or documented EIP-1193 deep-link scheme we can rely on. Three
- * viable paths, in order of preference once RH confirms support:
- *
- *   1. WalletConnect v2 — if RH Wallet registers as a WC-compatible wallet, it will
- *      appear in the WC modal automatically via the connector above (no extra code).
- *   2. Universal/App link deep-link — open `https://wallet.robinhood.com/wc?uri=<enc>`
- *      (or the vendor's documented scheme) with the WC pairing URI, so mobile users
- *      jump straight into RH Wallet instead of scanning a QR. Implemented as a UI
- *      shortcut in ConnectButton (guarded behind ROBINHOOD_WALLET_DEEPLINK).
- *   3. Native injected provider — if RH Wallet's in-app browser injects
- *      window.ethereum, the `injected` connector already handles it with no work.
- *
- * ACTION: confirm the real scheme with Deployment (5)/GTM (7); until then the button
- * is shown but flagged "beta" and falls back to WalletConnect QR.
+ * ROBINHOOD WALLET DEEP-LINK — investigation note (still open; kept for Deployment/GTM).
+ * -------------------------------------------------------------------------------------
+ * Robinhood Wallet exposes no confirmed public WalletConnect allow-list entry or
+ * documented deep-link scheme yet. Three viable paths, in order of preference:
+ *   1. WalletConnect v2 — if RH Wallet registers as WC-compatible it appears in the
+ *      RainbowKit/WC modal automatically (no extra code).
+ *   2. Universal-link deep-link with the WC pairing URI (scheme below) so mobile users
+ *      jump straight into RH Wallet instead of scanning a QR.
+ *   3. Native injected provider — RH Wallet's in-app browser injecting window.ethereum
+ *      is already handled by the injected connector with no work.
+ * ACTION: confirm the real scheme with Deployment (5)/GTM (7).
  */
 export const ROBINHOOD_WALLET_DEEPLINK = {
   enabled: false, // flip once the scheme is confirmed

@@ -29,7 +29,7 @@ export function PoolDetailView({ poolId }: { poolId: PoolId }) {
   if (error || !pool)
     return (
       <Card className="p-8 text-center text-body-sm text-neg">
-        Pool not found. <Link href="/" className="text-accent underline">Back to Earn</Link>
+        Pool not found. <Link href="/app" className="text-accent underline">Back to Earn</Link>
       </Card>
     );
 
@@ -38,7 +38,7 @@ export function PoolDetailView({ poolId }: { poolId: PoolId }) {
       {/* header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/" className="text-mute hover:text-dim text-body-sm">
+          <Link href="/app" className="text-mute hover:text-dim text-body-sm">
             ← Earn
           </Link>
           <TokenPair token0={pool.token0} token1={pool.token1} className="text-title" />

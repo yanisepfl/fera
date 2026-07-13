@@ -1,112 +1,56 @@
 "use client";
 
-import { useState } from "react";
-import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { ConnectButton as RainbowConnectButton } from "@rainbow-me/rainbowkit";
 import { Button } from "@/components/ui/Button";
 import { shortHex } from "@/lib/format";
-import { ROBINHOOD_WALLET_DEEPLINK } from "@/lib/wagmi";
-import { cn } from "@/lib/cn";
 
 /**
- * Compact wallet connect. Lists injected + WalletConnect (when configured) + a
- * Robinhood-Wallet deep-link entry (beta — see lib/wagmi ROBINHOOD_WALLET_DEEPLINK).
- * Kept minimal on purpose (no RainbowKit) to match the calm, data-dense aesthetic.
+ * Wallet connect — RainbowKit's modal (family-standard WalletConnect UX) triggered by a
+ * button rendered in the FERA design system, so the connect affordance stays calm and
+ * in-aesthetic (DESIGN.md) instead of RainbowKit's stock chrome. Same export name as
+ * before, so TopNav and the landing import it unchanged.
  */
 export function ConnectButton() {
-  const { address, isConnected } = useAccount();
-  const { connectors, connect, isPending } = useConnect();
-  const { disconnect } = useDisconnect();
-  const [open, setOpen] = useState(false);
-
-  if (isConnected && address) {
-    return (
-      <Button variant="secondary" size="sm" onClick={() => disconnect()}>
-        <span className="h-1.5 w-1.5 rounded-full bg-pos" />
-        <span className="font-mono">{shortHex(address)}</span>
-      </Button>
-    );
-  }
-
   return (
-    <div className="relative">
-      <Button size="sm" onClick={() => setOpen((v) => !v)} disabled={isPending}>
-        {isPending ? "Connecting…" : "Connect"}
-      </Button>
-      {open ? (
-        <>
+    <RainbowConnectButton.Custom>
+      {({
+        account,
+        chain,
+        openAccountModal,
+        openChainModal,
+        openConnectModal,
+        authenticationStatus,
+        mounted,
+      }) => {
+        const ready = mounted && authenticationStatus !== "loading";
+        const connected =
+          ready &&
+          account &&
+          chain &&
+          (!authenticationStatus || authenticationStatus === "authenticated");
+
+        return (
           <div
-            className="fixed inset-0 z-40"
-            onClick={() => setOpen(false)}
-            aria-hidden
-          />
-          <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-64 rounded-lg border border-line-strong bg-raised p-1.5 shadow-pop">
-            <div className="px-2.5 py-1.5 overline">Connect a wallet</div>
-            {connectors.map((c) => (
-              <WalletRow
-                key={c.uid}
-                label={c.name}
-                onClick={() => {
-                  connect({ connector: c });
-                  setOpen(false);
-                }}
-              />
-            ))}
-            <WalletRow
-              label="Robinhood Wallet"
-              beta
-              onClick={() => {
-                // Deep-link path — falls back to WalletConnect until the scheme is confirmed.
-                const wc = connectors.find((c) => c.id === "walletConnect");
-                if (ROBINHOOD_WALLET_DEEPLINK.enabled && wc) {
-                  connect({ connector: wc });
-                } else if (wc) {
-                  connect({ connector: wc });
-                }
-                setOpen(false);
-              }}
-            />
-            {!connectors.some((c) => c.id === "walletConnect") ? (
-              <p className="px-2.5 py-2 text-caption text-mute">
-                Set{" "}
-                <code className="font-mono text-dim">
-                  NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
-                </code>{" "}
-                for mobile + Robinhood Wallet.
-              </p>
-            ) : null}
+            aria-hidden={!ready}
+            className={ready ? undefined : "pointer-events-none opacity-0"}
+          >
+            {!connected || !account || !chain ? (
+              <Button size="sm" onClick={openConnectModal}>
+                Connect
+              </Button>
+            ) : chain.unsupported ? (
+              <Button variant="danger" size="sm" onClick={openChainModal}>
+                Wrong network
+              </Button>
+            ) : (
+              <Button variant="secondary" size="sm" onClick={openAccountModal}>
+                <span className="h-1.5 w-1.5 rounded-full bg-pos" />
+                <span className="font-mono">{shortHex(account.address)}</span>
+              </Button>
+            )}
           </div>
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-function WalletRow({
-  label,
-  onClick,
-  beta,
-}: {
-  label: string;
-  onClick: () => void;
-  beta?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2",
-        "text-body-sm text-dim hover:bg-hover hover:text-text transition-colors"
-      )}
-    >
-      <span className="flex items-center gap-2">
-        <span className="grid h-5 w-5 place-items-center rounded bg-surface text-[10px] font-semibold text-mute">
-          {label.slice(0, 1)}
-        </span>
-        {label}
-      </span>
-      {beta ? (
-        <span className="text-micro uppercase tracking-wide text-accent">beta</span>
-      ) : null}
-    </button>
+        );
+      }}
+    </RainbowConnectButton.Custom>
   );
 }

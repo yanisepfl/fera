@@ -15,7 +15,7 @@ export function PoolRow({ pool }: { pool: PoolSummary }) {
     <div className="group grid grid-cols-2 items-center gap-3 border-b border-line px-4 py-3.5 last:border-0 hover:bg-elevated md:grid-cols-[1.6fr_0.9fr_1.3fr_0.9fr_1fr_auto]">
       {/* pair + regime */}
       <Link
-        href={`/pool/${pool.poolId}`}
+        href={`/app/pool/${pool.poolId}`}
         className="flex items-center gap-3 min-w-0"
       >
         <TokenPair token0={pool.token0} token1={pool.token1} />

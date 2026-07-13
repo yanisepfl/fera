@@ -13,7 +13,7 @@ test.describe("FERA funnel: deposit → earn → claim → stake", () => {
   test("1. DEPOSIT — deposit into the featured pool from Earn", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/app");
 
     // Earn hero shows a LIVE dynamic fee and its reason.
     await expect(page.getByText("LIVE FEE").first()).toBeVisible();
@@ -34,7 +34,7 @@ test.describe("FERA funnel: deposit → earn → claim → stake", () => {
   test("2. EARN — pools list shows fee-yield and emissions APR separately", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/app");
     // The APR streams are always shown distinctly, never blended.
     await expect(page.getByText(/Fee-yield APR/i).first()).toBeVisible();
     await expect(page.getByText(/Emissions APR/i).first()).toBeVisible();
@@ -43,7 +43,7 @@ test.describe("FERA funnel: deposit → earn → claim → stake", () => {
   test("3. CLAIM — rewards page shows epoch countdown and claim surface", async ({
     page,
   }) => {
-    await page.goto("/rewards");
+    await page.goto("/app/rewards");
 
     // Epoch countdown present.
     await expect(page.getByText(/Epoch #/i).first()).toBeVisible();
@@ -63,7 +63,7 @@ test.describe("FERA funnel: deposit → earn → claim → stake", () => {
   test("4. STAKE — sFERA panel shows revenue-share APR distinct from emissions", async ({
     page,
   }) => {
-    await page.goto("/rewards");
+    await page.goto("/app/rewards");
     await expect(page.getByText(/sFERA/i).first()).toBeVisible();
     // Real yield (revenue share) is labelled and separated from token emissions.
     await expect(page.getByText(/Revenue-share APR/i)).toBeVisible();
@@ -71,7 +71,7 @@ test.describe("FERA funnel: deposit → earn → claim → stake", () => {
   });
 
   test("5. SWAP — live regime fee shows a reason", async ({ page }) => {
-    await page.goto("/swap");
+    await page.goto("/app/swap");
     await expect(page.getByText(/Live regime fee/i)).toBeVisible();
     // e.g. "Fee 2.10%: volatility elevated" — the reason is always present.
     await expect(page.getByText(/volatility|widened|calm|market/i).first()).toBeVisible();
@@ -80,7 +80,7 @@ test.describe("FERA funnel: deposit → earn → claim → stake", () => {
   test("6. TRANSPARENCY — emissions chart and 50/25/25 split render", async ({
     page,
   }) => {
-    await page.goto("/transparency");
+    await page.goto("/app/transparency");
     await expect(page.getByText(/Emissions vs cap vs/i)).toBeVisible();
     await expect(page.getByText(/50 . 25 . 25/i)).toBeVisible();
   });

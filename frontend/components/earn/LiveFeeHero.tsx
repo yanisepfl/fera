@@ -113,7 +113,7 @@ export function LiveFeeHero({
                 </Button>
               )}
             />
-            <Link href={`/pool/${pool.poolId}`}>
+            <Link href={`/app/pool/${pool.poolId}`}>
               <Button size="lg" variant="secondary">
                 Pool
               </Button>
