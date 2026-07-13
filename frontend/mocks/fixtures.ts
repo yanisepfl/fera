@@ -1,5 +1,5 @@
 /**
- * Mock fixtures — realistic FERA data shaped exactly to MASTER_SPEC §8.
+ * Mock fixtures - realistic FERA data shaped exactly to MASTER_SPEC §8.
  * Consumed by lib/api.ts in mock mode and by mocks/handlers.ts (MSW).
  * NOT lorem: values reflect the SHARED_CONTEXT thesis (Robinhood Chain pairs,
  * regime fees, weekend Stock-Token drift, emissions ≤ revenue bound).
@@ -54,7 +54,7 @@ export const POOLS: PoolSummary[] = [
     regime: "RWA",
     token0: NVDA,
     token1: USDG,
-    currentFeePips: 480, // 0.048% — market open, tight
+    currentFeePips: 480, // 0.048% - market open, tight
     feeApr: 0.213,
     emissionsApr: 0.116,
     tvlUsd: 4_820_000,
@@ -65,7 +65,7 @@ export const POOLS: PoolSummary[] = [
     regime: "MEME",
     token0: PEPE,
     token1: WETH,
-    currentFeePips: 21000, // 2.10% — volatility elevated
+    currentFeePips: 21000, // 2.10% - volatility elevated
     feeApr: 0.734,
     emissionsApr: 0.298,
     tvlUsd: 1_240_000,
@@ -87,7 +87,7 @@ export const POOLS: PoolSummary[] = [
     regime: "MEME",
     token0: WIF,
     token1: WETH,
-    currentFeePips: 34000, // 3.40% — one-sided sell pressure
+    currentFeePips: 34000, // 3.40% - one-sided sell pressure
     feeApr: 0.912,
     emissionsApr: 0.377,
     tvlUsd: 690_000,
@@ -98,7 +98,7 @@ export const POOLS: PoolSummary[] = [
     regime: "RWA",
     token0: GOOG,
     token1: USDG,
-    currentFeePips: 6200, // 0.62% — market CLOSED, widened
+    currentFeePips: 6200, // 0.62% - market CLOSED, widened
     feeApr: 0.241,
     emissionsApr: 0.094,
     tvlUsd: 2_110_000,
@@ -226,7 +226,7 @@ const RWA_STRATEGY: StrategyLogEntry[] = [
 const MEME_STRATEGY: StrategyLogEntry[] = [
   {
     t: NOW - 6 * HOUR,
-    kind: 5, // fee drip — principal untouched
+    kind: 5, // fee drip - principal untouched
     tickLower: -1400,
     tickUpper: 1400,
     oraclePrice: 0,
@@ -243,7 +243,7 @@ const MEME_STRATEGY: StrategyLogEntry[] = [
   },
   {
     t: NOW - 4 * DAY,
-    kind: 6, // band consolidation — stay under MAX_BANDS (D-17)
+    kind: 6, // band consolidation - stay under MAX_BANDS (D-17)
     tickLower: -2100,
     tickUpper: 2100,
     oraclePrice: 0,
@@ -251,7 +251,7 @@ const MEME_STRATEGY: StrategyLogEntry[] = [
   },
   {
     t: NOW - 9 * DAY,
-    kind: 1, // guarded principal recenter (rare) — depth stayed below v1 floor ≥24h
+    kind: 1, // guarded principal recenter (rare) - depth stayed below v1 floor ≥24h
     tickLower: -4200,
     tickUpper: 4200,
     oraclePrice: 0,
@@ -314,7 +314,7 @@ export const POOL_DETAILS: Record<string, PoolDetail> = {
     band: { fullRange: false, tickLower: -420, tickUpper: 420, priceLower: 168.2, priceUpper: 176.9 },
     marketHoursState: "CLOSED",
     oraclePrice: 172.6,
-    poolPrice: 173.9, // drifted off-hours — arb becomes LP income
+    poolPrice: 173.9, // drifted off-hours - arb becomes LP income
     feeHistory: feeHistory(6200, 1400),
     strategyLog: RWA_STRATEGY,
   },
@@ -396,10 +396,10 @@ export const STAKING: StakingSummary = {
   sFera: 48_200,
   boost: 1.74,
   multiplierPoints: 12_940,
-  revenueShareApr: 0.081, // 8.1% REAL yield — shown distinctly from emissions
+  revenueShareApr: 0.081, // 8.1% REAL yield - shown distinctly from emissions
 };
 
-// --- Vesting (GET /vesting/:account) — §8 endpoint added v0.2 (OD-6/FE-6) -----
+// --- Vesting (GET /vesting/:account) - §8 endpoint added v0.2 (OD-6/FE-6) -----
 // Seed grants (human units) → §8 VestingGrant[] with 18-dec STRING amounts. esFERA vests
 // ~6mo linear to FERA 1:1 (VEST_DAYS=182). `claimed` = FERA already withdrawn from the grant.
 const VEST_SEED = [
@@ -429,7 +429,7 @@ export const EMISSIONS: EmissionsTransparency = {
     // logistic S-curve cap over ~4y; revenue bound grows with activity then flattens
     const cap = 4_600_000 / (1 + Math.exp(-(i - 14) / 3.2));
     const revenueBound = 120_000 + 62_000 * Math.log(1 + i) + (i % 4) * 9_000;
-    const emitted = Math.min(cap, revenueBound); // min(cap, β×revenue) — β folded into revenueBound
+    const emitted = Math.min(cap, revenueBound); // min(cap, β×revenue) - β folded into revenueBound
     const feraTwap = 0.042 + i * 0.0016 + Math.sin(i / 3) * 0.002;
     return { epochId, cap: Math.round(cap), revenueBound: Math.round(revenueBound), emitted: Math.round(emitted), feraTwap: +feraTwap.toFixed(4) };
   }),

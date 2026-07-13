@@ -6,11 +6,11 @@ import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: {
-    default: "FERA — the liquidity layer that prices what others bleed",
+    default: "FERA - the liquidity layer that prices what others bleed",
     template: "%s · FERA",
   },
   description:
-    "A Uniswap v4 hook on Robinhood Chain that charges toxic, mechanical, and weekend-arbitrage flow the fee it's actually worth — so the volatility that drains ordinary LPs pays FERA's LPs instead.",
+    "A Uniswap v4 hook on Robinhood Chain that charges toxic, mechanical, and weekend-arbitrage flow the fee it's actually worth - so the volatility that drains ordinary LPs pays FERA's LPs instead.",
 };
 
 export const viewport: Viewport = {

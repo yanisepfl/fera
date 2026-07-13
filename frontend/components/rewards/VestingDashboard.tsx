@@ -12,10 +12,9 @@ import { weiToTokens, tokenAmt, countdownLabel } from "@/lib/format";
 import type { VestingGrant } from "@/lib/types";
 
 /**
- * esFERA grants, backed by GET /vesting/:account (§8, added v0.2 / FE-6). All amounts arrive
- * as 18-dec STRINGS (§8 v0.2) and are parsed with weiToTokens for display only. Linear vest to
- * FERA 1:1; instant-exit on the unvested remainder takes the 50% haircut (INV-9), shown with
- * the same "impossible to miss" rigor as the standalone calculator BEFORE any confirm.
+ * esFERA vesting grants. Amounts arrive as 18-dec strings and are parsed with
+ * weiToTokens for display only. esFERA vests linearly to FERA 1:1; exit early on
+ * the still-locked remainder and you keep half, shown plainly before any confirm.
  */
 export function VestingDashboard() {
   const { address, isConnected } = useAccount();
@@ -24,8 +23,11 @@ export function VestingDashboard() {
 
   if (!isConnected) {
     return (
-      <Card>
-        <CardHeader eyebrow="Vesting" title="esFERA → FERA" />
+      <Card className="card-glow">
+        <CardHeader
+          eyebrow={<span className="text-accent">Vesting</span>}
+          title="esFERA → FERA"
+        />
         <div className="px-5 pb-5">
           <p className="text-body-sm text-dim">
             Connect a wallet to see your esFERA vesting grants.
@@ -40,9 +42,9 @@ export function VestingDashboard() {
   const totalClaimable = grants.reduce((s, g) => s + weiToTokens(g.claimable), 0);
 
   return (
-    <Card>
+    <Card className="card-glow">
       <CardHeader
-        eyebrow="Vesting"
+        eyebrow={<span className="text-accent">Vesting</span>}
         title="esFERA → FERA"
         action={
           <div className="text-right">

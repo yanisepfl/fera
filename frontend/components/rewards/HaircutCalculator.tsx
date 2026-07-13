@@ -6,27 +6,26 @@ import { HaircutBreakdown } from "./HaircutBreakdown";
 import { InfoTip } from "@/components/ui/InfoTip";
 
 /**
- * Standalone instant-exit HAIRCUT CALCULATOR. Type an esFERA amount and see exactly
- * what you'd lose before ever confirming. This is the "forfeiture impossible to miss"
- * surface required for the vesting dashboard.
+ * Instant-exit calculator. Type an esFERA amount and see the trade in one glance:
+ * exit now for half, or wait the vest for all of it. Dead simple, no fine print.
  */
 export function HaircutCalculator({ presetBalance = 2652.6 }: { presetBalance?: number }) {
   const [raw, setRaw] = useState("1000");
   const amount = Number(raw) || 0;
 
   return (
-    <Card>
+    <Card className="card-glow">
       <CardHeader
-        eyebrow="Instant-exit calculator"
-        title="What would exiting cost you?"
+        eyebrow={<span className="text-accent">Instant exit</span>}
+        title="Exit now, or wait to vest?"
         action={
-          <InfoTip text="Instant exit converts esFERA to FERA now at a 50% haircut. The forfeited half is split 1/3 burn, 1/3 stakers, 1/3 revenue (INV-9)." />
+          <InfoTip text="Instant exit turns esFERA into FERA right now, at half its value. Wait the vest and you keep all of it." />
         }
       />
       <div className="px-5 pb-5 space-y-4">
         <label className="block">
           <div className="mb-1 flex items-center justify-between">
-            <span className="overline">esFERA to instant-exit</span>
+            <span className="overline">esFERA to exit</span>
             <button
               className="text-caption text-accent hover:text-accent-strong"
               onClick={() => setRaw(String(presetBalance))}
@@ -52,7 +51,7 @@ export function HaircutCalculator({ presetBalance = 2652.6 }: { presetBalance?: 
             value={Math.min(amount, presetBalance)}
             onChange={(e) => setRaw(e.target.value)}
             className="mt-3 w-full accent-[var(--danger)]"
-            aria-label="Amount to instant-exit"
+            aria-label="Amount to exit"
           />
         </label>
 

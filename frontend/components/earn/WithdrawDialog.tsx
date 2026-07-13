@@ -97,7 +97,7 @@ export function WithdrawDialog({
               />
 
               <p className="text-caption text-mute">
-                Principal is returned in full and a withdrawal is never blocked (INV-11). Any
+                Principal is returned in full and a withdrawal is never blocked. Any
                 pending esFERA keeps vesting. Withdrawing shares doesn&apos;t forfeit it.
               </p>
 

@@ -59,7 +59,7 @@ export function JitPenaltyNotice({
           swap fees this position accrued in that window. They go to the LPs still in range.
           The penalty decays linearly to zero across the window. Your{" "}
           <span className="font-semibold text-text">principal is never touched and a
-          withdrawal is never blocked</span> (INV-11).
+          withdrawal is never blocked</span>.
         </p>
         <p className="mt-1.5 text-caption text-pos">
           LP-positive: when other LPs bail early, their forfeited fees are paid to you while

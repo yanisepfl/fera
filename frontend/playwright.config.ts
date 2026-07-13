@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * FERA E2E config. Skeleton only — NOT run in CI yet.
+ * FERA E2E config. Skeleton only - NOT run in CI yet.
  *
  * The dev server is started by Playwright on demand (reused if already up). We set
  * NEXT_PUBLIC_GEO_OVERRIDE=FR so the RWA deposit affordance isn't geo-fenced in the

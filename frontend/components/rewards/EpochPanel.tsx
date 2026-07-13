@@ -6,7 +6,8 @@ import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { LiveDot } from "@/components/ui/LiveDot";
 import { InfoTip } from "@/components/ui/InfoTip";
-import { countdown, usd, esFera } from "@/lib/format";
+import { CountUp } from "@/components/viz/CountUp";
+import { countdown, usd, weiToTokens } from "@/lib/format";
 
 /** Re-render every second so the epoch clock ticks. Only mounts client-side. */
 function useNow(intervalMs = 1000) {
@@ -19,11 +20,11 @@ function useNow(intervalMs = 1000) {
 }
 
 /**
- * Current (unfinalized) weekly epoch, from GET /epochs/current (§8).
- * Shows the countdown to close, the account's fees PAID (drives the 5% trader
- * bucket) vs fees EARNED (drives the 85% LP bucket), and the projected esFERA at
- * the current pro-rata. Nothing here is claimable yet. That happens once the
- * epoch finalizes and a Merkle root is posted (see ClaimsCard).
+ * Current (unfinalized) weekly epoch, from GET /epochs/current.
+ * Shows the countdown to close, the account's fees paid (drives the 5% trader
+ * bucket) vs fees earned (drives the 85% LP bucket), and the projected esFERA at
+ * the current pace. Nothing here is claimable yet. That happens once the epoch
+ * finalizes on-chain (see ClaimsCard).
  */
 export function EpochPanel() {
   const { data: epoch, isLoading } = useCurrentEpoch();
@@ -35,7 +36,7 @@ export function EpochPanel() {
   const c = countdown(epoch.endsAt, now);
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="card-glow overflow-hidden">
       <div className="grid gap-6 p-6 md:grid-cols-[1fr_1.3fr] md:p-7">
         {/* countdown */}
         <div className="flex flex-col justify-between gap-5 rounded-lg border border-line bg-well/60 p-5">
@@ -53,8 +54,8 @@ export function EpochPanel() {
             <TimeBlock v={c.s} unit="s" dim />
           </div>
           <p className="text-caption text-mute">
-            Weekly epochs. At close, Backend snapshots events, computes the Merkle
-            root (§9), and a keeper posts it on-chain. Then rewards become claimable.
+            A new epoch every week. When it closes, your rewards are finalized on-chain
+            and become claimable.
           </p>
         </div>
 
@@ -63,7 +64,7 @@ export function EpochPanel() {
           <div>
             <div className="mb-1 flex items-center gap-1">
               <span className="overline">Fees paid</span>
-              <InfoTip text="Fees you paid as a TRADER this epoch. Drives your pro-rata slice of the 5% trader-rebate emission bucket (§7 · 85/5/10)." />
+              <InfoTip text="Fees you paid as a trader this epoch. This sets your share of trader emissions." />
             </div>
             <div className="font-mono tnum text-title font-semibold text-text">
               {usd(epoch.feesPaid)}
@@ -73,7 +74,7 @@ export function EpochPanel() {
           <div>
             <div className="mb-1 flex items-center gap-1">
               <span className="overline">Fees earned</span>
-              <InfoTip text="Fees you earned as an LP this epoch (net of the 10% perf fee). Drives your slice of the 85% LP emission bucket (§7 · 85/5/10)." />
+              <InfoTip text="Fees you earned as an LP this epoch, after the 10% performance fee. This sets your share of LP emissions." />
             </div>
             <div className="font-mono tnum text-title font-semibold text-pos">
               {usd(epoch.feesEarned)}
@@ -82,13 +83,13 @@ export function EpochPanel() {
           </div>
           <div className="col-span-2 sm:col-span-1">
             <div className="mb-1 flex items-center gap-1">
-              <span className="overline">Projected esFERA</span>
-              <InfoTip text="Estimated esFERA for this account at the current pro-rata. Final amount is fixed only when the epoch closes and the root is posted." />
+              <span className="overline text-accent">Projected esFERA</span>
+              <InfoTip text="Estimated esFERA for you at the current pace. It is fixed only when the epoch closes." />
             </div>
-            <div className="font-mono tnum text-title font-semibold text-accent">
-              {esFera(epoch.projectedEsFera)}
+            <div className="text-title font-semibold text-accent">
+              <CountUp value={weiToTokens(epoch.projectedEsFera)} decimals={1} />
             </div>
-            <div className="text-caption text-mute">at current pro-rata</div>
+            <div className="text-caption text-mute">projected, at current pace</div>
           </div>
         </div>
       </div>

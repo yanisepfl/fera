@@ -22,8 +22,8 @@ export function StrategyLog({ pool }: { pool: PoolDetail }) {
         {pool.regime === "MEME" ? (
           <p className="mb-4 text-caption text-mute">
             <span className="text-pos">Fee drip</span> moves income only;{" "}
-            <span className="text-accent">principal</span> actions are rare and guarded
-            (INV-5″). {hasDrip ? "Income follows price without churning your principal." : ""}
+            <span className="text-accent">principal</span> actions are rare and guarded.{" "}
+            {hasDrip ? "Income follows price without churning your principal." : ""}
           </p>
         ) : null}
         <ol className="relative space-y-4 border-l border-line pl-5">

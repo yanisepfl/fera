@@ -1,7 +1,7 @@
 import { cn } from "@/lib/cn";
 
 /**
- * FERA brand mark — a single geometric F, condensed and forward-leaning
+ * FERA brand mark - a single geometric F, condensed and forward-leaning
  * (see /BRAND.md and public/brand/mark.svg for the reference source).
  *
  * Path geometry is copied verbatim from public/brand/mark.svg (5 flat shapes,

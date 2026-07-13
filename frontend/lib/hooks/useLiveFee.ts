@@ -16,7 +16,7 @@ import type { Regime } from "@/lib/types";
  * mount, so server and client HTML match (no hydration flash) and it idles under
  * prefers-reduced-motion.
  *
- * MEME floor is 3400 pips (0.34%) — raised from 0.30% in Mechanism v2 (PT-3): the 10%
+ * MEME floor is 3400 pips (0.34%) - raised from 0.30% in Mechanism v2 (PT-3): the 10%
  * perf fee means 0.9·0.34% > 0.30% clears the vanilla-30 hurdle at the floor itself.
  */
 const RANGE: Record<Regime, [number, number]> = {
@@ -29,7 +29,7 @@ export interface LiveFee {
   prevPips: number;
   /** 1 = ticked up, -1 = down, 0 = unchanged (first paint) */
   direction: -1 | 0 | 1;
-  /** monotonically increases each tick — use as a React key to retrigger flash anim */
+  /** monotonically increases each tick - use as a React key to retrigger flash anim */
   tick: number;
 }
 

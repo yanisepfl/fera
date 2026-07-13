@@ -7,7 +7,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { tokenAmt, shortHex } from "@/lib/format";
+import { tokenAmt } from "@/lib/format";
 import type { ClaimKind } from "@/lib/types";
 
 const KIND_LABEL: Record<ClaimKind, string> = {
@@ -21,9 +21,10 @@ function fromWei(amount: string): number {
 }
 
 /**
- * Merkle claim for the most recently FINALIZED epoch, from GET /epochs/:id/proof/:account (§8).
- * The current epoch (EpochPanel) is still accruing; the claimable root is the prior
- * epoch. Claiming is idempotent per (epochId, account, kind), INV-8.
+ * Claim your esFERA emissions from the most recently finalized epoch. These are
+ * earned from your own LPing and trading, then vest to FERA. This is separate
+ * from the staking revenue share (real fee tokens), which is claimed in the
+ * Staking panel.
  */
 export function ClaimsCard() {
   const { address, isConnected } = useAccount();
@@ -34,10 +35,10 @@ export function ClaimsCard() {
   const [claimed, setClaimed] = useState(false);
 
   return (
-    <Card>
+    <Card className="card-glow">
       <CardHeader
-        eyebrow="Claim"
-        title="Claimable esFERA"
+        eyebrow={<span className="text-accent">Claim</span>}
+        title="Your esFERA emissions"
         action={
           finalizedEpoch !== undefined ? (
             <span className="text-caption text-mute">
@@ -49,14 +50,14 @@ export function ClaimsCard() {
       <div className="px-5 pb-5">
         {!isConnected ? (
           <p className="text-body-sm text-dim">
-            Connect a wallet to see your posted Merkle claim for the last epoch.
+            Connect a wallet to see the esFERA you earned last epoch.
           </p>
         ) : isLoading ? (
           <Skeleton className="h-24 w-full rounded-lg" />
         ) : !proof ? (
           <p className="text-body-sm text-dim">
             Nothing to claim for epoch #{finalizedEpoch}. Emissions accrue for the
-            current epoch (above) and become claimable once it finalizes.
+            current epoch (above) and become claimable once it closes.
           </p>
         ) : (
           <div className="space-y-4">
@@ -66,9 +67,6 @@ export function ClaimsCard() {
                   <Badge color="var(--accent)" wash="var(--accent-wash)">
                     {KIND_LABEL[proof.kind]}
                   </Badge>
-                  <span className="text-caption text-mute">
-                    proof depth {proof.proof.length}
-                  </span>
                 </div>
                 <div className="font-mono tnum text-display-l font-semibold text-accent">
                   {tokenAmt(fromWei(proof.amount), 2)}
@@ -83,13 +81,9 @@ export function ClaimsCard() {
                 {claimed ? "Claimed ✓" : "Claim"}
               </Button>
             </div>
-            <p className="text-caption text-mute font-mono tnum">
-              leaf = keccak256(epochId={finalizedEpoch}, {shortHex(address ?? "0x")},
-              kind={proof.kind}, amount) · claimable once (INV-8)
-            </p>
             <p className="text-caption text-mute">
-              Claimed esFERA lands in the vesting schedule below (6-mo linear →
-              FERA 1:1). Real path: Distributor.claim(epochId, kind, amount, proof).
+              Earned from your LPing and trading. Claimed esFERA vests to FERA over
+              about 6 months, 1:1.
             </p>
           </div>
         )}

@@ -24,7 +24,7 @@ export interface GeoFenceResult {
 /**
  * Config-driven geo-fence for a pool's LP/deposit affordance.
  * MEME pools are never fenced; RWA pools consult config/geo.ts.
- * Swaps are NEVER gated by this — INV-2 (routers must reach the pool).
+ * Swaps are NEVER gated by this - INV-2 (routers must reach the pool).
  */
 export function useGeoFence(regime: Regime): GeoFenceResult {
   return useMemo(() => {

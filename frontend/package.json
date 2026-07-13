@@ -2,7 +2,7 @@
   "name": "@fera/frontend",
   "version": "0.1.0",
   "private": true,
-  "description": "FERA — LP-first, regime-aware liquidity UI. Next.js App Router + wagmi/viem + lightweight-charts.",
+  "description": "FERA - LP-first, regime-aware liquidity UI. Next.js App Router + wagmi/viem + lightweight-charts.",
   "engines": {
     "node": ">=20"
   },

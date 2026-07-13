@@ -1,10 +1,10 @@
 import type { Config } from "tailwindcss";
 
 /**
- * FERA design tokens — see frontend/DESIGN.md for the full rationale.
+ * FERA design tokens - see frontend/DESIGN.md for the full rationale.
  * Colors are wired to CSS variables in app/globals.css so the theme is themeable
  * from one place and stays consistent across Tailwind classes + raw CSS.
- * Aesthetic family: alphix.fi / Canary / Alma / Alps — dark-first, typography-led,
+ * Aesthetic family: alphix.fi / Canary / Alma / Alps - dark-first, typography-led,
  * greyscale-forward with a single restrained accent (Fera Gold).
  */
 const config: Config = {
@@ -45,6 +45,21 @@ const config: Config = {
           line: "var(--accent-line)",
           fg: "var(--on-accent)",
         },
+
+        // --- Secondary accent (Cove: cool data / analytics accent) ---
+        accent2: {
+          DEFAULT: "var(--accent2)",
+          strong: "var(--accent2-strong)",
+          dim: "var(--accent2-dim)",
+          wash: "var(--accent2-wash)",
+          line: "var(--accent2-line)",
+          fg: "var(--on-accent2)",
+        },
+
+        // --- Named chart series (both illustrative charts read as one system) ---
+        "series-fera": "var(--series-fera)",
+        "series-ref": "var(--series-ref)",
+        "series-cove": "var(--series-cove)",
 
         // --- Semantic ---
         pos: "var(--pos)",
@@ -103,8 +118,14 @@ const config: Config = {
         pop: "0 8px 30px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.4)",
         "glow-accent":
           "0 0 0 1px var(--accent-line), 0 10px 34px rgba(231,184,75,0.07)",
+        "glow-accent2":
+          "0 0 0 1px var(--accent2-line), 0 10px 34px rgba(73,190,224,0.08)",
         "glow-danger":
           "0 0 0 1px var(--danger-line), 0 10px 34px rgba(255,92,77,0.09)",
+        "card-hover":
+          "0 0 0 1px var(--accent-line), 0 12px 40px rgba(231,184,75,0.10)",
+        "card-hover-cove":
+          "0 0 0 1px var(--accent2-line), 0 12px 40px rgba(73,190,224,0.10)",
       },
       transitionTimingFunction: {
         out: "cubic-bezier(0.22, 1, 0.36, 1)",

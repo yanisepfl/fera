@@ -2,14 +2,14 @@
   Next.js app-router metadata file convention: co-located here as `icon.svg`,
   it's auto-detected and injected as the favicon/tab icon (no manifest or
   <link> tag needed). Content is copied verbatim from
-  public/brand/mark-on-dark.svg (the mark pre-set on a Void rounded square —
+  public/brand/mark-on-dark.svg (the mark pre-set on a Void rounded square - 
   see BRAND.md), since a favicon needs an opaque backing the transparent
   mark.svg doesn't have.
 
   TODO (future, non-blocking): for older browsers/platforms that don't honor
   SVG favicons (legacy Safari pinned-tab, some Android launchers), generate a
-  raster fallback (favicon.ico / apple-icon.png) from this same source —
-  public/brand/mark-on-dark.svg — at 32x32 / 180x180 etc. Not done here since
+  raster fallback (favicon.ico / apple-icon.png) from this same source - 
+  public/brand/mark-on-dark.svg - at 32x32 / 180x180 etc. Not done here since
   this environment has no raster export tooling available.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">

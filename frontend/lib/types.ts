@@ -1,5 +1,5 @@
 /**
- * FERA API data contract — TypeScript mirror of MASTER_SPEC §8
+ * FERA API data contract - TypeScript mirror of MASTER_SPEC §8
  * (Indexer → API contract, Backend 4 ↔ Frontend 3).
  *
  * RULE (MASTER_SPEC §6/§8): the Frontend reads ONLY these shapes from Backend's API.
@@ -8,14 +8,14 @@
  * we model the minimum the UI needs and flag the assumption in frontend/OPEN_DECISIONS.md.
  *
  * Units convention used by the FE (documented, since §8 leaves units to Backend):
- *   - *Pips   : hundredths of a bip (MASTER_SPEC §5). 3400 = 0.34%, 30000 = 3.00%.
- *   - *Apr    : decimal fraction. 0.184 = 18.4% APR.
- *   - *Usd    : USD, already decimal-scaled by Backend from token metadata (may be a JS number).
- *   - amounts named token0/token1 raw counts are decimal-scaled by Backend (§6).
- *   - FERA/esFERA/raw-token amounts are JSON **strings** (18-dec integers) to avoid float
+ *  - *Pips   : hundredths of a bip (MASTER_SPEC §5). 3400 = 0.34%, 30000 = 3.00%.
+ *  - *Apr    : decimal fraction. 0.184 = 18.4% APR.
+ *  - *Usd    : USD, already decimal-scaled by Backend from token metadata (may be a JS number).
+ *  - amounts named token0/token1 raw counts are decimal-scaled by Backend (§6).
+ *  - FERA/esFERA/raw-token amounts are JSON **strings** (18-dec integers) to avoid float
  *     precision loss (§8 Conventions v0.2). Covers `amount`, `projectedEsFera`,
  *     `emissionsPending`, `vested`, `claimable`. Format for display with lib/format.esFera().
- *   - timestamps: unix seconds unless the field name ends in `Ms`.
+ *  - timestamps: unix seconds unless the field name ends in `Ms`.
  */
 
 // ----------------------------------------------------------------------------
@@ -33,7 +33,7 @@ export const REGIME_BY_ID: Record<number, Regime> = { 0: "MEME", 1: "RWA" };
 /**
  * Risk class = the vault's per-pool share class (MASTER_SPEC §4 / VAULT_ARCHITECTURE §2.3,
  * D-12). The on-chain/§6 field is `uint8 tranche` (0 = Core, 1 = Anchor); we NEVER surface
- * the word "tranche" in user copy (D-18, BarnBridge/SEC) — see lib/riskClass.ts for the
+ * the word "tranche" in user copy (D-18, BarnBridge/SEC) - see lib/riskClass.ts for the
  * user-facing labels. RWA pools ship both classes; MEME defaults to Core only (D-16).
  */
 export type RiskClass = "CORE" | "ANCHOR";
@@ -84,7 +84,7 @@ export interface PoolSummary {
   currentFeePips: number;
   /** Trailing fee yield to LPs (net of the 10% perf fee), decimal APR. */
   feeApr: number;
-  /** esFERA emissions APR (distinct stream — never blended into feeApr in the UI). */
+  /** esFERA emissions APR (distinct stream - never blended into feeApr in the UI). */
   emissionsApr: number;
   tvlUsd: number;
   /** Depth multiple vs the best competing vanilla venue for this pair. 1.8 = 1.8x deeper. */
@@ -108,15 +108,15 @@ export interface FeeHistoryPoint {
   feePips: number;
 }
 
-/** MASTER_SPEC §6 StrategyAction.kind (F-8 batch adds 5/6 — D-15/D-17). */
+/** MASTER_SPEC §6 StrategyAction.kind (F-8 batch adds 5/6 - D-15/D-17). */
 export type StrategyKind =
   | 0 // initialMint (MEME/RWA)
-  | 1 // recenter (RWA), or guarded principal recenter (MEME — INV-5″/D-15)
+  | 1 // recenter (RWA), or guarded principal recenter (MEME - INV-5″/D-15)
   | 2 // widen (RWA off-hours)
   | 3 // partialWithdraw (RWA)
   | 4 // compoundInPlace
-  | 5 // dripDeploy (MEME fee-income deployed into a new band — INV-5″)
-  | 6; // bandConsolidate (fee-band merge under MAX_BANDS — D-17)
+  | 5 // dripDeploy (MEME fee-income deployed into a new band - INV-5″)
+  | 6; // bandConsolidate (fee-band merge under MAX_BANDS - D-17)
 
 export interface StrategyLogEntry {
   /** unix seconds */
@@ -170,7 +170,7 @@ export interface LadderBand {
 
 export interface PoolDetail extends PoolSummary {
   band: PositionBand;
-  /** Discrete band ladder (MEME) — additive §8; RWA may omit (single oracle-anchored band). */
+  /** Discrete band ladder (MEME) - additive §8; RWA may omit (single oracle-anchored band). */
   ladder?: LadderBand[];
   /** RWA only. Absent/`null` for MEME. */
   marketHoursState: MarketHoursState | null;
@@ -213,7 +213,7 @@ export interface Position {
   valueUsd: number;
   /** LP fees earned to date on these shares, USD */
   feesEarned: number;
-  /** esFERA accrued & claimable/pending for these shares — 18-dec STRING (§8 v0.2). */
+  /** esFERA accrued & claimable/pending for these shares - 18-dec STRING (§8 v0.2). */
   emissionsPending: string;
   /**
    * Additive: unix-seconds timestamp of this position's last add. Drives the JIT
@@ -234,7 +234,7 @@ export interface CurrentEpoch {
   feesPaid: number;
   /** fees the account EARNED as an LP this epoch (drives the 85% LP bucket), USD */
   feesEarned: number;
-  /** projected esFERA for the account at current pro-rata — 18-dec STRING (§8 v0.2). */
+  /** projected esFERA for the account at current pro-rata - 18-dec STRING (§8 v0.2). */
   projectedEsFera: string;
 }
 
@@ -245,7 +245,7 @@ export interface CurrentEpoch {
 /**
  * One esFERA vesting grant. §8: `[{ grantId, amount, startTs, endTs, vested, claimable }]`.
  * All esFERA amounts are 18-dec STRINGS (§8 v0.2). esFERA vests ~6mo linear to FERA 1:1;
- * instant-exit on the unvested remainder takes the 50% haircut (INV-9) — see lib/vesting.ts.
+ * instant-exit on the unvested remainder takes the 50% haircut (INV-9) - see lib/vesting.ts.
  */
 export interface VestingGrant {
   grantId: string;
@@ -321,7 +321,7 @@ export interface RevenueByToken {
 }
 
 export interface RevenueTransparency {
-  /** immutable 50/25/25 split — MASTER_SPEC §7 / INV-10 */
+  /** immutable 50/25/25 split - MASTER_SPEC §7 / INV-10 */
   toStakers: number;
   toTreasury: number;
   toOps: number;

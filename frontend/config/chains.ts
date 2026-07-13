@@ -1,12 +1,12 @@
 import { defineChain } from "viem";
 
 /**
- * Robinhood Chain — permissionless Arbitrum Orbit L2 (SHARED_CONTEXT; docs/CHAIN.md).
+ * Robinhood Chain - permissionless Arbitrum Orbit L2 (SHARED_CONTEXT; docs/CHAIN.md).
  * ~100ms soft blocks, EVM-equivalent, native gas token = ETH, Blockscout explorer.
  *
- * Chain IDs are FIXED constants (mainnet 4663 / testnet 46630 — VERIFIED in
+ * Chain IDs are FIXED constants (mainnet 4663 / testnet 46630 - VERIFIED in
  * docs/CHAIN.md §0/§1); env vars only override RPC/explorer endpoints (e.g. to point at
- * an Alchemy/QuickNode RPC — the public RPC is rate-limited) and pick which network is
+ * an Alchemy/QuickNode RPC - the public RPC is rate-limited) and pick which network is
  * "active". This keeps both chains in the wagmi config with distinct ids.
  */
 
@@ -32,7 +32,7 @@ export const robinhoodChain = defineChain({
     },
   },
   testnet: false,
-  // ~100ms soft blocks — poll fast when live.
+  // ~100ms soft blocks - poll fast when live.
   contracts: {},
 });
 

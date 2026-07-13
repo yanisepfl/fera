@@ -113,7 +113,7 @@ export function DepositDialog({
               </p>
               <p className="text-caption text-mute">
                 You now hold vault shares (ERC-20). Fees + esFERA emissions accrue to them
-                automatically. Emissions are the vault&apos;s exclusive reward (INV-14).
+                automatically. Emissions are the vault&apos;s exclusive reward.
               </p>
               <Button className="w-full" onClick={reset}>
                 Done

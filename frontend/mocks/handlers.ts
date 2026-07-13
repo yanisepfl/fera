@@ -1,5 +1,5 @@
 /**
- * MSW request handlers — realistic same-origin /api/* interceptors that return the
+ * MSW request handlers - realistic same-origin /api/* interceptors that return the
  * §8 shapes from fixtures. Enabled with NEXT_PUBLIC_USE_MSW=1 (browser) or in
  * Playwright/node. Default dev path uses fixtures directly via lib/api.ts, so MSW is
  * an opt-in "closer to the wire" mode (adds latency, exercises fetch/error paths).

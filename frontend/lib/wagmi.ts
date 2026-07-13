@@ -5,7 +5,7 @@ import { robinhoodChain, robinhoodTestnet } from "@/config/chains";
 /**
  * wagmi + RainbowKit config.
  *
- * Wallet UX is RainbowKit (the alphix-family idiom is a WalletConnect-based modal —
+ * Wallet UX is RainbowKit (the alphix-family idiom is a WalletConnect-based modal - 
  * alphix's own frontend uses Reown AppKit; we use RainbowKit, the family standard, so
  * the modal layers *additively* on top of the existing wagmi v2 config, degrades to
  * injected-only with zero env, and themes cleanly to the Fera-Gold dark surface. See
@@ -13,8 +13,8 @@ import { robinhoodChain, robinhoodTestnet } from "@/config/chains";
  * the in-aesthetic trigger).
  *
  * getDefaultConfig bundles the curated connector set (injected/MetaMask, WalletConnect,
- * Coinbase, Rainbow, …). Injected wallets — incl. the Robinhood Wallet in-app browser
- * if it injects window.ethereum — work with NO env. WalletConnect (mobile + QR) needs
+ * Coinbase, Rainbow, …). Injected wallets - incl. the Robinhood Wallet in-app browser
+ * if it injects window.ethereum - work with NO env. WalletConnect (mobile + QR) needs
  * NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID; until it is set we pass a non-empty placeholder
  * so config creation + `next build`/SSR never throw (the WC client is created lazily on
  * connect, not at module load).
@@ -41,15 +41,15 @@ export const wagmiConfig = getDefaultConfig({
 });
 
 /**
- * ROBINHOOD WALLET DEEP-LINK — investigation note (still open; kept for Deployment/GTM).
+ * ROBINHOOD WALLET DEEP-LINK - investigation note (still open; kept for Deployment/GTM).
  * -------------------------------------------------------------------------------------
  * Robinhood Wallet exposes no confirmed public WalletConnect allow-list entry or
  * documented deep-link scheme yet. Three viable paths, in order of preference:
- *   1. WalletConnect v2 — if RH Wallet registers as WC-compatible it appears in the
+ *   1. WalletConnect v2 - if RH Wallet registers as WC-compatible it appears in the
  *      RainbowKit/WC modal automatically (no extra code).
  *   2. Universal-link deep-link with the WC pairing URI (scheme below) so mobile users
  *      jump straight into RH Wallet instead of scanning a QR.
- *   3. Native injected provider — RH Wallet's in-app browser injecting window.ethereum
+ *   3. Native injected provider - RH Wallet's in-app browser injecting window.ethereum
  *      is already handled by the injected connector with no work.
  * ACTION: confirm the real scheme with Deployment (5)/GTM (7).
  */

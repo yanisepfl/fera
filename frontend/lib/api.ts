@@ -1,12 +1,12 @@
 /**
- * FERA typed API client — the ONLY surface through which the UI reads pool
+ * FERA typed API client - the ONLY surface through which the UI reads pool
  * lists / aggregates (MASTER_SPEC §6/§8: never read the chain directly for these).
  *
  * Source resolution:
  *   1. NEXT_PUBLIC_API_URL set  → fetch Backend (4)'s indexer/API (real §8 JSON).
  *   2. NEXT_PUBLIC_USE_MSW=1     → fetch same-origin /api/* intercepted by MSW.
  *   3. otherwise                 → resolve straight from mocks/fixtures.ts
- *      (zero network — works in `next build`, RSC, and CI without a running backend).
+ *      (zero network - works in `next build`, RSC, and CI without a running backend).
  *
  * Every function's return type is imported from lib/types.ts, which mirrors §8
  * field names verbatim. Swap the source; the types don't move.
@@ -94,7 +94,7 @@ export const api = {
   staking: (account: Address) =>
     get<StakingSummary>(`/staking/${account}`, () => fx.STAKING),
 
-  /** GET /vesting/:account (added v0.2, OD-6/FE-6) — esFERA grants, string amounts. */
+  /** GET /vesting/:account (added v0.2, OD-6/FE-6) - esFERA grants, string amounts. */
   vesting: (account: Address) =>
     get<VestingGrant[]>(`/vesting/${account}`, () => fx.VESTING),
 

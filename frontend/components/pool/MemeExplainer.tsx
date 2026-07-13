@@ -1,7 +1,7 @@
 import { Card, CardHeader } from "@/components/ui/Card";
 
 /**
- * MEME strategy, v2 (D-11/D-12/D-15). Replaces the old "why we never rebalance" copy with
+ * MEME strategy, v2. Replaces the old "why we never rebalance" copy with
  * the honest story: principal isn't churned, fee income DRIPS to follow price, and a rare
  * guarded principal recenter fires only after depth degrades past an on-chain floor.
  */
@@ -17,7 +17,7 @@ export function MemeExplainer() {
           Your principal is minted once as a{" "}
           <strong className="text-text">shaped band ladder</strong> (Core / Mid / Tail) and is{" "}
           <strong className="text-text">never churned</strong>. No strategy action closes or
-          swaps a principal band (INV-5″). What moves is fee <em>income</em>: collected fees
+          swaps a principal band. What moves is fee <em>income</em>: collected fees
           drip into fresh no-swap bands at the current price, so the shape&apos;s center of
           mass follows the market without ever realizing your principal&apos;s impermanent
           loss.
@@ -27,7 +27,7 @@ export function MemeExplainer() {
           {[
             {
               t: "Fee income drips to follow price",
-              d: "The 90% LP share of collected fees is deployed daily as new limit-order-style bands at spot. Principal is untouched; only income chases the market (INV-5″).",
+              d: "The 90% LP share of collected fees is deployed daily as new limit-order-style bands at spot. Principal is untouched; only income chases the market.",
             },
             {
               t: "IL is priced, not fought",
@@ -75,7 +75,7 @@ export function MemeExplainer() {
           <p className="mt-2 text-caption text-mute">
             If a recenter ever fired outside these bounds the transaction would revert. Worst
             case if it never fires: the ladder simply holds, with degraded depth but never a loss
-            beyond the passive full-range outcome (INV-5″/INV-6).
+            beyond the passive full-range outcome.
           </p>
         </div>
 

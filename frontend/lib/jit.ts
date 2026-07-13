@@ -11,7 +11,7 @@ import type { Regime } from "./types";
  *   forfeit = accruedFees × (1 − elapsed / window)
  *
  * Windows are frozen in PARAMS.md#JIT_PENALTY_WINDOW_SEC: MEME 1800s (30 min), RWA 600s
- * (10 min). This is the anti-JIT economics — a bot that adds around a 3% dump fee and
+ * (10 min). This is the anti-JIT economics - a bot that adds around a 3% dump fee and
  * removes immediately keeps ≈0 of that fee. The flip side is LP-positive: fees other LPs
  * forfeit when THEY exit early are donated to you while you're in range.
  */

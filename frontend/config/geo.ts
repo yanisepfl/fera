@@ -3,7 +3,7 @@
  *
  * WHY: RWA pools route liquidity into Robinhood-issued Stock Tokens (NVDA, AAPL…),
  * which carry jurisdictional restrictions that MEME pools do not. FERA never gates
- * SWAPS (INV-2 — routers must reach the pool permissionlessly), so this fence only
+ * SWAPS (INV-2 - routers must reach the pool permissionlessly), so this fence only
  * governs the FRONTEND deposit/LP affordance for RWA regime pools. It is a UI
  * compliance surface, not a protocol control.
  *
@@ -26,7 +26,7 @@ export interface GeoPolicy {
 }
 
 /**
- * Placeholder policy — values are illustrative and MUST be replaced with a
+ * Placeholder policy - values are illustrative and MUST be replaced with a
  * legal-reviewed list before mainnet (tracked in frontend/OPEN_DECISIONS.md OD-4).
  */
 export const GEO_POLICY: GeoPolicy = {

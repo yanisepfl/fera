@@ -4,8 +4,8 @@ import { feePipsToPct } from "./format";
 /**
  * Human "why" for a live dynamic fee. This is the product's core explainability
  * promise: every fee shown says WHY it is what it is (SHARED_CONTEXT §2).
- * Reasons are derived from regime + fee level + RWA market state — the same inputs
- * the hook prices from — so they stay honest to the mechanism.
+ * Reasons are derived from regime + fee level + RWA market state - the same inputs
+ * the hook prices from - so they stay honest to the mechanism.
  */
 export function feeReason(
   regime: Regime,
@@ -31,7 +31,7 @@ export function feeReason(
     };
   }
 
-  // MEME — volatility-scaled
+  // MEME - volatility-scaled
   const pct = pips / 10_000;
   if (pct >= 2.5) {
     return {
@@ -45,7 +45,7 @@ export function feeReason(
     return {
       headline: `Fee ${feePipsToPct(pips)}: volatility elevated`,
       detail:
-        "Realized volatility is above baseline. Principal bands aren't churned — IL is compensated by the fee, not chased with active repositioning.",
+        "Realized volatility is above baseline. Principal bands aren't churned - IL is compensated by the fee, not chased with active repositioning.",
       tone: "warn",
     };
   }

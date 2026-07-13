@@ -20,8 +20,8 @@ export default function AppLayout({
         <div className="hr mb-4" />
         <p className="text-caption text-mute">
           FERA is LP-first infrastructure. Swaps are never gated and never charged a
-          protocol fee (INV-2). Numbers shown are reproducible from on-chain data via
-          Backend&apos;s published bundle (MASTER_SPEC §9).
+          protocol fee. Numbers shown are reproducible from on-chain data via
+          Backend&apos;s published bundle.
         </p>
       </footer>
     </>

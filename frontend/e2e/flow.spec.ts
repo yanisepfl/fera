@@ -6,11 +6,11 @@ import { test, expect } from "@playwright/test";
  * Runs against fixtures (no backend, no wallet). The deposit affordance is usable
  * without a connected wallet in mock mode (it previews a mocked tx), so the full
  * funnel is exercisable headless. Selectors prefer roles/text so they survive style
- * changes. This is a SKELETON — flesh out assertions as the flow hardens.
+ * changes. This is a SKELETON - flesh out assertions as the flow hardens.
  */
 
 test.describe("FERA funnel: deposit → earn → claim → stake", () => {
-  test("1. DEPOSIT — deposit into the featured pool from Earn", async ({
+  test("1. DEPOSIT - deposit into the featured pool from Earn", async ({
     page,
   }) => {
     await page.goto("/app");
@@ -31,7 +31,7 @@ test.describe("FERA funnel: deposit → earn → claim → stake", () => {
     await expect(dialog.getByText(/Deposited into/i)).toBeVisible();
   });
 
-  test("2. EARN — pools list shows fee-yield and emissions APR separately", async ({
+  test("2. EARN - pools list shows fee-yield and emissions APR separately", async ({
     page,
   }) => {
     await page.goto("/app");
@@ -40,7 +40,7 @@ test.describe("FERA funnel: deposit → earn → claim → stake", () => {
     await expect(page.getByText(/Emissions APR/i).first()).toBeVisible();
   });
 
-  test("3. CLAIM — rewards page shows epoch countdown and claim surface", async ({
+  test("3. CLAIM - rewards page shows epoch countdown and claim surface", async ({
     page,
   }) => {
     await page.goto("/app/rewards");
@@ -60,7 +60,7 @@ test.describe("FERA funnel: deposit → earn → claim → stake", () => {
     await expect(page.getByText(/What would exiting cost you/i)).toBeVisible();
   });
 
-  test("4. STAKE — sFERA panel shows revenue-share APR distinct from emissions", async ({
+  test("4. STAKE - sFERA panel shows revenue-share APR distinct from emissions", async ({
     page,
   }) => {
     await page.goto("/app/rewards");
@@ -68,20 +68,5 @@ test.describe("FERA funnel: deposit → earn → claim → stake", () => {
     // Real yield (revenue share) is labelled and separated from token emissions.
     await expect(page.getByText(/Revenue-share APR/i)).toBeVisible();
     await expect(page.getByText(/Emissions boost/i)).toBeVisible();
-  });
-
-  test("5. SWAP — live regime fee shows a reason", async ({ page }) => {
-    await page.goto("/app/swap");
-    await expect(page.getByText(/Live regime fee/i)).toBeVisible();
-    // e.g. "Fee 2.10%: volatility elevated" — the reason is always present.
-    await expect(page.getByText(/volatility|widened|calm|market/i).first()).toBeVisible();
-  });
-
-  test("6. TRANSPARENCY — emissions chart and 50/25/25 split render", async ({
-    page,
-  }) => {
-    await page.goto("/app/transparency");
-    await expect(page.getByText(/Emissions vs cap vs/i)).toBeVisible();
-    await expect(page.getByText(/50 . 25 . 25/i)).toBeVisible();
   });
 });

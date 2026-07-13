@@ -51,7 +51,7 @@ export function BandLadder({ pool }: { pool: PoolDetail }) {
         eyebrow="MEME strategy · shaped liquidity"
         title="The band ladder"
         action={
-          <InfoTip text="Principal is minted once as a ladder of discrete bands: concentrated near price (wins routing), fat tails for crash coverage. Weights 30/40/30 (Core/Mid/Tail). Fee income drips into new bands at spot to follow price; principal bands are never closed or swapped (INV-5″)." />
+          <InfoTip text="Principal is minted once as a ladder of discrete bands: concentrated near price (wins routing), fat tails for crash coverage. Weights 30/40/30 (Core/Mid/Tail). Fee income drips into new bands at spot to follow price; principal bands are never closed or swapped." />
         }
       />
       <div className="px-5 pb-5 space-y-4">

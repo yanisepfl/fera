@@ -26,18 +26,18 @@ export const STRATEGY_KIND_META: Record<
   0: { label: "Initial mint", note: "Band ladder opened (Core / Mid / Tail)", principal: true },
   1: {
     label: "Guarded recenter",
-    note: "Rare principal move — fires only after at-spot depth stayed below the v1 floor ≥24h, ≥7d since the last, TWAP within ±5% (INV-5″/INV-6)",
+    note: "Rare principal move that fires only after at-spot depth stayed below the v1 floor ≥24h, ≥7d since the last, TWAP within ±5%",
     principal: true,
   },
-  2: { label: "Off-hours widen", note: "Underlying market closed — band widened, fee up", principal: true },
+  2: { label: "Off-hours widen", note: "Underlying market closed; band widened, fee up", principal: true },
   3: { label: "Partial withdraw", note: "Off-hours de-risk", principal: true },
-  4: { label: "Compound in place", note: "Fees reinvested into an existing band — no reposition", principal: false },
+  4: { label: "Compound in place", note: "Fees reinvested into an existing band; no reposition", principal: false },
   5: {
     label: "Fee drip",
-    note: "Collected fee income deployed as a new no-swap band at spot — principal untouched (INV-5″)",
+    note: "Collected fee income deployed as a new no-swap band at spot; principal untouched",
     principal: false,
   },
-  6: { label: "Band consolidate", note: "Nearby fee-bands merged to stay under the band cap (D-17)", principal: false },
+  6: { label: "Band consolidate", note: "Nearby fee-bands merged to stay under the band cap", principal: false },
 };
 
 export const MARKET_HOURS_META: Record<

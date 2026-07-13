@@ -18,8 +18,6 @@ const NAV: { href: string; label: string; match: (p: string) => boolean }[] = [
   { href: "/app", label: "Earn", match: (p) => p === "/app" },
   { href: `/app/pool/${FEATURED_POOL}`, label: "Pool", match: (p) => p.startsWith("/app/pool") },
   { href: "/app/rewards", label: "Rewards", match: (p) => p.startsWith("/app/rewards") },
-  { href: "/app/swap", label: "Swap", match: (p) => p.startsWith("/app/swap") },
-  { href: "/app/transparency", label: "Transparency", match: (p) => p.startsWith("/app/transparency") },
 ];
 
 export function TopNav() {
