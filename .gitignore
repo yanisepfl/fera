@@ -32,6 +32,15 @@ coverage/
 /backend/.ponder/
 /backend/generated/
 
+# ── Internal working tree: local-only, kept OFF the public GitHub repo ──
+# Internal engineering process artifacts (OPEN_DECISIONS, memos, GTM playbooks,
+# vault review, raw brief, go-live plan) live here. See internal/CLEANUP_MANIFEST.md.
+/internal/
+
+# ── Python (mechanism / pressure-test sims) ────────────────────────────
+__pycache__/
+*.pyc
+
 # ── OS / editor ────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
