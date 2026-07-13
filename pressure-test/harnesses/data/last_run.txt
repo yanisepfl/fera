@@ -1,0 +1,136 @@
+==== FERA PRESSURE-TEST HARNESS RUN ====
+2026-07-10T20:53:17Z
+Python 3.12.7
+numpy 2.4.2  pandas 3.0.1
+
+==== wash_bot.py ====
+==========================================================================
+FERA M4 WASH-FARMING BREAK-EVEN  (beta-bound + 50% haircut)
+consts: perf=10%  beta=0.8  splits(tr/lp)=0.45/0.45  haircut=50%  maxboost=2.0
+DATA: closed-form (no real fee/boost data wired). PARAMS.md pending.
+Rule: cost/profit >= 10x => PASS ; net<=0 => attack fails => PASS(inf)
+==========================================================================
+
+[A] Self-dealing whole-pool whale, boost=1, owns 100% of its pool
+  instant-exit (50% haircut)        reward/cost=0.36  net=-0.0640F  cost/profit=inf  -> PASS
+  full vest, FERA flat (g=1.0)      reward/cost=0.72  net=-0.0280F  cost/profit=inf  -> PASS
+  full vest, FERA +39% (g=1.39)     reward/cost=1.00  net=+0.0001F  cost/profit=1250.00x  -> PASS
+  full vest, FERA +100% (g=2.0)     reward/cost=1.44  net=+0.0440F  cost/profit=2.27x  -> FAIL
+  -> break-even FERA appreciation over vest = 0.10/0.072 = 1.39x
+
+[B] 2x self-boost, whale is a MINORITY theta of protocol-wide fees
+    (boost reallocates a fixed pool -> whale steals honest users' share)
+  theta= 0.50  reward/cost=0.96  net=-0.00200F  cost/profit=inf  profit=no  -> PASS
+  theta= 0.20  reward/cost=1.20  net=+0.00400F  cost/profit=5.00x  profit=YES  -> FAIL
+  theta= 0.05  reward/cost=1.37  net=+0.00186F  cost/profit=2.69x  profit=YES  -> FAIL
+  theta= 0.01  reward/cost=1.43  net=+0.00043F  cost/profit=2.35x  profit=YES  -> FAIL
+    break-even FERA appreciation WITH 2x boost = 0.10/0.144 = 0.69x
+    (i.e. profitable even if FERA FALLS up to 31% over the vest)
+
+[C] Worst-cell sweep: does ANY realistic config give cost/profit<10x?
+  CHEAPEST PROFITABLE ATTACK: theta=0.01, boost=2.0, g=2.0
+    reward/cost=2.85  net=+0.00185F  cost/profit=0.54x
+
+==========================================================================
+OVERALL M4 WASH VERDICT: FAIL
+  Base (no-boost) claim holds net-negative at flat FERA, but the
+  margin is only 28% and BREAKS under: (i) 2x self-boost, or
+  (ii) FERA appreciation > 39% over the vest. Boost must not apply
+  to self-generated/self-LP'd flow. See memo 04.
+==========================================================================
+
+==== lp_superiority.py meme --elasticity 0 (PRIMARY same-volume) ====
+========================================================================
+FERA V4 LP-SUPERIORITY  (regime fee vs vanilla 30/100bps, net 10% perf)
+DATA: SYNTHETIC structured paths (no real chain data wired yet).
+PARAMS: structural defaults (PARAMS.md pending). perf=10%
+Perf-fee hurdle: regime must charge > 30/0.90 = 33.3bps to beat vanilla-30
+========================================================================
+
+MEME  pump/dump paths (n=200, elasticity=0.0, depth_mult=3.0)
+  regime beats best-vanilla on 200/200 paths (100.0%)
+  mean edge vs best vanilla: +159.9%   worst path: +156.0%
+
+MEME  CALM paths (n=200)  [exposes the perf-fee hurdle]
+  regime beats best-vanilla on 0/200 paths (0.0%)
+  mean edge: -24.6%   worst: -26.7%
+
+VERDICT (MEME, violent paths): PASS (strictly beats vanilla on every path)
+CAVEAT: in CALM markets the 30bps MEME floor loses to vanilla-30 net of perf fee (27bps < 30bps). Regime only wins when realized vol holds the dynamic fee above ~33.3bps. See memo 03.
+
+NOTE: IL is identical across regime/vanilla (same full-range position,
+      same path) so it cancels; this test isolates FEE capture only.
+
+==== lp_superiority.py meme --elasticity 0.05 --depth-mult 1 (routed, NO depth edge) ====
+  regime beats best-vanilla on 0/200 paths (0.0%)
+  mean edge vs best vanilla: -99.9%   worst path: -100.0%
+
+MEME  CALM paths (n=200)  [exposes the perf-fee hurdle]
+  regime beats best-vanilla on 0/200 paths (0.0%)
+  mean edge: -82.4%   worst: -83.5%
+
+==== lp_superiority.py meme --elasticity 0.05 --depth-mult 3 (routed, 3x depth) ====
+  regime beats best-vanilla on 200/200 paths (100.0%)
+  mean edge vs best vanilla: +7090.4%   worst path: +6375.6%
+
+MEME  CALM paths (n=200)  [exposes the perf-fee hurdle]
+  regime beats best-vanilla on 200/200 paths (100.0%)
+  mean edge: +751.5%   worst: +726.6%
+
+==== lp_superiority.py rwa --elasticity 0 ====
+========================================================================
+FERA V4 LP-SUPERIORITY  (regime fee vs vanilla 30/100bps, net 10% perf)
+DATA: SYNTHETIC structured paths (no real chain data wired yet).
+PARAMS: structural defaults (PARAMS.md pending). perf=10%
+Perf-fee hurdle: regime must charge > 30/0.90 = 33.3bps to beat vanilla-30
+========================================================================
+
+RWA weekend paths (n=100, elasticity=0.0, depth_mult=3.0)
+  regime beats best-vanilla on 0/100 weekends (0.0%)
+  mean edge vs vanilla-30 : +139.7%   <-- realistic competitor
+  mean edge vs vanilla-100: -28.1%   (static 100bps that keeps ALL volume is unrealistic for a liquid token)
+
+VERDICT (RWA weekend vs realistic vanilla-30): PASS
+  NOTE: 'loses to vanilla-100' is a same-volume artifact — a static
+  100bps stock-token pool would win ~zero in-hours routed volume.
+
+NOTE: IL is identical across regime/vanilla (same full-range position,
+      same path) so it cancels; this test isolates FEE capture only.
+
+==== rwa_stress.py ====
+============================================================================
+FERA M5 RWA VAULT ADVERSARIAL STRESS
+band half-width w=0.50%  off-hours withdraw q=60%  overlay_ceil=100bps
+DATA: SYNTHETIC / order-of-magnitude bounds. PARAMS.md pending.
+============================================================================
+
+S1 Oracle halt Friday (3% weekend drift)  [FAIL-STATIC (band frozen; swaps + overlay still live)]
+   gross band loss=0.50%  overlay offset=0.20%  NET LP drawdown=0.30%
+
+S2 20% Monday earnings gap  [FAIL-STATIC (no recenter into gap; TWAP-gated)]
+   gross band loss=3.90%  overlay offset=0.20%  NET LP drawdown=3.70%
+   WITHOUT off-hours withdrawal (q=0): NET drawdown=9.25%  <-- exposure driver
+
+S3 Keeper offline 48h  [FAIL-STATIC (holds), but forgoes off-hours widen -> extra drawdown]
+   NET drawdown (stayed tight)=0.75%  extra vs widened baseline=0.45%
+
+S4 Tick-boundary griefing (8bps slippage/recenter)
+   with 4h min-interval: 6 recenters/day -> 0.48%/day  (min-interval caps it)
+   NO min-interval:      48 recenters/day -> 3.84%/day  (UNBOUNDED without a min-recenter-interval)
+
+S5 MEV sandwich of recenter (10% of depth size)
+   deterministic timing: 0.50% extracted  |  randomized(64 slots): 0.06%
+
+============================================================================
+WORST-CASE LP DRAWDOWN SUMMARY (per scenario, % of pool TVL)
+   S1 oracle-halt          0.30%   CONDITIONAL
+   S2 monday-gap-20%       3.70%   CONDITIONAL
+   S3 keeper-offline       0.75%   CONDITIONAL
+   S4 tick-grief           0.48%   CONDITIONAL: needs min-recenter-interval
+   S5 mev-sandwich         0.06%   CONDITIONAL: randomized timing REQUIRED
+
+DRIVER: worst scenario = S2 monday-gap-20% at 3.70% of TVL.
+All scenarios FAIL-STATIC (positions hold; no fail-open path found in
+model). Losses are BOUNDED but S2 (Monday gap) is only acceptable with
+aggressive off-hours partial withdrawal. Required spec changes -> memo 05.
+============================================================================
