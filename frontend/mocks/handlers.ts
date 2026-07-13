@@ -10,7 +10,8 @@ import * as fx from "./fixtures";
 const j = <T>(data: T, ms = 60) =>
   (async () => {
     await delay(ms);
-    return HttpResponse.json(data);
+    // fixtures are plain JSON-serializable objects/arrays; cast to satisfy MSW's JsonBodyType
+    return HttpResponse.json(data as unknown as Record<string, unknown>);
   })();
 
 export const handlers = [
