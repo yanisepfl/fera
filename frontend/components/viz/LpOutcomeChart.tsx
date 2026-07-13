@@ -196,14 +196,13 @@ export function LpOutcomeChart({ className }: { className?: string }) {
   return (
     <IllustrativeChart
       className={cn(className)}
-      eyebrow="Fee capture, modeled"
+      eyebrow="Fee capture"
       title={
         <>
           Same position, same path. The gap is{" "}
           <span style={{ color: "var(--accent)" }}>fees</span>.
         </>
       }
-      tag="Modeled"
       legend={
         <>
           <LegendChip
@@ -234,7 +233,6 @@ export function LpOutcomeChart({ className }: { className?: string }) {
           />
         </div>
       }
-      caption="Modeled on a synthetic volatile price path. Same position, same path, so impermanent loss is identical and the gap is fees. This compares our pool to a vanilla pool, net of the 10% performance fee. Not a live result, and not the vault versus a self-managed LP."
       ariaLabel={`Modeled chart: an identical LP position over the same volatile price path finishes at plus ${FERA_END} percent in a FERA pool versus plus ${VANILLA_END} percent in a vanilla pool, a gap of ${DELTA} points, entirely from fees.`}
       srTable={
         <table>

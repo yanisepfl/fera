@@ -26,7 +26,8 @@ const btnSecondary = `${btnBase} bg-surface text-text border border-line hover:b
 const SECTIONS = [
   { href: "#how", label: "How it works" },
   { href: "#mechanism", label: "The mechanism" },
-  { href: "#claims", label: "What we claim" },
+  { href: "#claims", label: "Our claim" },
+  { href: "#transparency", label: "Verifiable" },
 ];
 
 export default function LandingPage() {
@@ -60,10 +61,12 @@ const navLink =
 function MarketingHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-well/80 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-app items-center gap-8 px-4 md:px-6">
+      <div className="mx-auto flex h-16 max-w-app items-center gap-6 px-4 md:px-6">
         <BrandLockup />
 
-        <nav className="hidden items-center gap-6 md:flex">
+        {/* Centered nav balances the header on wide viewports (flex-1 fills the gap
+            between the left brand and the right CTA instead of hugging the left). */}
+        <nav className="hidden flex-1 items-center justify-center gap-6 md:flex">
           {SECTIONS.map((n) => (
             <a key={n.href} href={n.href} className={navLink}>
               {n.label}
@@ -154,13 +157,13 @@ function Hero() {
             </div>
 
             <h1 className="text-[2.5rem] font-semibold leading-[1.05] tracking-[-0.02em] text-text md:text-[3.5rem]">
-              Liquidity that gets paid by{" "}
-              <span style={{ color: "var(--accent2)" }}>volatility</span>.
+              Earn <span style={{ color: "var(--accent2)" }}>more</span> on
+              memecoins and stocks.
             </h1>
 
             <p className="mt-6 max-w-xl text-body text-dim md:text-heading md:leading-8">
-              FERA pools charge volatile, bot-driven trades a higher fee. The flow
-              that usually drains liquidity providers earns for ours instead.
+              One regime-aware vault. It charges volatile, bot-driven flow more, so
+              the swings that usually drain LPs earn for you instead.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -236,8 +239,18 @@ function HowItWorks() {
 
 /* -------------------------------------------------------------- narratives ---- */
 
-// Narratives 2 & 3 render as cards under the featured fee-curve narrative.
+// Narrative text boxes that sit UNDER the featured fee-response chart. The first
+// is about protecting the LP (the fee cushions your worst, volatile periods and
+// stays cheap in calm markets to pull volume) - deliberately distinct from the
+// "Toxic flow" bot-monetization narrative below it.
 const NARRATIVES = [
+  {
+    tag: "The fee curve",
+    t: "The fee works hardest when you need it most.",
+    d: "High-volatility stretches are when LPs lose the most. FERA's fee is built to rise right then, cushioning the hit in your worst periods. In calm markets it stays low to pull the volume that keeps fees flowing.",
+    honest:
+      "Modeled shape, not a promise. Quiet markets earn little, and a violent one still carries real risk.",
+  },
   {
     tag: "Weekend drift",
     t: "Your position earns the arbitrage instead of feeding it.",
@@ -263,46 +276,25 @@ function Narratives() {
           The flow that drains most LPs pays yours instead.
         </h2>
 
-        {/* Featured narrative: the fee curve is built to protect the LP. Paired with
-            the FeeResponseChart (fee rises with volatility, low in calm). This is
-            about protecting / rewarding the LP, distinct from the "Toxic flow" card
-            below, which is about who pays. */}
-        <div className="mt-10 grid gap-8 lg:grid-cols-2 lg:items-center">
-          <div>
-            <div className="inline-flex rounded-full bg-accent-wash px-2.5 py-1 text-micro uppercase tracking-[0.08em] text-accent">
-              The fee curve
-            </div>
-            <h3 className="mt-3 text-title font-semibold tracking-tight text-text">
-              The fee works hardest when you need it most.
-            </h3>
-            <p className="mt-4 text-body text-dim">
-              High-volatility stretches are when LPs lose the most. FERA&apos;s fee is
-              built to rise right then, cushioning the hit in your worst periods. In
-              calm markets it stays low to pull the volume that keeps fees flowing.
-            </p>
-            <p className="mt-3 border-l-2 border-line-strong pl-3 text-body-sm text-mute">
-              <span className="font-medium text-dim">The honest line:</span> Modeled
-              shape, not a promise. Quiet markets earn little, and a violent one still
-              carries real risk.
-            </p>
-          </div>
-
+        {/* Lead proof: the fee-response chart sits in one prominent full-width box at
+            the top of the section. The narrative text boxes read underneath it. */}
+        <div className="mt-10">
           <FeeResponseChart />
         </div>
 
-        <div className="mt-8 grid gap-4 md:grid-cols-2">
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
           {NARRATIVES.map((x) => (
             <div
               key={x.tag}
-              className="card-glow rounded-lg border border-line bg-card p-6 shadow-card md:p-8"
+              className="card-glow rounded-lg border border-line bg-card p-6 shadow-card"
             >
               <div className="inline-flex rounded-full bg-accent-wash px-2.5 py-1 text-micro uppercase tracking-[0.08em] text-accent">
                 {x.tag}
               </div>
-              <h3 className="mt-3 text-title font-semibold tracking-tight text-text">
+              <h3 className="mt-3 text-heading font-semibold tracking-tight text-text">
                 {x.t}
               </h3>
-              <p className="mt-3 text-body text-dim">{x.d}</p>
+              <p className="mt-3 text-body-sm text-dim">{x.d}</p>
               <p className="mt-3 border-l-2 border-line-strong pl-3 text-body-sm text-mute">
                 <span className="font-medium text-dim">The honest line:</span>{" "}
                 {x.honest}
@@ -338,9 +330,19 @@ const CLAIMS = [
 
 function HonestFraming() {
   return (
-    <section id="claims" className="border-b border-line bg-well">
-      <div className="mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
-        <div className="overline mb-3">What we will and won&apos;t claim</div>
+    <section id="claims" className="relative overflow-hidden border-b border-line bg-well">
+      {/* subtle gold spark: a faint top-crown tint so the honesty section reads
+          intentional, not an afterthought. Static / reduced-motion-safe. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[340px]"
+        style={{
+          background:
+            "radial-gradient(55% 100% at 50% -10%, rgba(231,184,75,0.06) 0%, rgba(231,184,75,0) 62%)",
+        }}
+      />
+      <div className="relative mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
+        <div className="overline overline-gold mb-3">Our claim</div>
         <h2 className="max-w-2xl text-display-l font-semibold tracking-tight text-text">
           Precise beats loud.
         </h2>
@@ -369,8 +371,18 @@ function HonestFraming() {
 
 function Transparency() {
   return (
-    <section id="transparency" className="border-b border-line">
-      <div className="mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
+    <section id="transparency" className="relative overflow-hidden border-b border-line bg-well">
+      {/* matching faint gold spark, so this always-lit section and "Our claim" share
+          the same quiet treatment. Static / reduced-motion-safe. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[340px]"
+        style={{
+          background:
+            "radial-gradient(55% 100% at 50% -10%, rgba(231,184,75,0.06) 0%, rgba(231,184,75,0) 62%)",
+        }}
+      />
+      <div className="relative mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
         <div className="card-glow rounded-lg border border-accent-line bg-card p-8 shadow-glow-accent md:p-10">
           <div className="overline overline-gold mb-3">Verifiable by construction</div>
           <h2 className="max-w-2xl text-title font-semibold tracking-tight text-text md:text-display-l">
@@ -459,7 +471,8 @@ function MarketingFooter() {
               links={[
                 { href: "#how", label: "How it works" },
                 { href: "#mechanism", label: "The mechanism" },
-                { href: "#claims", label: "What we claim" },
+                { href: "#claims", label: "Our claim" },
+                { href: "#transparency", label: "Verifiable" },
                 { href: DOCS_URL, label: "Docs", external: true },
               ]}
             />

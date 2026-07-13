@@ -220,21 +220,19 @@ export function FeeResponseChart({ className }: { className?: string }) {
   return (
     <IllustrativeChart
       className={cn(className)}
-      eyebrow="Regime fee, illustrative"
+      eyebrow="Regime fee"
       title={
         <>
           The fee rises when{" "}
           <span style={{ color: "var(--accent2)" }}>volatility</span> does.
         </>
       }
-      tag="Illustrative"
       legend={
         <>
           <LegendChip color="var(--series-fera)" label="LP fee" />
           <LegendChip color="var(--series-cove)" label="Realized volatility" />
         </>
       }
-      caption="Illustrative shape of the regime fee. It rises with realized volatility to cushion LPs when flow is most toxic, and stays low in calm markets to pull volume. The exact curve is set on-chain per pool."
       ariaLabel="Illustrative chart: the LP fee tracks realized volatility, rising from a floor of 0.34 percent through a volatile period and returning toward the floor as the market calms."
       srTable={
         <table>

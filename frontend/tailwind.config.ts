@@ -119,13 +119,13 @@ const config: Config = {
         "glow-accent":
           "0 0 0 1px var(--accent-line), 0 10px 34px rgba(231,184,75,0.07)",
         "glow-accent2":
-          "0 0 0 1px var(--accent2-line), 0 10px 34px rgba(73,190,224,0.08)",
+          "0 0 0 1px var(--accent2-line), 0 10px 34px rgba(79,201,143,0.08)",
         "glow-danger":
           "0 0 0 1px var(--danger-line), 0 10px 34px rgba(255,92,77,0.09)",
         "card-hover":
           "0 0 0 1px var(--accent-line), 0 12px 40px rgba(231,184,75,0.10)",
         "card-hover-cove":
-          "0 0 0 1px var(--accent2-line), 0 12px 40px rgba(73,190,224,0.10)",
+          "0 0 0 1px var(--accent2-line), 0 12px 40px rgba(79,201,143,0.10)",
       },
       transitionTimingFunction: {
         out: "cubic-bezier(0.22, 1, 0.36, 1)",

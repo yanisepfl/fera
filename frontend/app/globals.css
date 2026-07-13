@@ -38,17 +38,17 @@
   --accent-line: rgba(231, 184, 75, 0.28); /* tinted borders / focus rings */
   --on-accent: #17130a; /* text on solid accent (near-black warm) */
 
-  /* ===== Secondary accent - "Cove" (cool data / analytics accent) =====
-   * Second lane in the discipline: gold stays the sole BRAND hue; Cove carries
-   * data / analytics / secondary chart series only. Cyan-leaning (~193°) and
-   * brighter than the RWA regime azure (#5aa9e6, ~208°) so the two never read as
-   * the same color. See REDESIGN_PLAN.md §1. ADD-only; no existing token changed. */
-  --accent2: #49bee0; /* secondary/data chart series, data eyebrows */
-  --accent2-strong: #6fd1ec; /* hover / bright / chart endpoint */
-  --accent2-dim: #2c88a6; /* pressed / muted reference line */
-  --accent2-wash: rgba(73, 190, 224, 0.1); /* tint fills, badges, selection */
-  --accent2-line: rgba(73, 190, 224, 0.3); /* tinted borders / focus rings / glow ring */
-  --on-accent2: #06222b; /* text on solid Cove (rare) */
+  /* ===== Secondary accent - "Signal" (green data / analytics accent) =====
+   * Second lane in the discipline: gold stays the sole BRAND hue; this green carries
+   * data / analytics / secondary chart series only. Kept in the family of the
+   * positive-green (#46c08a) but a touch brighter (#4fc98f) so it reads as the
+   * data accent while the palette stays gold + black + white + green (no blue). */
+  --accent2: #4fc98f; /* secondary/data chart series, data eyebrows */
+  --accent2-strong: #6dd7a4; /* hover / bright / chart endpoint */
+  --accent2-dim: #2f8f63; /* pressed / muted reference line */
+  --accent2-wash: rgba(79, 201, 143, 0.1); /* tint fills, badges, selection */
+  --accent2-line: rgba(79, 201, 143, 0.3); /* tinted borders / focus rings / glow ring */
+  --on-accent2: #06231a; /* text on solid green (rare) */
 
   /* ===== Named chart series (so both illustrative charts read as one system) ===== */
   --series-fera: var(--accent); /* the FERA / primary line - always gold */
@@ -57,7 +57,7 @@
 
   /* ===== Card-hover glow presets (used by .card-glow; mirror boxShadow tokens) ===== */
   --card-hover: 0 0 0 1px var(--accent-line), 0 12px 40px rgba(231, 184, 75, 0.1);
-  --card-hover-cove: 0 0 0 1px var(--accent2-line), 0 12px 40px rgba(73, 190, 224, 0.1);
+  --card-hover-cove: 0 0 0 1px var(--accent2-line), 0 12px 40px rgba(79, 201, 143, 0.1);
 
   /* ===== Semantic ===== */
   --pos: #46c08a; /* gain / up / market-open */

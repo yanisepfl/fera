@@ -235,11 +235,13 @@ export function IllustrativeChart({
 }: {
   eyebrow: string;
   title: React.ReactNode;
-  tag: "Illustrative" | "Modeled";
+  /** Optional honesty tag pill. Omit to render no pill (titles are self-explanatory). */
+  tag?: "Illustrative" | "Modeled";
   legend?: React.ReactNode;
   /** Optional prominent figure (e.g. the +5.7 pts delta callout). */
   callout?: React.ReactNode;
-  caption: React.ReactNode;
+  /** Optional footnote under the plot. Omit for a clean, caption-free card. */
+  caption?: React.ReactNode;
   ariaLabel: string;
   /** Optional visually-hidden data table for screen readers. */
   srTable?: React.ReactNode;
@@ -326,10 +328,12 @@ export function IllustrativeChart({
             {title}
           </h3>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          <TagPill kind={tag} />
-          {callout ? <div className="text-right">{callout}</div> : null}
-        </div>
+        {tag || callout ? (
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            {tag ? <TagPill kind={tag} /> : null}
+            {callout ? <div className="text-right">{callout}</div> : null}
+          </div>
+        ) : null}
       </div>
 
       {/* legend */}
@@ -379,8 +383,8 @@ export function IllustrativeChart({
         ) : null}
       </div>
 
-      {/* caption */}
-      <p className="mt-3 text-body-sm text-mute">{caption}</p>
+      {/* caption (optional) */}
+      {caption ? <p className="mt-3 text-body-sm text-mute">{caption}</p> : null}
 
       {srTable ? <div className="sr-only">{srTable}</div> : null}
     </div>
