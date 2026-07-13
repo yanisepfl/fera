@@ -96,21 +96,26 @@ function Hero() {
       />
       <div className="relative mx-auto max-w-app px-4 py-20 md:px-6 md:py-28">
         <div className="max-w-3xl">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-accent-line bg-accent-wash px-3 py-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-            <span className="text-micro uppercase tracking-[0.08em] text-dim">
-              Regime-aware liquidity · Robinhood Chain
+          <div
+            className="mb-5 inline-flex items-center gap-2 rounded-full border px-3 py-1"
+            style={{ borderColor: "rgba(70,192,138,0.28)", background: "rgba(70,192,138,0.08)" }}
+          >
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: "#46c08a", boxShadow: "0 0 8px rgba(70,192,138,0.75)" }}
+            />
+            <span className="text-micro uppercase tracking-[0.08em]" style={{ color: "#8fd9b6" }}>
+              Live on Robinhood Chain
             </span>
           </div>
 
           <h1 className="text-[2.5rem] font-semibold leading-[1.05] tracking-[-0.02em] text-text md:text-[4rem]">
-            The liquidity layer that prices what others bleed.
+            Earn on Robinhood Chain, the easy way.
           </h1>
 
           <p className="mt-6 max-w-2xl text-body text-dim md:text-heading md:leading-8">
-            A Uniswap v4 hook that charges toxic, mechanical, and weekend-arbitrage
-            flow the fee it&apos;s actually worth — so the volatility that drains
-            ordinary LPs pays FERA&apos;s LPs instead.
+            FERA pools charge volatile, bot-driven trades a higher fee. The flow that
+            usually drains liquidity providers earns for ours instead.
           </p>
 
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -124,8 +129,7 @@ function Hero() {
           </div>
 
           <p className="mt-6 text-caption text-mute">
-            On-chain-verifiable. Traders and bots pay zero protocol swap fees (INV-2).
-            No guaranteed yield.
+            On-chain-verifiable, immutable, permissionless. Zero FERA swap fees.
           </p>
         </div>
       </div>
@@ -138,18 +142,18 @@ function Hero() {
 const STEPS = [
   {
     n: "01",
-    t: "Regime-aware fees",
-    d: "One v4 hook sets the LP fee per swap. MEME pools scale the fee with realized volatility; RWA pools widen it off-hours and track the Chainlink feed. The more mechanical the flow, the more LPs earn — set live in beforeSwap, visible on-chain.",
+    t: "Regime-Aware Liquidity",
+    d: "Our v4 hooked pools set the LP fee per swap. MEME pools scale the fee with realized volatility; RWA pools widen it off-hours and track the Chainlink feed. The more mechanical the flow, the more LPs earn. All transparent on-chain and immutable.",
   },
   {
     n: "02",
-    t: "Managed vaults",
-    d: "Deposit one or both assets into a managed vault and hold a normal ERC-20 share — no keeper to run. Rule-based, zero-discretion strategies within hardcoded bounds. Pick a risk profile: Steady (wide, conservative) or Active (concentrated, more fee capture).",
+    t: "Fera Vaults",
+    d: "Deposit into our vault and forget the hassle of position management. Rule-based, zero-discretion strategies within hardcoded bounds. Pick a risk profile: Steady (wide, conservative) or Active (concentrated, more fee capture).",
   },
   {
     n: "03",
     t: "Earn",
-    d: "Collect fee-yield plus esFERA emissions on your vault shares. A 10% performance fee applies only to fees you actually earn — never on principal, deposits, withdrawals, or swaps.",
+    d: "Collect interest plus esFERA emissions on your vault shares. A 10% performance fee applies only to fees you actually earn, never on principal, deposits, withdrawals, or swaps. Half of it flows back to FERA stakers.",
   },
 ];
 
@@ -159,7 +163,7 @@ function HowItWorks() {
       <div className="mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
         <div className="overline mb-3">How it works</div>
         <h2 className="max-w-2xl text-display-l font-semibold tracking-tight text-text">
-          Fees price toxicity. Vaults make it usable. You earn the difference.
+          Smart fees price the risk. Vaults make it effortless. You keep the yield.
         </h2>
 
         <div className="mt-10 grid gap-4 md:grid-cols-3">
@@ -386,7 +390,7 @@ function MarketingFooter() {
                 { href: "#how", label: "How it works" },
                 { href: "#narratives", label: "Narratives" },
                 {
-                  href: "https://alphix.gitbook.io",
+                  href: "https://github.com/yanisepfl/fera/tree/main/docs/gitbook",
                   label: "Docs",
                   external: true,
                 },
