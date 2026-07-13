@@ -1,0 +1,199 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * FERA theme tokens. Dark-first: the design assumes near-black canvas.
+ * Single source of truth for color; Tailwind classes reference these via
+ * tailwind.config.ts. See DESIGN.md for the token rationale + scale.
+ * Fonts (--font-sans / --font-mono) are injected by next/font in app/layout.tsx
+ * (Geist Sans for UI/display, Geist Mono for every number).
+ */
+:root {
+  color-scheme: dark;
+
+  /* ===== Ink scale (surfaces): near-black, whisper-warm neutral ===== */
+  --ink-950: #0a0a0b; /* app canvas / page background */
+  --ink-900: #0e0e10; /* recessed wells, nav bar */
+  --ink-875: #121215; /* base card / container */
+  --ink-850: #161619; /* elevated card, row-hover base */
+  --ink-800: #1b1b1f; /* surface: inputs, selectors */
+  --ink-750: #212127; /* raised surface, popovers, dialogs */
+  --ink-700: #292930; /* hover state */
+
+  /* ===== Borders ===== */
+  --line: #23232a; /* hairline border (primary) */
+  --line-strong: #34343d; /* elevated / secondary border */
+
+  /* ===== Text ===== */
+  --text: #f4f4f6; /* primary foreground */
+  --text-dim: #a9a9b4; /* secondary */
+  --text-mute: #6e6e79; /* tertiary / captions / disabled */
+
+  /* ===== Accent — "Fera Gold" (the single restrained brand accent) ===== */
+  --accent: #e7b84b;
+  --accent-strong: #f0c766; /* hover / bright */
+  --accent-dim: #b98f2e; /* pressed / muted */
+  --accent-wash: rgba(231, 184, 75, 0.1); /* tint fills, badges, selection */
+  --accent-line: rgba(231, 184, 75, 0.28); /* tinted borders / focus rings */
+  --on-accent: #17130a; /* text on solid accent (near-black warm) */
+
+  /* ===== Semantic ===== */
+  --pos: #46c08a; /* gain / up / market-open */
+  --pos-wash: rgba(70, 192, 138, 0.12);
+  --neg: #e5675c; /* loss / down */
+  --neg-wash: rgba(229, 103, 92, 0.12);
+  --warn: #e0873a; /* caution / off-hours widen (amber-orange, distinct from gold) */
+  --warn-wash: rgba(224, 135, 58, 0.12);
+  --danger: #ff5c4d; /* LOUD — esFERA forfeiture / haircut only */
+  --danger-wash: rgba(255, 92, 77, 0.14);
+  --danger-line: rgba(255, 92, 77, 0.45);
+
+  /* ===== Regimes (MASTER_SPEC §5: MEME, RWA; EVENT reserved v2) ===== */
+  --regime-meme: #e8834a; /* ember */
+  --regime-meme-wash: rgba(232, 131, 74, 0.12);
+  --regime-rwa: #5aa9e6; /* azure */
+  --regime-rwa-wash: rgba(90, 169, 230, 0.12);
+  --regime-event: #a98be0; /* violet, reserved — never rendered in v1 */
+
+  /* ===== Charts (greyscale-forward; accent reserved for the live/primary series) ===== */
+  --chart-grid: #1e1e24;
+  --chart-axis: #56565f;
+  --chart-1: #e7b84b; /* accent — primary/live series */
+  --chart-2: #c9c9d1;
+  --chart-3: #9a9aa4;
+  --chart-4: #74747e;
+  --chart-5: #55555e;
+
+  /* ===== Radii ===== */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  /* ===== Motion ===== */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-smooth: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+
+  /* Font var fallbacks (overwritten by next/font in layout.tsx) */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, "Cascadia Mono", monospace;
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--ink-950);
+    /* Subtle top vignette: a barely-lifted center over the near-black canvas so the
+     * dark surface never reads dead-flat — the calm premium-dark trait of the
+     * alphix.fi / Shui reference family. Static (reduced-motion-safe), additive. */
+    background-image: radial-gradient(
+      120% 80% at 50% -10%,
+      rgba(231, 184, 75, 0.035) 0%,
+      rgba(231, 184, 75, 0) 42%
+    );
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv01", "ss01";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 0.9375rem; /* 15px base — data-dense but comfortable */
+    line-height: 1.375rem;
+  }
+
+  /* Every number is tabular by default so live-updating values don't jitter width. */
+  .tnum,
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum", "zero";
+  }
+
+  ::selection {
+    background: var(--accent-wash);
+    color: var(--text);
+  }
+
+  /* Focus ring — accent, visible, keyboard-first */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Thin, unobtrusive scrollbars for the data-dense feel */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 9999px;
+  }
+}
+
+@layer components {
+  /* Overline / section label — 11px uppercase tracked, muted */
+  .overline {
+    font-size: 0.6875rem;
+    line-height: 0.875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-mute);
+    font-weight: 600;
+  }
+
+  /* Hairline divider */
+  .hr {
+    height: 1px;
+    background: var(--line);
+    border: 0;
+  }
+
+  /* Skeleton shimmer for loading states */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--ink-800);
+    border-radius: var(--radius-sm);
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.04),
+      transparent
+    );
+    animation: shimmer 1.4s infinite;
+  }
+}
+
+/* Respect users who prefer no motion: kill the live pulse / jitter animations. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

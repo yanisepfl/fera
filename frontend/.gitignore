@@ -1,0 +1,31 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# next
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# testing
+/coverage
+/test-results
+/playwright-report
+/playwright/.cache
+
+# misc
+.DS_Store
+*.pem
+.vercel
+*.tsbuildinfo
+
+# env
+.env
+.env*.local
+
+# msw generated worker (regenerate with `npm run mocks:init`)
+/public/mockServiceWorker.js
