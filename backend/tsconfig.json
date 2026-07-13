@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true
+  },
+  "include": [
+    "ponder-env.d.ts",
+    "ponder.config.ts",
+    "ponder.schema.ts",
+    "abis/**/*.ts",
+    "src/**/*.ts",
+    "api/**/*.ts",
+    "keepers/**/*.ts",
+    "ops/**/*.ts",
+    "pipeline/**/*.ts"
+  ],
+  "//exclude-note": "src/handlers/** are Ponder INDEXING functions: their event args and db-row types come from `ponder codegen` (needs the DB/RPC, so it can't run in an offline typecheck). They are typechecked by `npm run typecheck:ponder` (ponder codegen + tsc) in CI. Plain `npm run typecheck` (this config) covers everything else — pipeline, api, keepers, ops, abis, config, schema.",
+  "exclude": ["node_modules", ".ponder", "generated", "src/handlers"]
+}

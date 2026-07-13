@@ -1,0 +1,80 @@
+# Prometheus alerting rules STUB (MASTER_SPEC §10: "redundant + monitored").
+# Thresholds are placeholders — tune against real cadence. Metric names are the frozen constants
+# in ops/metrics.ts (METRIC.*). Keeper-miss + indexer-lag are the two the task calls out.
+
+groups:
+  - name: fera-indexer
+    rules:
+      # Indexer fell behind the chain head. ~100ms blocks (Arbitrum Orbit) → 60s lag is many blocks.
+      - alert: IndexerLagHigh
+        expr: fera_indexer_lag_seconds > 60
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "FERA indexer lag > 60s"
+          description: "fera_indexer_lag_seconds = {{ $value }}s. API reads are stale; pipeline snapshot builder may be affected."
+
+      - alert: IndexerLagCritical
+        expr: fera_indexer_lag_seconds > 600
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "FERA indexer lag > 10m — API/pipeline data is stale"
+
+  - name: fera-keepers
+    rules:
+      # A keeper hasn't reported a successful tick recently (heartbeat file went stale). Per-keeper
+      # via the `keeper` label. RWA strategy + market-hours are time-sensitive; root-poster is weekly.
+      - alert: KeeperMissed
+        expr: time() - fera_keeper_last_success_timestamp > 900
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "FERA keeper {{ $labels.keeper }} missed"
+          description: "No successful tick from {{ $labels.keeper }} in >15m. Fail-static holds, but investigate."
+
+      - alert: KeeperFailing
+        expr: fera_keeper_ok == 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "FERA keeper {{ $labels.keeper }} last tick FAILED"
+
+      # Epoch ended but no root posted well after close (root-poster stuck). Tune window to epoch len.
+      - alert: EmissionsRootLate
+        expr: (time() - fera_epoch_last_posted_ts) > 7200 and fera_epoch_pending == 1
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: "Emissions root not posted > 2h after epoch close"
+          description: "Claims are blocked until the root-poster keeper posts. Never hotfix a posted epoch."
+
+  - name: fera-oracle
+    rules:
+      # A Chainlink RWA feed is stale beyond 2x its per-feed heartbeat (D-9). Vault clamps to the
+      # flat oracle-fail fee independently, so this is a heads-up, not an outage.
+      - alert: OracleStale
+        expr: fera_oracle_seconds_since_update > (2 * fera_oracle_heartbeat_seconds)
+        for: 3m
+        labels: { severity: warning }
+        annotations:
+          summary: "RWA oracle {{ $labels.symbol }} stale"
+          description: "seconds_since_update = {{ $value }}. Vault fee logic clamps to flat 300bp (fail-static)."
+
+  - name: fera-reconcile
+    rules:
+      # INV-3 breach: perf fee != 10% of collected LP fees. Stop-the-line — contract or indexer bug.
+      - alert: PerfFeeInvariantBreach
+        expr: increase(fera_reconcile_perf_fee_violations_total[1h]) > 0
+        for: 0m
+        labels: { severity: critical }
+        annotations:
+          summary: "INV-3 perf-fee reconciliation breach"
+          description: "Indexed perfFee != 10% of collected LP fees. Investigate before trusting APRs/pipeline."
+
+      - alert: FeeAccountingDrift
+        expr: fera_reconcile_fee_drift_bps > 100
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "Indexer vs on-chain fee drift > 1% on {{ $labels.poolId }}"

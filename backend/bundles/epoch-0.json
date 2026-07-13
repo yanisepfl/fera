@@ -1,0 +1,522 @@
+{
+  "blockRange": {
+    "fromBlock": "100000",
+    "toBlock": "200000"
+  },
+  "boostExclusionE6": [
+    {
+      "lp": [
+        {
+          "account": "0xbbb1000000000000000000000000000000000001",
+          "weightE6": "14492518"
+        }
+      ],
+      "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "trader": [
+        {
+          "account": "0xbbb2000000000000000000000000000000000002",
+          "weightE6": "6000000"
+        },
+        {
+          "account": "0xbbb3000000000000000000000000000000000003",
+          "weightE6": "4000000"
+        }
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "account": "0x1111111111111111111111111111111111111111",
+      "amount": "3047785234899328859",
+      "kind": 0,
+      "proof": [
+        "0xeef81d2373e1ef7eb9216ca79aca2e083aa58ae162229208faa477ea5c588cab",
+        "0xf883018e3103f5282a3350f2d9ed83b85791fe62347bf9ab4de02c487474eece",
+        "0xcaf8db27b0d1d841244eb16cb8c0d56ad1a374ce6e48432e8e9ec92b10d97bcd"
+      ]
+    },
+    {
+      "account": "0x2222222222222222222222222222222222222222",
+      "amount": "652214765100671141",
+      "kind": 0,
+      "proof": [
+        "0x2c27e719df14f90833d45e6df02d2ad0555bb76c9d8a781bc12a39bb8870aad3",
+        "0xcaa146f053b3b222d3abc3bd809b3e494a12ea0ecd99a9babe648a4fbfc62cec",
+        "0xec2233b845575effb66f0f51c429d15fbafb62546cc8713e647a9b3e6eff22fe"
+      ]
+    },
+    {
+      "account": "0x5555555555555555555555555555555555555555",
+      "amount": "1600000000000000000",
+      "kind": 0,
+      "proof": [
+        "0xd006d79bcc95b197befdf68a8634f0415af17380248dd870eba0b6ee844f9e98",
+        "0xf883018e3103f5282a3350f2d9ed83b85791fe62347bf9ab4de02c487474eece",
+        "0xcaf8db27b0d1d841244eb16cb8c0d56ad1a374ce6e48432e8e9ec92b10d97bcd"
+      ]
+    },
+    {
+      "account": "0xaaa1000000000000000000000000000000000001",
+      "amount": "18402558398613844365",
+      "kind": 1,
+      "proof": [
+        "0x56af25993f11d751c5cec941d69abe037c1f45b0720a6f590b56ef42b8ae5aaa",
+        "0x1a84e77e5d94a740f37ab055b724824145c7c51b70fb2ac4eae0fc286f67d2ae",
+        "0xec2233b845575effb66f0f51c429d15fbafb62546cc8713e647a9b3e6eff22fe"
+      ]
+    },
+    {
+      "account": "0xaaa2000000000000000000000000000000000002",
+      "amount": "15752536703108355002",
+      "kind": 1,
+      "proof": [
+        "0x63995559034059dfe0599bfb59fa28580b0116c1f62e547c310fc89f57f6ce03",
+        "0x1a84e77e5d94a740f37ab055b724824145c7c51b70fb2ac4eae0fc286f67d2ae",
+        "0xec2233b845575effb66f0f51c429d15fbafb62546cc8713e647a9b3e6eff22fe"
+      ]
+    },
+    {
+      "account": "0xaaa4000000000000000000000000000000000004",
+      "amount": "590644597348467065",
+      "kind": 1,
+      "proof": [
+        "0x2daac7bae38fb74ab0d7245697fe5d52caeee0d187a8dafd5166e7ae5f4c7116",
+        "0xcaf8db27b0d1d841244eb16cb8c0d56ad1a374ce6e48432e8e9ec92b10d97bcd"
+      ]
+    },
+    {
+      "account": "0xbbb1000000000000000000000000000000000001",
+      "amount": "55354260300929333568",
+      "kind": 1,
+      "proof": [
+        "0x324adbb5fd5590fd5d099f665f9654b70861ec8484c6ff5b13bdf2594378a3dc",
+        "0xcaa146f053b3b222d3abc3bd809b3e494a12ea0ecd99a9babe648a4fbfc62cec",
+        "0xec2233b845575effb66f0f51c429d15fbafb62546cc8713e647a9b3e6eff22fe"
+      ]
+    }
+  ],
+  "clusters": [
+    {
+      "members": [
+        "0x1111111111111111111111111111111111111111",
+        "0xccc1000000000000000000000000000000000001"
+      ],
+      "rep": "0x1111111111111111111111111111111111111111"
+    },
+    {
+      "members": [
+        "0x2222222222222222222222222222222222222222",
+        "0xccc2000000000000000000000000000000000002"
+      ],
+      "rep": "0x2222222222222222222222222222222222222222"
+    },
+    {
+      "members": [
+        "0xaaa1000000000000000000000000000000000001",
+        "0xaaa4000000000000000000000000000000000004"
+      ],
+      "rep": "0xaaa1000000000000000000000000000000000001"
+    },
+    {
+      "members": [
+        "0xbbb1000000000000000000000000000000000001",
+        "0xbbb2000000000000000000000000000000000002",
+        "0xbbb3000000000000000000000000000000000003",
+        "0xccc3000000000000000000000000000000000003"
+      ],
+      "rep": "0xbbb1000000000000000000000000000000000001"
+    }
+  ],
+  "epochId": "0",
+  "feraTwapE6": "50000",
+  "headline": {
+    "capFeraWei": "10000000000000000000000000",
+    "emittedFeraWei": "106000000000000000000",
+    "epochTotalFeraWei": "108160000000000000000",
+    "lpPoolFeraWei": "90100000000000000000",
+    "revenueBoundFeraWei": "108160000000000000000",
+    "revenueValuedInFeraWei": "135200000000000000000",
+    "traderPoolFeraWei": "5300000000000000000",
+    "treasuryFeraWei": "10600000000000000000"
+  },
+  "meta": {
+    "algoVersion": "fera-emissions-pipeline/3",
+    "generatedAt": "1970-01-01T00:00:00.000Z",
+    "note": "Reproducible bundle. Re-run pipeline over `snapshot` with the same scriptVersionHash to reproduce `root`. Never hotfix a posted epoch.",
+    "scriptVersionHash": "0xc815e8d58654181bb671da5cf741c9cf1a4d3e7a06495fd4a8f5b4ffe9d4b741"
+  },
+  "pools": [
+    {
+      "capShareFeraWei": "8875739644970414201183432",
+      "divMultBps": 2000,
+      "excludedLpWeightE6": "14492518",
+      "excludedTraderWeightE6": "10000000",
+      "feesEarnedE6": "54000000",
+      "feesPaidE6": "25000000",
+      "lpEmissionFeraWei": "81600000000000000000",
+      "poolEmissionFeraWei": "96000000000000000000",
+      "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "regime": 0,
+      "revenueE6": "6000000",
+      "revenueLockFeraWei": "96000000000000000000",
+      "traderEmissionFeraWei": "4800000000000000000",
+      "treasuryFeraWei": "9600000000000000000"
+    },
+    {
+      "capShareFeraWei": "1124260355029585798816568",
+      "divMultBps": 2000,
+      "excludedLpWeightE6": "0",
+      "excludedTraderWeightE6": "0",
+      "feesEarnedE6": "6840000",
+      "feesPaidE6": "5960000",
+      "lpEmissionFeraWei": "8500000000000000000",
+      "poolEmissionFeraWei": "10000000000000000000",
+      "poolId": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "regime": 1,
+      "revenueE6": "760000",
+      "revenueLockFeraWei": "12160000000000000000",
+      "traderEmissionFeraWei": "500000000000000000",
+      "treasuryFeraWei": "1000000000000000000"
+    }
+  ],
+  "root": "0xcc00c791115af886a60364bf7d5c7dab8d11120245fea6ebf5db1581c6897e78",
+  "snapshot": {
+    "boostX18": {
+      "0x1111111111111111111111111111111111111111": "2000000000000000000",
+      "0xaaa2000000000000000000000000000000000002": "1500000000000000000",
+      "0xbbb1000000000000000000000000000000000001": "2000000000000000000"
+    },
+    "capFeraWei": "10000000000000000000000000",
+    "checkpoints": [
+      {
+        "blockNumber": "199000",
+        "epochId": "0",
+        "logIndex": 0,
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sharePriceX96": "79228162514264337593543950336",
+        "timestamp": 6000,
+        "tranche": 0
+      },
+      {
+        "blockNumber": "199000",
+        "epochId": "0",
+        "logIndex": 1,
+        "poolId": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "sharePriceX96": "79228162514264337593543950336",
+        "timestamp": 6000,
+        "tranche": 0
+      },
+      {
+        "blockNumber": "199000",
+        "epochId": "0",
+        "logIndex": 2,
+        "poolId": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "sharePriceX96": "79228162514264337593543950336",
+        "timestamp": 6000,
+        "tranche": 1
+      }
+    ],
+    "deposits": [
+      {
+        "amount0": "0",
+        "amount1": "5000000000000000000",
+        "blockNumber": "100500",
+        "logIndex": 0,
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sharesMinted": "1000000000000000000000",
+        "timestamp": 1000,
+        "tranche": 0,
+        "user": "0xaaa1000000000000000000000000000000000001"
+      },
+      {
+        "amount0": "0",
+        "amount1": "15000000000000000000",
+        "blockNumber": "100600",
+        "logIndex": 1,
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sharesMinted": "3000000000000000000000",
+        "timestamp": 1000,
+        "tranche": 0,
+        "user": "0xbbb1000000000000000000000000000000000001"
+      },
+      {
+        "amount0": "0",
+        "amount1": "5000000000000000000",
+        "blockNumber": "105000",
+        "logIndex": 0,
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sharesMinted": "1000000000000000000000",
+        "timestamp": 2000,
+        "tranche": 0,
+        "user": "0xaaa2000000000000000000000000000000000002"
+      },
+      {
+        "amount0": "0",
+        "amount1": "10000000000",
+        "blockNumber": "101000",
+        "logIndex": 0,
+        "poolId": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "sharesMinted": "500000000000000000000",
+        "timestamp": 1200,
+        "tranche": 0,
+        "user": "0xaaa1000000000000000000000000000000000001"
+      },
+      {
+        "amount0": "50000000000000000000",
+        "amount1": "0",
+        "blockNumber": "101500",
+        "logIndex": 0,
+        "poolId": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "sharesMinted": "400000000000000000000",
+        "timestamp": 1300,
+        "tranche": 1,
+        "user": "0xaaa2000000000000000000000000000000000002"
+      }
+    ],
+    "epochEndTs": 7000,
+    "epochId": "0",
+    "feesCollected": [
+      {
+        "blockNumber": "110500",
+        "fee0": "0",
+        "fee1": "6000000000000000",
+        "logIndex": 1,
+        "perfFee0": "0",
+        "perfFee1": "600000000000000",
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "timestamp": 1500,
+        "tranche": 0
+      },
+      {
+        "blockNumber": "125000",
+        "fee0": "2000000000000000000000",
+        "fee1": "4000000000000000",
+        "logIndex": 1,
+        "perfFee0": "200000000000000000000",
+        "perfFee1": "400000000000000",
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "timestamp": 3000,
+        "tranche": 0
+      },
+      {
+        "blockNumber": "140500",
+        "fee0": "1000000000000000000000",
+        "fee1": "0",
+        "logIndex": 1,
+        "perfFee0": "100000000000000000000",
+        "perfFee1": "0",
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "timestamp": 5000,
+        "tranche": 0
+      },
+      {
+        "blockNumber": "141000",
+        "fee0": "0",
+        "fee1": "4000000",
+        "logIndex": 1,
+        "perfFee0": "0",
+        "perfFee1": "400000",
+        "poolId": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "timestamp": 4000,
+        "tranche": 0
+      },
+      {
+        "blockNumber": "151000",
+        "fee0": "30000000000000000",
+        "fee1": "0",
+        "logIndex": 1,
+        "perfFee0": "3000000000000000",
+        "perfFee1": "0",
+        "poolId": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "timestamp": 4500,
+        "tranche": 1
+      }
+    ],
+    "feraTwapE6": "50000",
+    "fromBlock": "100000",
+    "fundingEdges": [
+      {
+        "child": "0xbbb2000000000000000000000000000000000002",
+        "funder": "0xbbb1000000000000000000000000000000000001"
+      },
+      {
+        "child": "0xbbb3000000000000000000000000000000000003",
+        "funder": "0xbbb2000000000000000000000000000000000002"
+      },
+      {
+        "child": "0x1111111111111111111111111111111111111111",
+        "funder": "0xccc1000000000000000000000000000000000001"
+      },
+      {
+        "child": "0x2222222222222222222222222222222222222222",
+        "funder": "0xccc2000000000000000000000000000000000002"
+      },
+      {
+        "child": "0xbbb1000000000000000000000000000000000001",
+        "funder": "0xccc3000000000000000000000000000000000003"
+      }
+    ],
+    "openingShares": [],
+    "poolCapFeraWei": {
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": "10000000000000000000"
+    },
+    "pools": [
+      {
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "price0E6": "10000",
+        "price1E6": "3000000000",
+        "token0": {
+          "address": "0x1000000000000000000000000000000000000001",
+          "decimals": 18,
+          "symbol": "MEME"
+        },
+        "token1": {
+          "address": "0x2000000000000000000000000000000000000002",
+          "decimals": 18,
+          "symbol": "WETH"
+        }
+      },
+      {
+        "poolId": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "price0E6": "120000000",
+        "price1E6": "1000000",
+        "token0": {
+          "address": "0x3000000000000000000000000000000000000003",
+          "decimals": 18,
+          "symbol": "NVDA"
+        },
+        "token1": {
+          "address": "0x4000000000000000000000000000000000000004",
+          "decimals": 6,
+          "symbol": "USDG"
+        }
+      }
+    ],
+    "prevFeraTwapE6": "55000",
+    "qualityScoreBps": {},
+    "shareTransfers": [
+      {
+        "blockNumber": "135000",
+        "from": "0xaaa1000000000000000000000000000000000001",
+        "logIndex": 5,
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "shares": "500000000000000000000",
+        "timestamp": 4000,
+        "to": "0xaaa4000000000000000000000000000000000004",
+        "tranche": 0
+      }
+    ],
+    "swaps": [
+      {
+        "amount0": "0",
+        "amount1": "-10000000000000000000",
+        "blockNumber": "110000",
+        "feeAmount": "3000000000000000",
+        "logIndex": 0,
+        "lpFeePips": 3400,
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "regime": 0,
+        "timestamp": 1500,
+        "trader": "0x1111111111111111111111111111111111111111",
+        "zeroForOne": false
+      },
+      {
+        "amount0": "5000000000000000000000",
+        "amount1": "0",
+        "blockNumber": "120000",
+        "feeAmount": "100000000000000000000",
+        "logIndex": 0,
+        "lpFeePips": 30000,
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "regime": 0,
+        "timestamp": 2500,
+        "trader": "0x2222222222222222222222222222222222222222",
+        "zeroForOne": true
+      },
+      {
+        "amount0": "0",
+        "amount1": "-6000000000000000000",
+        "blockNumber": "125500",
+        "feeAmount": "2000000000000000",
+        "logIndex": 0,
+        "lpFeePips": 3400,
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "regime": 0,
+        "timestamp": 2600,
+        "trader": "0xbbb2000000000000000000000000000000000002",
+        "zeroForOne": false
+      },
+      {
+        "amount0": "20000000000000000000000",
+        "amount1": "0",
+        "blockNumber": "126000",
+        "feeAmount": "400000000000000000000",
+        "logIndex": 0,
+        "lpFeePips": 30000,
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "regime": 0,
+        "timestamp": 2700,
+        "trader": "0xbbb3000000000000000000000000000000000003",
+        "zeroForOne": true
+      },
+      {
+        "amount0": "25000000000000000000000",
+        "amount1": "0",
+        "blockNumber": "127000",
+        "feeAmount": "500000000000000000000",
+        "logIndex": 0,
+        "lpFeePips": 30000,
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "regime": 0,
+        "timestamp": 2800,
+        "trader": "0x5555555555555555555555555555555555555555",
+        "zeroForOne": true
+      },
+      {
+        "amount0": "0",
+        "amount1": "-20000000000",
+        "blockNumber": "140000",
+        "feeAmount": "2000000",
+        "logIndex": 0,
+        "lpFeePips": 200,
+        "poolId": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "regime": 1,
+        "timestamp": 4000,
+        "trader": "0x1111111111111111111111111111111111111111",
+        "zeroForOne": false
+      },
+      {
+        "amount0": "33000000000000000",
+        "amount1": "0",
+        "blockNumber": "150000",
+        "feeAmount": "33000000000000000",
+        "logIndex": 0,
+        "lpFeePips": 3000,
+        "poolId": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "regime": 1,
+        "timestamp": 4500,
+        "trader": "0x2222222222222222222222222222222222222222",
+        "zeroForOne": true
+      }
+    ],
+    "toBlock": "200000",
+    "unclusterableAddresses": [
+      "0x5555555555555555555555555555555555555555"
+    ],
+    "withdraws": [
+      {
+        "amount0": "0",
+        "amount1": "1000000000000000000",
+        "blockNumber": "132000",
+        "logIndex": 0,
+        "poolId": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sharesBurned": "200000000000000000000",
+        "timestamp": 3500,
+        "tranche": 0,
+        "user": "0xaaa2000000000000000000000000000000000002"
+      }
+    ]
+  },
+  "totalEsFeraWei": "95400000000000000000",
+  "washFarmFlags": []
+}

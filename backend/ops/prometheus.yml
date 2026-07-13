@@ -1,0 +1,32 @@
+# Prometheus scrape config STUB (MASTER_SPEC §10 monitoring).
+# Points Prometheus at the indexer's /metrics endpoint (ops/metrics.ts renderMetrics) and the
+# node exporter. Alert rules are in ops/alerts.yml. Deploy task: fill real hostnames/TLS/auth.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093 # TODO(deploy): real Alertmanager target
+
+scrape_configs:
+  # FERA indexer + API (exposes fera_indexer_lag_seconds, fera_epoch_last_posted, keeper gauges,
+  # fera_oracle_seconds_since_update, and the reconcile drift/violation metrics).
+  - job_name: fera-indexer
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - indexer:42069 # TODO(deploy): real indexer host:port
+
+  # Optional: a small pushgateway if keepers/reconcile push instead of being scraped.
+  - job_name: fera-pushgateway
+    honor_labels: true
+    static_configs:
+      - targets:
+          - pushgateway:9091 # TODO(deploy): real pushgateway host:port

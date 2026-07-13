@@ -1,0 +1,63 @@
+{
+  "__comment": "Grafana dashboard STUB (MASTER_SPEC §10). Import into Grafana; bind to the Prometheus datasource scraping ops/prometheus.yml. Panels reference the frozen metric names in ops/metrics.ts. TODO(deploy): set datasource uid, refine thresholds.",
+  "title": "FERA Backend — Indexer / Keepers / Reconcile",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "30s",
+  "tags": ["fera", "backend"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Indexer lag (s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "fera_indexer_lag_seconds", "legendFormat": "lag" }],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 60 }, { "color": "red", "value": 600 }] } } }
+    },
+    {
+      "id": 2,
+      "title": "Keeper last success age (s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [{ "expr": "time() - fera_keeper_last_success_timestamp", "legendFormat": "{{keeper}}" }]
+    },
+    {
+      "id": 3,
+      "title": "Keeper OK (1/0)",
+      "type": "state-timeline",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 8 },
+      "targets": [{ "expr": "fera_keeper_ok", "legendFormat": "{{keeper}}" }]
+    },
+    {
+      "id": 4,
+      "title": "Last posted epoch",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 8 },
+      "targets": [{ "expr": "fera_epoch_last_posted" }]
+    },
+    {
+      "id": 5,
+      "title": "Oracle seconds since update",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 8 },
+      "targets": [{ "expr": "fera_oracle_seconds_since_update", "legendFormat": "{{symbol}}" }]
+    },
+    {
+      "id": 6,
+      "title": "Reconcile: perf-fee (INV-3) violations",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 14 },
+      "targets": [{ "expr": "fera_reconcile_perf_fee_violations_total" }],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } }
+    },
+    {
+      "id": 7,
+      "title": "Reconcile: fee drift (bps) by pool",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 14 },
+      "targets": [{ "expr": "fera_reconcile_fee_drift_bps", "legendFormat": "{{poolId}}" }]
+    }
+  ]
+}
