@@ -279,7 +279,9 @@ contract BaseLimitStrategyTest is Deployers {
         // wait of merely dwell+margin can still average in pre-move history), then refresh the TWAP
         // head at the new level so it reads OOR (TWAP-confirmed). Spot stays at ~tick 2200 (a warp
         // never moves price; the tiny refresh swap keeps the head at the sustained level).
-        vm.warp(block.timestamp + FeraConstants.REBALANCE_TWAP_WINDOW_SEC + 100);
+        // v3-hardening (§5.1): the MEME dwell is now 1h (> the 30-min TWAP window), so sustain past
+        // the DWELL — which also clears the full averaging window for a clean post-move TWAP read.
+        vm.warp(block.timestamp + FeraConstants.MEME_OOR_DWELL_SEC + 100);
         swap(memeKey, true, -1e15, ""); // refresh the TWAP head (age → 0), price stays out of range
         assertTrue(vault.pokeOutOfRange(memeId, 1), "price should still be OOR");
 
@@ -775,7 +777,7 @@ contract BaseLimitStrategyTest is Deployers {
 
         // Sustain past the FULL TWAP window (not just the dwell) so the TWAP-confirmation gate
         // reads a clean post-gap average, then confirm still OOR.
-        vm.warp(block.timestamp + FeraConstants.REBALANCE_TWAP_WINDOW_SEC + 100);
+        vm.warp(block.timestamp + FeraConstants.MEME_OOR_DWELL_SEC + 100); // v3-hardening: 1h dwell
         swap(memeKey, !up, -1e15, ""); // refresh the TWAP head at the sustained level
         if (!vault.pokeOutOfRange(memeId, 1)) return;
 
@@ -839,7 +841,7 @@ contract BaseLimitStrategyTest is Deployers {
         _pushToTick(memeKey, 2_200); // Active OOR, Steady stays put (v3 vol-adaptive calm-floor sizing)
         vm.prank(rando);
         assertTrue(vault.pokeOutOfRange(memeId, 1), "expected Active base OOR");
-        vm.warp(block.timestamp + FeraConstants.REBALANCE_TWAP_WINDOW_SEC + 100);
+        vm.warp(block.timestamp + FeraConstants.MEME_OOR_DWELL_SEC + 100); // v3-hardening: 1h dwell
         swap(memeKey, false, -1e15, "");
         vm.prank(rando);
         vault.rebalanceBase(memeId, 1, false);
@@ -874,7 +876,7 @@ contract BaseLimitStrategyTest is Deployers {
         vault.rebalanceBase(memeId, 1, false);
 
         // Past the dwell from the ORIGINAL (unmoved) arm, with a clean TWAP confirmation ⇒ eligible.
-        vm.warp(uint256(firstArm) + FeraConstants.REBALANCE_TWAP_WINDOW_SEC + 100);
+        vm.warp(uint256(firstArm) + FeraConstants.MEME_OOR_DWELL_SEC + 100); // v3-hardening: 1h dwell
         swap(memeKey, false, -1e15, ""); // refresh TWAP at the sustained level
         vault.rebalanceBase(memeId, 1, false); // must NOT revert OorNotPersistent
         assertFalse(vault.pokeOutOfRange(memeId, 1), "base did not re-anchor");

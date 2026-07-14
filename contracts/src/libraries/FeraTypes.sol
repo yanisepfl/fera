@@ -22,18 +22,24 @@ library FeraTypes {
     }
 
     /// @notice StrategyAction.kind encoding — MUST match MASTER_SPEC §6 StrategyAction comment.
-    ///         v3 (contracts/VAULT_STRATEGY_V3.md): the legacy ladder-only kinds (1=Recenter as the
-    ///         MEME INV-5″ path, 2=Widen, 3=PartialWithdraw, 4=CompoundInPlace, 5=DripDeploy,
-    ///         6=BandConsolidate) are NO LONGER EMITTED — the code paths that emitted them are
-    ///         removed, not stubbed. Values are kept (not renumbered) purely so historical event
-    ///         decoding never shifts; new pools only ever emit 0 (shared InitialMint) and 7-12.
-    /// 0=initialMint 7=limitDeploy 8=baseRecenter(full) 9=selfSwap 10=venueSwap 11=skimIdle
-    /// 12=baseRecenterPartial (v3: IL-budget-capped, staged recenter).
+    ///         v3 (contracts/VAULT_STRATEGY_V3.md): the legacy ladder mechanism was removed, so kinds
+    ///         4=CompoundInPlace, 5=DripDeploy, 6=BandConsolidate are NO LONGER EMITTED (their code
+    ///         paths are deleted, not stubbed). Values are kept (not renumbered) so historical event
+    ///         decoding never shifts.
+    ///         V3-HARDENING (2026-07-14, §5.1): kinds 1=Recenter and 2=Widen are RE-EMITTED for the
+    ///         RESTORED RWA regime — 1 by the in-hours oracle-anchored base recenter
+    ///         (`rebalanceRwaOracle`), 2 by the off-hours/event WIDEN + partial-withdraw defense
+    ///         (`defendRwaOffHours`). Their semantics are the base+limit-native heirs of the removed
+    ///         ladder-era RWA recenter/widen (same intent, new mechanism — re-anchor the base band,
+    ///         not a ladder). 3=PartialWithdraw stays unused (the partial-withdraw is folded into the
+    ///         Widen defend, emitted as 2).
+    /// 0=initialMint 1=rwaOracleRecenter 2=rwaOffHoursWiden 7=limitDeploy 8=baseRecenter(full)
+    /// 9=selfSwap 10=venueSwap 11=skimIdle 12=baseRecenterPartial (v3: IL-budget-capped staged recenter).
     enum StrategyKind {
         InitialMint, // 0
-        Recenter, // 1 — LEGACY, no longer emitted (was: RWA oracle recenter / MEME INV-5″ recenter)
-        Widen, // 2 — LEGACY, no longer emitted
-        PartialWithdraw, // 3 — LEGACY, no longer emitted
+        Recenter, // 1 — RESTORED (v3-hardening): RWA in-hours oracle-anchored base recenter
+        Widen, // 2 — RESTORED (v3-hardening): RWA off-hours/event WIDEN + partial-withdraw defense
+        PartialWithdraw, // 3 — unused (partial-withdraw folded into the Widen defend, kind 2)
         CompoundInPlace, // 4 — LEGACY, no longer emitted
         DripDeploy, // 5 — LEGACY, no longer emitted
         BandConsolidate, // 6 — LEGACY, no longer emitted

@@ -663,33 +663,46 @@ contract FeraHook is BaseHook, IFeraHook {
             _seedOracle(id, tick);
             return;
         }
-        uint32 dt = nowTs - head.blockTimestamp;
-        if (dt == 0) {
-            _lastTick[id] = tick; // same block: only the effective tick for the NEXT interval moves
-            return;
-        }
+        // TASK-1 / MUST-FIX (v3-hardening 2026-07-14): the cumulative-tick oracle math runs UNCHECKED,
+        // exactly like the Uniswap v3/v4 reference Oracle. Two overflow classes are wrapped away here:
+        //   • the uint32 elapsed-time subtractions (`nowTs - head.blockTimestamp`, `nowTs -
+        //     _headBornTs`) wrap mod 2^32 — correct as long as the TRUE elapsed span < 2^32s. A
+        //     block.timestamp crossing the uint32 rollover (or a test warping across it) would make
+        //     the CHECKED subtraction underflow-panic (0x11).
+        //   • the int56 accumulation (`tickCumulative + _lastTick·dt`) wraps mod 2^56 — every consumer
+        //     (`consultTwapTick`) differences two cumulatives, so a consistent wrap cancels exactly.
+        // `_writeOracle` runs inside `afterSwap`; a panic here would REVERT THE TRIGGERING SWAP,
+        // violating INV-2 ("swaps never revert"). Wrapping arithmetic can NEVER revert, so afterSwap
+        // is now unconditionally revert-free on this path.
+        unchecked {
+            uint32 dt = nowTs - head.blockTimestamp;
+            if (dt == 0) {
+                _lastTick[id] = tick; // same block: only the effective tick for the NEXT interval moves
+                return;
+            }
 
-        // Advance the cumulative to `now` using the tick effective over [head.ts, now]. This uses
-        // _lastTick as it stood entering this interval (set by the PREVIOUS swap), NOT the current
-        // (possibly manipulated) `tick` — so an atomic manipulate-then-restore never enters history.
-        int56 cumNow = head.tickCumulative + int56(_lastTick[id]) * int56(uint56(dt));
+            // Advance the cumulative to `now` using the tick effective over [head.ts, now]. This uses
+            // _lastTick as it stood entering this interval (set by the PREVIOUS swap), NOT the current
+            // (possibly manipulated) `tick` — so an atomic manipulate-then-restore never enters history.
+            int56 cumNow = head.tickCumulative + int56(_lastTick[id]) * int56(uint56(dt));
 
-        if (nowTs - _headBornTs[id] >= FeraConstants.TWAP_OBS_SPACING_SEC) {
-            // Spacing elapsed: FREEZE the current head as a checkpoint and open a new floating head at
-            // the next slot (continuing from the same cumulative). Checkpoints are therefore ≥ SPACING
-            // apart, so the ring spans real time, not blocks.
-            _obs[id][idx] = Observation({blockTimestamp: nowTs, tickCumulative: cumNow, initialized: true});
-            uint16 next = (idx + 1) % OBS_CARDINALITY;
-            _obs[id][next] = Observation({blockTimestamp: nowTs, tickCumulative: cumNow, initialized: true});
-            _obsIndex[id] = next;
-            _headBornTs[id] = nowTs;
-        } else {
-            // Within the spacing window: advance the head IN PLACE (no new checkpoint). Keeps
-            // (now − head.ts) small so the read's live-tick extrapolation stays negligible.
-            head.blockTimestamp = nowTs;
-            head.tickCumulative = cumNow;
+            if (nowTs - _headBornTs[id] >= FeraConstants.TWAP_OBS_SPACING_SEC) {
+                // Spacing elapsed: FREEZE the current head as a checkpoint and open a new floating head
+                // at the next slot (continuing from the same cumulative). Checkpoints are therefore ≥
+                // SPACING apart, so the ring spans real time, not blocks.
+                _obs[id][idx] = Observation({blockTimestamp: nowTs, tickCumulative: cumNow, initialized: true});
+                uint16 next = (idx + 1) % OBS_CARDINALITY;
+                _obs[id][next] = Observation({blockTimestamp: nowTs, tickCumulative: cumNow, initialized: true});
+                _obsIndex[id] = next;
+                _headBornTs[id] = nowTs;
+            } else {
+                // Within the spacing window: advance the head IN PLACE (no new checkpoint). Keeps
+                // (now − head.ts) small so the read's live-tick extrapolation stays negligible.
+                head.blockTimestamp = nowTs;
+                head.tickCumulative = cumNow;
+            }
+            _lastTick[id] = tick;
         }
-        _lastTick[id] = tick;
     }
 
     /// @inheritdoc IFeraHook
@@ -699,9 +712,18 @@ contract FeraHook is BaseHook, IFeraHook {
         if (!newest.initialized) return (0, false);
 
         uint32 nowTs = uint32(block.timestamp);
-        // Cumulative extrapolated to `now`. Same-block swaps left newest.blockTimestamp == now, so
-        // the (now - newest) term is 0 ⇒ the manipulated tick is excluded from this read.
-        int56 cumNow = newest.tickCumulative + int56(_lastTick[id]) * int56(uint56(nowTs - newest.blockTimestamp));
+        // TASK-1 / MUST-FIX (v3-hardening 2026-07-14): UNCHECKED to match the Uniswap v3/v4 reference
+        // Oracle — the uint32 elapsed-time subtraction and the int56 accumulation wrap-around, and the
+        // final `cumNow - anchorCum` delta below differences two cumulatives so the wrap cancels
+        // exactly (the true average tick always fits int24). CHECKED arithmetic could panic (0x11) at
+        // the uint32 timestamp rollover or on an extreme cumulative; this view feeds `_poolTwapPrice`,
+        // which the deposit + rebalance gates call WITHOUT a try/catch — a panic there would DoS them.
+        // Wrapping cannot panic, so a bad/edge read degrades to `ready=false` (spot fallback) or the
+        // fail-closed stale path in the consumer, never an uncaught revert.
+        int56 cumNow;
+        unchecked {
+            cumNow = newest.tickCumulative + int56(_lastTick[id]) * int56(uint56(nowTs - newest.blockTimestamp));
+        }
 
         uint32 targetTs = window >= nowTs ? 0 : nowTs - window;
 
@@ -730,7 +752,12 @@ contract FeraHook is BaseHook, IFeraHook {
             anchorCum = oldestCum;
         }
         if (nowTs <= anchorTs) return (0, false); // no elapsed history ⇒ caller falls back to spot
-        twapTick = int24((cumNow - anchorCum) / int56(uint56(nowTs - anchorTs)));
+        unchecked {
+            // `cumNow - anchorCum` differences two (possibly-wrapped) int56 cumulatives; the wrap
+            // cancels so the quotient is the true average tick (fits int24). `nowTs - anchorTs` is
+            // guaranteed > 0 by the guard above, so the division is safe.
+            twapTick = int24((cumNow - anchorCum) / int56(uint56(nowTs - anchorTs)));
+        }
         ready = true;
     }
 

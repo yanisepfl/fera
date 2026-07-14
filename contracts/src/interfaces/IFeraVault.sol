@@ -139,6 +139,15 @@ interface IFeraVault {
     ///         symmetrically require the pool it registers is a real-hook pool (mirrors the hook's
     ///         own `_beforeInitialize` `sender == vault` guard).
     error WrongHook();
+    /// @notice v3-hardening (§5.1): an RWA-only action (`rebalanceRwaOracle`/`defendRwaOffHours`) was
+    ///         called on a MEME pool.
+    error NotRwaPool();
+    /// @notice v3-hardening (§5.1): the RWA oracle-anchored recenter could not read a fresh/positive
+    ///         Chainlink price (the anchor is mandatory — no blind recenter).
+    error OracleUnavailable();
+    /// @notice v3-hardening (§5.1): the pool-vs-oracle drift is below `RWA_ORACLE_RECENTER_HYSTERESIS_BPS`
+    ///         — there is nothing meaningful to recenter (moving liquidity would be pure churn).
+    error OracleDeviationTooSmall();
 
     /// @notice Deposit into a tranche of `poolId`, ratio-matched across its band set; mints the
     ///         tranche's ERC-20 shares at NAV. Respects pause + TWAP gate (INV-11 — pausable side).
@@ -240,6 +249,19 @@ interface IFeraVault {
     function rebalanceViaVenue(PoolId poolId, uint8 tranche, address venue, bool zeroForOne, uint256 amountIn)
         external
         returns (uint256 amountOut);
+
+    /// @notice v3-hardening (§5.1): RWA IN-HOURS oracle-anchored base recenter. Permissionless; RWA
+    ///         only. Re-anchors the base band TOWARD the Chainlink oracle when the pool has drifted
+    ///         past `RWA_ORACLE_RECENTER_HYSTERESIS_BPS` during market hours (TWAP-sanity-checked).
+    ///         Swap-free / value-conserving. Reverts NotRwaPool / MarketClosed / OracleUnavailable /
+    ///         OracleDeviationTooSmall / TwapOutOfBand / RebalanceTooSoon per its gates.
+    function rebalanceRwaOracle(PoolId poolId, uint8 tranche) external;
+
+    /// @notice v3-hardening (§5.1): RWA OFF-HOURS / EVENT-WINDOW defense — WIDEN the base band and
+    ///         PARTIAL-WITHDRAW a fraction into idle reserve to survive weekend drift + a Monday gap.
+    ///         Permissionless; RWA only; eligible when the market is closed OR an event window is
+    ///         flagged. Swap-free / value-conserving. Reverts NotRwaPool / MarketOpen / RebalanceTooSoon.
+    function defendRwaOffHours(PoolId poolId, uint8 tranche) external;
 
     /// @notice Governance allowlist toggle for an external rebalance venue. onlyOwner (timelocked) —
     ///         a trust/governance decision, unlike the mechanical rebalance actions above.

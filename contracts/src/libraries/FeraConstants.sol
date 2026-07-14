@@ -12,8 +12,18 @@ pragma solidity ^0.8.26;
 ///         INV-5″ guarded-recenter constants are REMOVED (not deprecated — deleted). Nothing was
 ///         ever deployed, so there is no backward-compatibility surface; base+limit+idle is now the
 ///         ONLY vault strategy, for BOTH regimes. Do not re-add MEME_LADDER_*/MEME_DRIP_*/
-///         MEME_RECENTER_*/RWA_HYSTERESIS_*/RWA_*_WITHDRAW_FRAC_* — they described a mechanism that
-///         no longer exists in `FeraVault.sol`.
+///         MEME_RECENTER_* — they described a mechanism that no longer exists in `FeraVault.sol`.
+///
+///         V3-HARDENING NOTE (2026-07-14, this pass — contracts/VAULT_STRATEGY_V3.md §5.1/§12): the
+///         RWA regime's oracle-anchored recenter + off-hours WIDEN / partial-withdraw defenses are
+///         RESTORED on the base+limit+idle shape (they were vestigial after the v3 unification —
+///         OD-4). The `RWA_ORACLE_RECENTER_HYSTERESIS_BPS`/`RWA_OFFHOURS_WIDEN_MULT_BPS`/
+///         `RWA_OFFHOURS_WITHDRAW_FRAC_BPS` rows below are the (re-scoped, base+limit-native) heirs of
+///         the removed ladder-era `RWA_HYSTERESIS_*`/`RWA_*_WITHDRAW_FRAC_*` — same INTENT (RWA prices
+///         mean-revert to the real stock; recenter TOWARD the oracle in-hours, batten down off-hours),
+///         new mechanism (re-anchor the base band, not a ladder). MEME's base recenter is made
+///         CONSERVATIVE in the same pass (long dwell + long dedicated interval — §5.1): for a
+///         memecoin we do NOT chase the pump.
 library FeraConstants {
     // ─────────────────────────────────────────────────────────────────────────────────────
     // LOCKED (MASTER_SPEC §7 — immutable rows). These are contractual and safe to hardcode.
@@ -267,22 +277,71 @@ library FeraConstants {
     uint256 internal constant ORACLE_BIAS_WEIGHT_BPS = 3_000; // oracle contributes ≤30% of the score
 
     /// @notice v3: anti-whipsaw DWELL (how long an out-of-range base must persist before a guarded
-    ///         recenter may fire) is now DECOUPLED from the min-interval floor between rebalances
+    ///         recenter may fire) is DECOUPLED from the min-interval floor between rebalances
     ///         (previously the SAME constant served both, conflating "is this move real" with "how
-    ///         often can we act at all"). MEME goes out of range OFTEN and is expected to — the dwell
-    ///         is kept short (still non-zero + TWAP-confirmed) so it recenters reasonably promptly;
-    ///         RWA's dwell stays long (a real stock's price is comparatively stable, it should not
-    ///         need to move often).
-    uint32 internal constant MEME_OOR_DWELL_SEC = 900; // 15 min — confirm a real move quickly
+    ///         often can we act at all").
+    ///
+    ///         V3-HARDENING (2026-07-14, §5.1): the MEME dwell is RAISED 900→3_600 (15 min → 1h). A
+    ///         base recenter realises IL through its self-swap; for a strongly TRENDING memecoin many
+    ///         small IL-capped recenters stacking is a real loss (the "aggressive recentering loses
+    ///         money" failure our own sim showed). We do NOT chase the pump: a base recenter must now
+    ///         wait out a FULL HOUR of sustained, TWAP-confirmed out-of-range — not a transient 15-min
+    ///         blip. Everyday rebalancing is carried by the swap-free limit-fill (`rebalanceLimit`),
+    ///         which keeps the short general interval below and no dwell. RWA's dwell stays long.
+    uint32 internal constant MEME_OOR_DWELL_SEC = 3_600; // 1h — do NOT chase; confirm a genuine move
     uint32 internal constant RWA_OOR_DWELL_SEC = 14_400; // 4h — unchanged, RWA is calm
 
-    /// @notice Min spacing between successive rebalance actions (R-15 anti-griefing floor), PER
-    ///         REGIME. MEME shortened 3_600→1_800 (v3): safety comes from the PER-ACTION bounds
-    ///         (dwell + TWAP-confirm + slippage + the new IL cap, §4) — NOT from making recentering
-    ///         rare — so the interval only needs to be non-zero/bounded, not long. RWA unchanged
-    ///         (slow cadence is appropriate for a comparatively stable reference price).
-    uint32 internal constant MEME_MIN_REBALANCE_INTERVAL_SEC = 1_800; // 30 min (was 3_600 in v2)
+    /// @notice Min spacing between successive GENERAL rebalance actions (R-15 anti-griefing floor),
+    ///         PER REGIME. This governs the swap-free everyday rebalancer (`rebalanceLimit`) plus
+    ///         `selfSwap`/`rebalanceViaVenue`. MEME stays SHORT (30 min) so the limit-fill can track a
+    ///         volatile pair responsively; the base RECENTER is separately, and much more strictly,
+    ///         gated (see MEME_BASE_RECENTER_MIN_INTERVAL_SEC). RWA unchanged (slow cadence suits a
+    ///         comparatively stable reference price).
+    uint32 internal constant MEME_MIN_REBALANCE_INTERVAL_SEC = 1_800; // 30 min (limit-fill cadence)
     uint32 internal constant RWA_MIN_REBALANCE_INTERVAL_SEC = 14_400; // 4h (unchanged)
+
+    /// @notice V3-HARDENING (2026-07-14, §5.1) — DEDICATED min-interval for the IL-realising BASE
+    ///         RECENTER (`rebalanceBase`, and the restored RWA oracle-recenter / off-hours defend),
+    ///         tracked on its OWN clock (`lastBaseRecenterTs`) SEPARATE from the general
+    ///         `lastRebalanceTs`. Two reasons the base recenter needs its own, much longer, clock:
+    ///           1. CONSERVATISM — for MEME we let the volatility-scaled fee compensate IL and rely on
+    ///              the wide vol-adaptive band + swap-free limit-fill; the base recenter should fire
+    ///              RARELY (≤ ~4×/day at 6h), so a trending/whipsawing path cannot stack many small
+    ///              IL-capped recenters into a real loss.
+    ///           2. NO CROSS-STARVE (closes OD-13) — if the base recenter shared the general clock, a
+    ///              cheap `rebalanceLimit` every 30 min would reset it and the base could NEVER reach
+    ///              its 6h gap (permanent starvation). A dedicated clock makes the base recenter
+    ///              independent of limit-fill activity while still strictly bounded.
+    ///         [PROVISIONAL] — 6h MEME (hours, not minutes); RWA reuses its 4h general interval.
+    uint32 internal constant MEME_BASE_RECENTER_MIN_INTERVAL_SEC = 21_600; // 6h — base recenter is RARE
+
+    // ─────────────────────────────────────────────────────────────────────────────────────
+    // V3-HARDENING (2026-07-14) — RWA regime-appropriate defenses RESTORED on base+limit+idle
+    // (contracts/VAULT_STRATEGY_V3.md §5.1). RWA prices MEAN-REVERT to the underlying real stock, so
+    // (a) in-hours we recenter the base band TOWARD the Chainlink oracle when the pool drifts past a
+    // hysteresis threshold (TWAP-sanity-checked so a spot spike cannot trigger it) — the OPPOSITE of
+    // MEME, where chasing the price loses money; (b) off-hours (market closed) or during a flagged
+    // event window (earnings), we WIDEN the base band and PARTIAL-WITHDRAW a fraction into idle
+    // reserve so weekend drift + a Monday open gap cannot realise IL into a tight stale-priced band.
+    // All swap-free (band<->reserve only ⇒ zero IL by construction), bounded, permissionless-but-
+    // on-chain-verified like the rest of the rebalance surface.
+    // ─────────────────────────────────────────────────────────────────────────────────────
+
+    /// @notice In-hours pool-vs-oracle deviation (bps of the oracle price) beyond which the RWA
+    ///         base band may be recentered TOWARD the oracle. Below this the pool is close enough to
+    ///         the real price that moving liquidity is pure churn. [PROVISIONAL] 2%.
+    uint256 internal constant RWA_ORACLE_RECENTER_HYSTERESIS_BPS = 200; // 2%
+
+    /// @notice Off-hours / event-window WIDEN multiplier (bps of 1x = BPS) applied to the RWA base
+    ///         tier half-width when battening down. 2x ⇒ the defensive band is twice as wide, so a
+    ///         weekend drift / Monday gap is far less likely to blow clean through it. [PROVISIONAL].
+    uint256 internal constant RWA_OFFHOURS_WIDEN_MULT_BPS = 20_000; // 2.0x
+
+    /// @notice Off-hours / event-window fraction of the base (bps of the closed base's own amounts)
+    ///         PARTIAL-WITHDRAWN into idle reserve instead of redeployed — a buffer that survives a
+    ///         Monday open gap without being adversely filled at a stale weekend price, and is instant-
+    ///         withdrawable. Bounded well below half so the pool keeps meaningful depth. [PROVISIONAL].
+    uint256 internal constant RWA_OFFHOURS_WITHDRAW_FRAC_BPS = 2_000; // 20%
 
     /// @notice Pool-TWAP window + spot-vs-TWAP sanity for the rebalance gates (price can snap back;
     ///         a lone spot spike whose TWAP disagrees must NOT trigger a base recenter).
@@ -313,35 +372,52 @@ library FeraConstants {
     uint256 internal constant MAX_IL_BPS_PER_RECENTER = 300; // 3% of tranche NAV per call [PROVISIONAL]
 
     // ─────────────────────────────────────────────────────────────────────────────────────
-    // v3 NEW — VOL-ADAPTIVE POSITION SIZING (§2). Base/limit half-widths scale off the SAME
-    // realized-volatility EWMA the MEME dynamic fee already reads (FeraHook's packed `_memeState`,
-    // read via `IFeraHook.memeStateOf` — NEVER re-estimated here, only converted to σ via the SAME
-    // conversion FeeLogic.quoteLpFee uses: `FeeLogic.sigmaTicks`). Width multiplier is a linear ramp
-    // with a dead-band, mirroring the fee curve's shape for calibration consistency, CLAMPED to a
-    // governance-set [min,max] band (`FeraVault.volWidthMultMinBps/MaxBps`, timelocked-owner-settable
-    // WITHIN the immutable legal range below — the Gamma lesson: bounds live in code) so the width
-    // can never degenerate to zero nor blow out unbounded. RWA has no EWMA vol signal wired (its
-    // dynamic fee uses oracle deviation, not an EWMA) — RWA multiplier is fixed at 1x (BPS).
+    // v3 — VOL-ADAPTIVE POSITION SIZING (§2), REBALANCED for LVR (v3-hardening 2026-07-14, §5.1).
+    //
+    // WHY THIS IS THE MEME STRATEGY (Loss-Versus-Rebalancing rationale — Milionis et al. "AMM and
+    // Loss-Versus-Rebalancing"; concentrated-liquidity LP studies; Bunni/am-AMM): recentering a
+    // TRENDING asset REALIZES the loss — recentering literally *is* the "R" in LVR. For a memecoin
+    // (which trends, does not mean-revert) active base recentering is a provably losing move, not
+    // merely a cadence to slow down. The correct memecoin strategy is therefore: a WIDE base that
+    // stays IN RANGE through big moves and essentially NEVER needs recentering, HELD, with the
+    // volatility-scaled dynamic fee acting as the LVR compensation; near-spot depth/capital-
+    // efficiency is supplied by the NARROW LIMIT, which is rebalanced by FLOW (swap-free limit-fill),
+    // never by forced recenters. So for a HIGH-realized-vol MEME pair the base half-width must
+    // APPROACH FULL RANGE — hence the max multiplier below is large (25x default / 50x legal): at
+    // high σ, STEADY's 6932-tick magnitude × 25 ≈ 173k ticks (and `_bandAround` clamps to the true
+    // usable full range), i.e. a wide-hold, near-v2-style base. A CALM pair still runs tight (0.5x
+    // floor) for capital efficiency. RWA is the OPPOSITE philosophy (mean-reverts to the oracle → it
+    // is recentered TOWARD the oracle, §5.1) and has no EWMA vol signal — RWA multiplier is fixed 1x.
+    //
+    // Width multiplier is a linear ramp with a dead-band off the SAME EWMA the MEME fee reads
+    // (FeraHook's packed `_memeState` via `IFeraHook.memeStateOf` → `FeeLogic.sigmaTicks` — NEVER
+    // re-estimated here), CLAMPED to a governance-set [min,max] band (`FeraVault.volWidthMult*Bps`,
+    // timelocked WITHIN the immutable legal range below — the Gamma lesson: bounds live in code), so
+    // the width can never degenerate to zero nor blow out unbounded.
     // ─────────────────────────────────────────────────────────────────────────────────────
 
-    /// @notice Default governance-set clamp band (bps of 1x = BPS). 0.5x floor / 2.5x ceiling.
-    uint256 internal constant VOL_WIDTH_MULT_MIN_BPS_DEFAULT = 5_000; // 0.5x
-    uint256 internal constant VOL_WIDTH_MULT_MAX_BPS_DEFAULT = 25_000; // 2.5x
+    /// @notice Default governance-set clamp band (bps of 1x = BPS). 0.5x floor / 25x ceiling. The high
+    ///         ceiling is deliberate (LVR — a volatile MEME base should approach FULL RANGE so it holds
+    ///         through the move and is never recentered; the narrow limit supplies CE). [PROVISIONAL].
+    uint256 internal constant VOL_WIDTH_MULT_MIN_BPS_DEFAULT = 5_000; // 0.5x (calm pair runs tight)
+    uint256 internal constant VOL_WIDTH_MULT_MAX_BPS_DEFAULT = 250_000; // 25x (volatile pair ≈ full-range)
     /// @notice Immutable LEGAL range the timelocked owner's `setVolWidthMultBounds` can never widen
-    ///         past (the Gamma lesson — bounds live in code, not just in a mutable default).
+    ///         past (the Gamma lesson — bounds live in code, not just in a mutable default). The 50x
+    ///         legal ceiling keeps `tierHalf(≤6932) × 50 = 346_600 < int24 max`; `_bandAround` further
+    ///         clamps the result to the pool's true usable tick range, so it can never overflow.
     uint256 internal constant VOL_WIDTH_MULT_MIN_LEGAL_BPS = 1_000; // 0.1x hard floor
-    uint256 internal constant VOL_WIDTH_MULT_MAX_LEGAL_BPS = 50_000; // 5.0x hard ceiling
+    uint256 internal constant VOL_WIDTH_MULT_MAX_LEGAL_BPS = 500_000; // 50x hard ceiling
     /// @notice Dead-band (ticks of σ) below which the multiplier sits at its floor — mirrors
     ///         `MEME_FEE_SIGMA0_TICKS`'s intuition (micro-noise should not widen the band) but is a
     ///         DISTINCT, independently-tunable constant (sizing and fee-pricing are separate concerns
     ///         that happen to share the same σ input).
     uint256 internal constant VOL_WIDTH_MULT_SIGMA0_TICKS = 4;
-    /// @notice Linear ramp slope (bps of multiplier per tick of σ above the dead-band). Calibrated so
-    ///         the multiplier reaches its default ceiling (25_000bps) at σ≈137 ticks — the same
-    ///         realized-vol regime the MEME fee curve reaches ITS ceiling at (internal consistency:
-    ///         the pair the fee curve already calls "very volatile" is also the pair this curve calls
-    ///         "needs the widest band").
-    uint256 internal constant VOL_WIDTH_MULT_SLOPE_BPS_PER_TICK = 150;
+    /// @notice Linear ramp slope (bps of multiplier per tick of σ above the dead-band). Steepened
+    ///         150→300 (v3-hardening §5.1) so a genuinely volatile MEME pair reaches a very wide,
+    ///         hold-in-range base at a realistic σ: raw = 5000 + 300·(σ−4) hits ~4.5x by σ≈137 (the
+    ///         regime the MEME fee curve calls "at its ceiling") and the 25x default cap by σ≈820. The
+    ///         wider the pair's realized vol, the wider (→ full-range) and more hold-forever its base.
+    uint256 internal constant VOL_WIDTH_MULT_SLOPE_BPS_PER_TICK = 300;
 
     // ─────────────────────────────────────────────────────────────────────────────────────
     // cap(t) logistic (S-curve, ~4-year horizon) — PARAMS.md §E.

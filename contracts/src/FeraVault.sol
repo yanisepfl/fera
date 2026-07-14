@@ -163,7 +163,13 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///      governance venue allowlist.
     mapping(PoolId => mapping(uint256 => TierConfig)) internal tierConfig;
     mapping(PoolId => mapping(uint256 => uint64)) internal oorSince; // base out-of-range since (0 = in range)
-    mapping(PoolId => mapping(uint256 => uint64)) internal lastRebalanceTs; // R-15 min-interval clock
+    mapping(PoolId => mapping(uint256 => uint64)) internal lastRebalanceTs; // R-15 GENERAL min-interval clock
+    /// @dev V3-HARDENING (§5.1): DEDICATED clock for the IL-realising BASE-RECENTER family
+    ///      (`rebalanceBase`, RWA `rebalanceRwaOracle`, RWA `defendRwaOffHours`), SEPARATE from the
+    ///      general `lastRebalanceTs`. Gated by MEME_BASE_RECENTER_MIN_INTERVAL_SEC (6h MEME) so the
+    ///      base recenter fires RARELY (do-not-chase-the-pump) AND is never starved by cheap
+    ///      swap-free `rebalanceLimit` spam resetting a shared clock (closes OD-13).
+    mapping(PoolId => mapping(uint256 => uint64)) internal lastBaseRecenterTs;
     mapping(address => bool) public rebalanceVenueAllowed;
     /// @dev PARAMS.md#DEPOSIT_COOLDOWN_SEC: per-(pool,tranche,user) last deposit; blocks only that
     ///      user's own redemption for 1h (narrow — no INV-11 tension).
@@ -204,6 +210,8 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     uint8 internal constant CB_SELF_SWAP = 7; // standalone bounded self-swap against own pool
     uint8 internal constant CB_WITHDRAW_SINGLE = 8; // pro-rata remove + self-swap to one token
     uint8 internal constant CB_ROUTE_FEE_SWAP = 9; // v3.1: bounded self-swap of a native-side perf fee into the pool's quote asset (unified fee-routing, §9)
+    uint8 internal constant CB_RWA_ORACLE_RECENTER = 10; // v3-hardening (§5.1): RWA in-hours oracle-anchored base recenter (swap-free)
+    uint8 internal constant CB_RWA_DEFEND = 11; // v3-hardening (§5.1): RWA off-hours/event WIDEN + partial-withdraw defense (swap-free)
 
     modifier onlyKeeper() {
         if (msg.sender != keeper) revert OnlyKeeper();
@@ -784,8 +792,11 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         uint32 dwell = _oorDwell(id);
         uint64 since = oorSince[id][t];
         if (since == 0 || block.timestamp - since < dwell) revert OorNotPersistent();
-        // Gate 3 — ≥ min-interval since the last rebalance (R-15: no unbounded frequency).
-        _requireRebalanceInterval(id, t);
+        // Gate 3 — ≥ the DEDICATED base-recenter interval since the last BASE recenter (§5.1). This is
+        // a SEPARATE, much longer clock (6h MEME) than the general limit-fill interval — for a
+        // memecoin the base recenter fires rarely (do not chase the pump), and it is never starved by
+        // cheap swap-free `rebalanceLimit` spam resetting a shared clock (closes OD-13).
+        _requireIntervalSince(lastBaseRecenterTs[id][t], _baseRecenterMinInterval(id));
         // Gate 4 — TWAP-confirmed real move (TWAP also OOR AND spot within sanity of TWAP).
         _requireTwapConfirmedOor(id, t);
 
@@ -801,6 +812,11 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         if (vAfter * FeraConstants.BPS < vBefore * (FeraConstants.BPS - FeraConstants.MAX_REBALANCE_SLIPPAGE_BPS)) {
             revert RebalanceSlippage();
         }
+        // Stamp BOTH clocks: the dedicated base-recenter clock (its own long gate) AND the general
+        // clock (a fresh recenter also briefly quiets the everyday limit-fill — a base action is
+        // significant). The base recenter's GATE reads only the dedicated clock, so limit-fill can
+        // never delay it.
+        lastBaseRecenterTs[id][t] = uint64(block.timestamp);
         lastRebalanceTs[id][t] = uint64(block.timestamp);
         oorSince[id][t] = 0;
         FeraTypes.StrategyKind kind =
@@ -895,6 +911,89 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         }
         lastRebalanceTs[id][t] = uint64(block.timestamp);
         emit StrategyAction(PoolId.unwrap(id), uint8(FeraTypes.StrategyKind.VenueSwap), 0, 0, amountOut, bytes32(0));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // v3-HARDENING (§5.1) — RWA REGIME-APPROPRIATE DEFENSES (RESTORED on base+limit+idle).
+    // RWA prices MEAN-REVERT to the underlying real stock (unlike a memecoin), so the correct
+    // posture is the OPPOSITE of MEME: in-hours we recenter TOWARD the oracle when the pool drifts;
+    // off-hours / during an event window we batten down (widen + partial-withdraw). Both are
+    // permissionless (every bound re-verified on-chain, like §6), RWA-only, swap-free (band<->reserve
+    // ⇒ zero IL by construction), and gated by the dedicated slow base-recenter clock (§5.1).
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    /// @notice RWA IN-HOURS oracle-anchored base recenter. When the pool price has drifted past
+    ///         `RWA_ORACLE_RECENTER_HYSTERESIS_BPS` from the Chainlink oracle DURING market hours (and
+    ///         the drift is TWAP-confirmed, not a spot spike), re-anchor the base band TOWARD the
+    ///         oracle price — RWA mean-reverts to the real stock, so providing liquidity at the true
+    ///         price is correct (the OPPOSITE of MEME, where chasing the price loses money). Swap-free
+    ///         (close base -> reserve -> re-mint around the oracle tick), so it realises ZERO IL and
+    ///         value is conserved (Gate-5-style guard). PERMISSIONLESS; every bound is on-chain.
+    function rebalanceRwaOracle(PoolId id, uint8 t) external nonReentrant knownTranche(id, t) {
+        _requireBaseLimit(id, t);
+        PoolInfo storage p = pools[id];
+        if (p.regime != FeraTypes.Regime.RWA) revert NotRwaPool();
+        // In-hours only, and NOT during a flagged event window — off-hours / events use the defensive
+        // widen path (`defendRwaOffHours`) instead of chasing the oracle into a thin/gapping session.
+        if (!_isMarketOpen(id) || p.eventWindow) revert MarketClosed();
+        // The oracle is the anchor — it MUST be readable (fresh, positive). No blind recenter.
+        (uint256 oracle, bool ok) = _tryReadOracle(id);
+        if (!ok) revert OracleUnavailable();
+        // Dedicated slow base-recenter clock (RWA cadence, 4h) — no churn.
+        _requireIntervalSince(lastBaseRecenterTs[id][t], _baseRecenterMinInterval(id));
+        // Hysteresis: only act on a MEANINGFUL pool-vs-oracle drift (else it is pure churn).
+        (uint160 sqrtSpot,,,) = poolManager.getSlot0(id);
+        uint256 spot = _priceFromSqrt(sqrtSpot);
+        if (_absDeviationBps(spot, oracle) < FeraConstants.RWA_ORACLE_RECENTER_HYSTERESIS_BPS) {
+            revert OracleDeviationTooSmall();
+        }
+        // TWAP sanity: the drift must be GENUINE (sustained), not a spot spike the 30-min TWAP
+        // disagrees with — otherwise an attacker could momentarily shove spot to force a recenter.
+        if (_twapDeviationBps(id, FeraConstants.REBALANCE_TWAP_WINDOW_SEC) > FeraConstants.REBALANCE_TWAP_SANITY_BPS) {
+            revert TwapOutOfBand();
+        }
+
+        _checkpoint(id, t);
+        (uint256 vBefore,,) = _trancheValue(id, t);
+        int24 oracleTick = _oracleTick(oracle);
+        poolManager.unlock(abi.encode(CB_RWA_ORACLE_RECENTER, id, t, abi.encode(oracleTick)));
+        (uint256 vAfter,, int24 tick) = _trancheValue(id, t);
+        // Swap-free ⇒ value conserved to dust; a Gate-5-style bound catches any pathology.
+        if (vAfter * FeraConstants.BPS < vBefore * (FeraConstants.BPS - FeraConstants.MAX_REBALANCE_SLIPPAGE_BPS)) {
+            revert RebalanceSlippage();
+        }
+        lastBaseRecenterTs[id][t] = uint64(block.timestamp);
+        lastRebalanceTs[id][t] = uint64(block.timestamp);
+        emit StrategyAction(PoolId.unwrap(id), uint8(FeraTypes.StrategyKind.Recenter), tick, oracleTick, oracle, bytes32("rwa-oracle"));
+    }
+
+    /// @notice RWA OFF-HOURS / EVENT-WINDOW defensive posture. When the market is CLOSED (per the
+    ///         on-chain hours/holiday/schedule gate) OR a scheduled-event window (earnings) is flagged,
+    ///         WIDEN the base band AND PARTIAL-WITHDRAW a fraction (`RWA_OFFHOURS_WITHDRAW_FRAC_BPS`)
+    ///         into idle reserve — so weekend drift + a Monday open gap cannot realise IL into a tight,
+    ///         stale-priced band, and a fraction sits instantly-withdrawable in reserve. Swap-free
+    ///         (band<->reserve only), value-conserving. RE-WIRES the previously-vestigial `eventWindow`
+    ///         (OD-4). PERMISSIONLESS; RWA-only; gated by the dedicated slow base-recenter clock.
+    function defendRwaOffHours(PoolId id, uint8 t) external nonReentrant knownTranche(id, t) {
+        _requireBaseLimit(id, t);
+        PoolInfo storage p = pools[id];
+        if (p.regime != FeraTypes.Regime.RWA) revert NotRwaPool();
+        // Eligible ONLY when the market is closed OR an event window is flagged. If the market is open
+        // and there is no event, use `rebalanceRwaOracle` instead (there is nothing to batten against).
+        if (_isMarketOpen(id) && !p.eventWindow) revert MarketOpen();
+        _requireIntervalSince(lastBaseRecenterTs[id][t], _baseRecenterMinInterval(id));
+
+        _checkpoint(id, t);
+        (uint256 vBefore,,) = _trancheValue(id, t);
+        poolManager.unlock(abi.encode(CB_RWA_DEFEND, id, t, bytes("")));
+        (uint256 vAfter,, int24 tick) = _trancheValue(id, t);
+        // Swap-free ⇒ value conserved to dust (removing + re-adding liquidity only rounds against us).
+        if (vAfter * FeraConstants.BPS < vBefore * (FeraConstants.BPS - FeraConstants.MAX_REBALANCE_SLIPPAGE_BPS)) {
+            revert RebalanceSlippage();
+        }
+        lastBaseRecenterTs[id][t] = uint64(block.timestamp);
+        lastRebalanceTs[id][t] = uint64(block.timestamp);
+        emit StrategyAction(PoolId.unwrap(id), uint8(FeraTypes.StrategyKind.Widen), tick, tick, 0, bytes32("rwa-offhours"));
     }
 
     /// @inheritdoc IFeraVault
@@ -1042,9 +1141,23 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
             : FeraConstants.RWA_OOR_DWELL_SEC;
     }
 
+    /// @dev V3-HARDENING (§5.1): the DEDICATED base-recenter min-interval (vs the general one above).
+    ///      MEME is deliberately LONG (6h) so a base recenter fires rarely — for a memecoin we do NOT
+    ///      chase the pump; RWA reuses its (slow) general interval.
+    function _baseRecenterMinInterval(PoolId id) internal view returns (uint32) {
+        return pools[id].regime == FeraTypes.Regime.MEME
+            ? FeraConstants.MEME_BASE_RECENTER_MIN_INTERVAL_SEC
+            : FeraConstants.RWA_MIN_REBALANCE_INTERVAL_SEC;
+    }
+
+    /// @dev Generic min-interval guard against an arbitrary last-action timestamp (R-15). Used for
+    ///      BOTH the general rebalance clock and the dedicated base-recenter clock (§5.1).
+    function _requireIntervalSince(uint64 last, uint32 minInterval) internal view {
+        if (last != 0 && block.timestamp - last < minInterval) revert RebalanceTooSoon();
+    }
+
     function _requireRebalanceInterval(PoolId id, uint8 t) internal view {
-        uint64 last = lastRebalanceTs[id][t];
-        if (last != 0 && block.timestamp - last < _minRebalanceInterval(id)) revert RebalanceTooSoon();
+        _requireIntervalSince(lastRebalanceTs[id][t], _minRebalanceInterval(id));
     }
 
     /// @dev The BASE band index (isPrincipal, non-limit). Reverts if the tranche has no base band.
@@ -1063,11 +1176,26 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         return tick < b.tickLower || tick >= b.tickUpper;
     }
 
+    /// @dev TASK-1 defense-in-depth (v3-hardening §5.1): read the hook TWAP behind a try/catch so no
+    ///      hook-side revert can propagate an UNCAUGHT panic into the deposit or rebalance gates. The
+    ///      int56 overflow class is fixed at SOURCE (`FeraHook.consultTwapTick`/`_writeOracle` are now
+    ///      `unchecked`/wrapping), so this catch should never fire in practice — it is belt-and-braces
+    ///      for ANY future/edge revert. A revert degrades to `ready=false`: the SAME conservative
+    ///      fresh-pool path the gates already handle (spot fallback in `_poolTwapPrice`; skip the
+    ///      TWAP-confirm in `_requireTwapConfirmedOor`) — a fail-safe, never a DoS or an uncaught panic.
+    function _consultTwap(PoolId id, uint32 window) internal view returns (int24 twapTick, bool ready) {
+        try hook.consultTwapTick(id, window) returns (int24 tt, bool r) {
+            return (tt, r);
+        } catch {
+            return (0, false);
+        }
+    }
+
     /// @dev Confirm the OOR is a real move, not a spot spike: the TWAP tick must ALSO be outside the
     ///      base band, and spot must be within the sanity band of the TWAP. Fresh pools (no elapsed
     ///      TWAP history) are allowed (spot IS the only price); dormant pools fail-closed (REC-9).
     function _requireTwapConfirmedOor(PoolId id, uint8 t) internal view {
-        (int24 twapTick, bool ready) = hook.consultTwapTick(id, FeraConstants.REBALANCE_TWAP_WINDOW_SEC);
+        (int24 twapTick, bool ready) = _consultTwap(id, FeraConstants.REBALANCE_TWAP_WINDOW_SEC);
         if (!ready) return;
         (uint32 ageSec, bool has) = hook.twapObservationAge(id);
         if (has && ageSec > FeraConstants.TWAP_MAX_STALENESS_SEC) revert TwapStale();
@@ -1130,14 +1258,31 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // v3 §2 — VOL-ADAPTIVE POSITION SIZING. Read the MEME EWMA the dynamic fee already reads (via
     // the hook's view); NEVER re-estimate it here.
+    //
+    // LVR RATIONALE (v3-hardening §5.1 — Milionis et al. "AMM and Loss-Versus-Rebalancing"; Bunni/
+    // am-AMM; concentrated-liquidity LP studies). Recentering a TRENDING asset REALIZES the loss —
+    // recentering literally *is* the "R" in loss-versus-rebalancing. A memecoin trends (it does not
+    // mean-revert), so ACTIVELY recentering its base is a provably losing move, not a cadence to tune.
+    // The MEME design is therefore WIDE-BASE-HOLD: this multiplier makes a high-realized-vol MEME base
+    // approach FULL RANGE (see FeraConstants VOL_WIDTH_MULT_* — 25x default / 50x legal) so the base
+    // stays IN RANGE through big moves and essentially NEVER needs recentering; the volatility-scaled
+    // dynamic fee is the LVR compensation; near-spot capital efficiency is supplied by the NARROW
+    // LIMIT, rebalanced by FLOW (swap-free `rebalanceLimit`), never by forced recenters. The MEME base
+    // recenter (`rebalanceBase`) is retained ONLY as an opportunistic, IL-capped (§4), rate-limited
+    // (6h dedicated interval, §5.1) safety valve for the rare case an extreme sustained move still
+    // exits the wide base — it is NOT an every-N-minutes active loop. CRITICALLY, operability is
+    // DECOUPLED from rebalancing: `deposit`/`withdraw`/`withdrawSingle` never depend on the base being
+    // in range or on any rebalance succeeding — an out-of-range withdrawal simply returns the user's
+    // fair pro-rata of current (possibly one-sided) holdings IN-KIND (INV-11). RWA is the OPPOSITE
+    // (mean-reverts to the oracle → recenter TOWARD the oracle, §5.1) and stays at 1x.
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
     /// @dev width = tierHalf × f(σ), clamped to the governance-set [min,max] multiplier band
-    ///      (FeeLogic.widthMultiplierBps — same formula the MEME fee curve's σ-ramp mirrors).
-    ///      RWA has no EWMA-vol signal wired in the hook (its dynamic fee uses oracle deviation, not
-    ///      an EWMA) — multiplier fixed at 1x for RWA (a real stock's price is comparatively stable;
-    ///      re-deriving a proxy vol estimator for RWA is explicitly OUT of this stage's scope —
-    ///      flagged in contracts/OPEN_DECISIONS.md).
+    ///      (FeeLogic.widthMultiplierBps — same formula the MEME fee curve's σ-ramp mirrors). For a
+    ///      volatile MEME pair f(σ) is large ⇒ a near-full-range hold-in-place base (LVR: do not chase
+    ///      the trend). RWA has no EWMA-vol signal wired in the hook (its dynamic fee uses oracle
+    ///      deviation, not an EWMA) — multiplier fixed at 1x for RWA (it is recentered toward the
+    ///      oracle instead, §5.1).
     function _effectiveHalfWidth(PoolId id, int24 tierHalf) internal view returns (int24) {
         if (pools[id].regime != FeraTypes.Regime.MEME) return tierHalf;
         (uint256 volEwmaX,,,) = hook.memeStateOf(id);
@@ -1240,7 +1385,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///      spot==TWAP ⇒ deviation 0 ⇒ the gate is open, never a false revert on a brand-new pool.
     function _poolTwapPrice(PoolId id, uint32 window) internal view returns (uint256) {
         (uint160 sqrtSpot,,,) = poolManager.getSlot0(id);
-        (int24 twapTick, bool ready) = hook.consultTwapTick(id, window);
+        (int24 twapTick, bool ready) = _consultTwap(id, window);
         uint160 sqrtPriceX96;
         if (ready) {
             // REC-9 FAIL-CLOSED: if the newest observation is older than the max-staleness bound the
@@ -1293,7 +1438,9 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         if (action == CB_REBALANCE_BASE) return _cbRebalanceBase(id, t, payload);
         if (action == CB_SELF_SWAP) return _cbSelfSwap(id, t, payload);
         if (action == CB_WITHDRAW_SINGLE) return _cbWithdrawSingle(id, t, payload);
-        return _cbRouteFeeSwap(id, payload); // CB_ROUTE_FEE_SWAP
+        if (action == CB_ROUTE_FEE_SWAP) return _cbRouteFeeSwap(id, payload);
+        if (action == CB_RWA_ORACLE_RECENTER) return _cbRwaOracleRecenter(id, t, payload);
+        return _cbRwaDefend(id, t); // CB_RWA_DEFEND
     }
 
     /// @dev D-18: tranche-scoped position salt — identical (owner,ticks) in different tranches can
@@ -1613,6 +1760,95 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         }
     }
 
+    /// @dev v3-hardening (§5.1): RWA in-hours oracle-anchored recenter. Close the base into reserve,
+    ///      re-anchor its ticks around the ORACLE tick (RWA mean-reversion target), and redeploy the
+    ///      reserve — SWAP-FREE, so no IL is realised (only re-ticking + re-minting; if spot sits
+    ///      outside the oracle-centred band the position is single-sided and the untouched token stays
+    ///      in reserve, exactly the "provide liquidity at the true price, let arbitrage mean-revert the
+    ///      pool" posture). RWA width is the tier magnitude (multiplier fixed 1x — no EWMA vol signal).
+    function _cbRwaOracleRecenter(PoolId id, uint8 t, bytes memory payload) internal returns (bytes memory) {
+        int24 oracleTick = abi.decode(payload, (int24));
+        TrancheState storage tr = tranches[id][t];
+        PoolInfo storage p = pools[id];
+        Band storage b = tr.bands[_baseIndex(tr)];
+
+        if (b.liquidity != 0) {
+            (uint256 g0, uint256 g1) = _modifyBand(id, t, b.tickLower, b.tickUpper, -int256(uint256(b.liquidity)));
+            b.liquidity = 0;
+            tr.reserve0 += g0;
+            tr.reserve1 += g1;
+        }
+
+        int24 effHalf = _effectiveHalfWidth(id, tierConfig[id][t].baseHalfTicks); // RWA => tier magnitude (1x)
+        (int24 lo, int24 hi) = _bandAround(oracleTick, effHalf, p.key.tickSpacing);
+        b.tickLower = lo;
+        b.tickUpper = hi;
+
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(id);
+        uint128 dL = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96, TickMath.getSqrtPriceAtTick(lo), TickMath.getSqrtPriceAtTick(hi), tr.reserve0, tr.reserve1
+        );
+        if (dL != 0) {
+            uint256 bal0 = p.key.currency0.balanceOfSelf();
+            uint256 bal1 = p.key.currency1.balanceOfSelf();
+            _modifyBand(id, t, lo, hi, int256(uint256(dL)));
+            _absorbDepositOverage(tr, bal0 - p.key.currency0.balanceOfSelf(), bal1 - p.key.currency1.balanceOfSelf());
+            b.liquidity = dL;
+        }
+        return "";
+    }
+
+    /// @dev v3-hardening (§5.1): RWA off-hours / event-window defense. (1) close the base into
+    ///      reserve; (2) KEEP a `RWA_OFFHOURS_WITHDRAW_FRAC_BPS` fraction of the just-closed amounts in
+    ///      reserve (the partial-withdraw — an idle buffer that survives a Monday gap unfilled); (3)
+    ///      redeploy the REMAINDER over a WIDER band (tier half × `RWA_OFFHOURS_WIDEN_MULT_BPS`) around
+    ///      spot. All SWAP-FREE (band<->reserve) ⇒ value-conserving; the wider band + the reserved
+    ///      fraction both cushion weekend drift.
+    function _cbRwaDefend(PoolId id, uint8 t) internal returns (bytes memory) {
+        TrancheState storage tr = tranches[id][t];
+        PoolInfo storage p = pools[id];
+        Band storage b = tr.bands[_baseIndex(tr)];
+
+        // (1) Close the entire base into reserve; remember the just-closed amounts.
+        uint256 got0;
+        uint256 got1;
+        if (b.liquidity != 0) {
+            (got0, got1) = _modifyBand(id, t, b.tickLower, b.tickUpper, -int256(uint256(b.liquidity)));
+            b.liquidity = 0;
+            tr.reserve0 += got0;
+            tr.reserve1 += got1;
+        }
+
+        // (2) PARTIAL WITHDRAW: keep only (BPS − withdrawFrac) of the closed base for redeploy; the
+        //     withdrawFrac remainder stays in `reserve` as an idle, instantly-withdrawable buffer.
+        uint256 keepBps = FeraConstants.BPS - FeraConstants.RWA_OFFHOURS_WITHDRAW_FRAC_BPS;
+        uint256 deploy0 = FullMath.mulDiv(got0, keepBps, FeraConstants.BPS);
+        uint256 deploy1 = FullMath.mulDiv(got1, keepBps, FeraConstants.BPS);
+        if (deploy0 > tr.reserve0) deploy0 = tr.reserve0;
+        if (deploy1 > tr.reserve1) deploy1 = tr.reserve1;
+
+        // (3) WIDEN: redeploy the remainder over a band twice as wide (RWA_OFFHOURS_WIDEN_MULT_BPS).
+        (uint160 sqrtPriceX96, int24 tick,,) = poolManager.getSlot0(id);
+        int24 baseHalf = tierConfig[id][t].baseHalfTicks;
+        int24 widenHalf =
+            int24(int256(FullMath.mulDiv(uint256(uint24(baseHalf)), FeraConstants.RWA_OFFHOURS_WIDEN_MULT_BPS, FeraConstants.BPS)));
+        (int24 lo, int24 hi) = _bandAround(tick, widenHalf, p.key.tickSpacing);
+        b.tickLower = lo;
+        b.tickUpper = hi;
+
+        uint128 dL = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96, TickMath.getSqrtPriceAtTick(lo), TickMath.getSqrtPriceAtTick(hi), deploy0, deploy1
+        );
+        if (dL != 0) {
+            uint256 bal0 = p.key.currency0.balanceOfSelf();
+            uint256 bal1 = p.key.currency1.balanceOfSelf();
+            _modifyBand(id, t, lo, hi, int256(uint256(dL)));
+            _absorbDepositOverage(tr, bal0 - p.key.currency0.balanceOfSelf(), bal1 - p.key.currency1.balanceOfSelf());
+            b.liquidity = dL;
+        }
+        return "";
+    }
+
     function _cbSelfSwap(PoolId id, uint8 t, bytes memory payload) internal returns (bytes memory) {
         (bool zeroForOne, uint256 amountIn) = abi.decode(payload, (bool, uint256));
         (uint256 spent, uint256 out) = _doSelfSwap(id, zeroForOne, amountIn, true);
@@ -1725,6 +1961,24 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     function _valueInToken1(uint160 sqrtPriceX96, uint256 amount0, uint256 amount1) internal pure returns (uint256) {
         uint256 priceX96 = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1 << 96);
         return FullMath.mulDiv(amount0, priceX96, 1 << 96) + amount1;
+    }
+
+    /// @dev v3-hardening (§5.1): token1-per-token0 price (1e18 basis) from a sqrtPriceX96 — the same
+    ///      basis `_tryReadOracle` returns the oracle price in, so the two are directly comparable.
+    function _priceFromSqrt(uint160 sqrtPriceX96) internal pure returns (uint256) {
+        uint256 priceX96 = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1 << 96);
+        return FullMath.mulDiv(priceX96, 1e18, 1 << 96);
+    }
+
+    /// @dev v3-hardening (§5.1): the tick nearest to an oracle price (1e18 basis, token1/token0). Used
+    ///      to anchor the RWA base band on the real-stock price. sqrtPriceX96 = √(P/1e18)·2^96 =
+    ///      √(P·2^192/1e18); clamped into TickMath's legal sqrt-price range so a pathological feed can
+    ///      never make `getTickAtSqrtPrice` revert (a team-approved feed never gets near the bound).
+    function _oracleTick(uint256 oraclePrice1e18) internal pure returns (int24) {
+        uint256 sq = Math.sqrt(FullMath.mulDiv(oraclePrice1e18, uint256(1) << 192, 1e18));
+        if (sq < TickMath.MIN_SQRT_PRICE) sq = TickMath.MIN_SQRT_PRICE;
+        if (sq > uint256(TickMath.MAX_SQRT_PRICE) - 1) sq = uint256(TickMath.MAX_SQRT_PRICE) - 1;
+        return TickMath.getTickAtSqrtPrice(uint160(sq));
     }
 
     /// @dev Token amounts a position of `liquidity` on [lower,upper] holds at `sqrtPriceX96`.

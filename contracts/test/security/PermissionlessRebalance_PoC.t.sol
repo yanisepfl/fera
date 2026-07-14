@@ -130,13 +130,14 @@ contract PermissionlessRebalancePoC is Deployers {
     }
 
     // ══════════════════════════════════════════════════════════════════════════════════════════
-    // FINDING 1 — SHARED INTERVAL CLOCK: a cheap swap-free `rebalanceLimit` resets the SAME
-    // `lastRebalanceTs` that gates the high-value `rebalanceBase`. An attacker front-running each
-    // interval boundary with `rebalanceLimit` starves base recentering: the honest `rebalanceBase`
-    // reverts `RebalanceTooSoon` even though EVERY other gate (OOR / dwell / TWAP-confirm) is
-    // satisfied — proving the interval clock, weaponised cross-function, is the sole blocker.
+    // FINDING 1 — CLOSED (v3-hardening §5.1, closes OD-13): the base recenter now runs on a DEDICATED
+    // clock (`lastBaseRecenterTs`), SEPARATE from the general `lastRebalanceTs` the swap-free
+    // `rebalanceLimit` stamps. So cheap limit-fill spam can NO LONGER starve the high-value base
+    // recenter: with OOR + dwell + TWAP satisfied, the honest recenter goes through EVEN IF an attacker
+    // just front-ran a limit-fill. The base recenter is still strictly bounded — by its OWN long
+    // interval (MEME_BASE_RECENTER_MIN_INTERVAL_SEC, 6h) — so it fires rarely, never runaway.
     // ══════════════════════════════════════════════════════════════════════════════════════════
-    function test_F1_rebalanceLimitSpam_starvesRebalanceBase() public {
+    function test_F1_rebalanceLimitSpam_doesNotStarveRebalanceBase() public {
         address attacker = makeAddr("griefer");
 
         _seedMeme();
@@ -146,33 +147,33 @@ contract PermissionlessRebalancePoC is Deployers {
         uint64 armed = vault.outOfRangeSince(memeId, 1);
         assertGt(armed, 0, "OOR clock armed");
 
-        // Let the move mature: dwell + TWAP window elapse, then refresh so the 30-min TWAP confirms.
-        vm.warp(uint256(armed) + FeraConstants.REBALANCE_TWAP_WINDOW_SEC + 100);
+        // Let the move mature past the (now 1h) dwell — which also clears the TWAP window — then
+        // refresh so the 30-min TWAP confirms.
+        vm.warp(uint256(armed) + FeraConstants.MEME_OOR_DWELL_SEC + 100);
         _refreshTwap();
 
-        // At this instant an honest `rebalanceBase(1)` WOULD pass (OOR + dwell + TWAP all satisfied).
-        // The attacker front-runs with a swap-free `rebalanceLimit(1)` — cheap, needs only the
-        // interval + TWAP-sanity — which stamps `lastRebalanceTs = now`.
+        // The attacker front-runs with a swap-free `rebalanceLimit(1)` — which stamps the GENERAL
+        // `lastRebalanceTs`, NOT the dedicated base-recenter clock.
         vm.prank(attacker);
         vault.rebalanceLimit(memeId, 1);
 
-        // `rebalanceLimit` did NOT clear the OOR clock (only poke/rebalanceBase do) — so dwell + TWAP
-        // still hold. The ONLY thing now blocking the recenter is the shared interval clock the
-        // attacker just reset. Proof: the revert is specifically RebalanceTooSoon.
-        vm.expectRevert(IFeraVault.RebalanceTooSoon.selector);
+        // FIXED: the honest base recenter is NOT blocked by the limit's clock — its Gate-3 reads only
+        // `lastBaseRecenterTs` (still 0 here). It succeeds despite the limit spam.
         vault.rebalanceBase(memeId, 1, false);
-        assertEq(vault.outOfRangeSince(memeId, 1), armed, "OOR clock untouched by limit spam (dwell still holds)");
+        assertEq(vault.outOfRangeSince(memeId, 1), 0, "OOR cleared by a SUCCESSFUL recenter (not starved)");
+        assertFalse(vault.pokeOutOfRange(memeId, 1), "base re-anchored - bulk capital recentered");
 
-        // Repeatable every interval: the base can be starved indefinitely at ~1 cheap tx / interval.
-        for (uint256 i; i < 3; ++i) {
-            vm.warp(block.timestamp + FeraConstants.MEME_MIN_REBALANCE_INTERVAL_SEC + 1);
-            _refreshTwap();
-            vm.prank(attacker);
-            vault.rebalanceLimit(memeId, 1); // resets the shared clock again
-            vm.expectRevert(IFeraVault.RebalanceTooSoon.selector);
-            vault.rebalanceBase(memeId, 1, false); // base recenter perpetually starved
-        }
-        assertTrue(vault.pokeOutOfRange(memeId, 1), "base is STILL OOR - bulk capital never recentered");
+        // And it is still RARE, never runaway: an immediate second recenter reverts on the dedicated
+        // 6h clock even after re-arming a fresh OOR + satisfying the dwell again. NB: the recenter
+        // re-derived the base at the now-elevated EWMA, so the band is VERY wide (LVR hold-in-range) —
+        // push far past it (tick 150k ≫ the ≤~68k widened Active band) to force a fresh OOR.
+        _pushToTick(150_000);
+        assertTrue(vault.pokeOutOfRange(memeId, 1), "re-OOR after a further push");
+        // Satisfy the dwell again; do NOT refresh the TWAP (a refresh swap would nudge spot back into
+        // the wide band). Gate 3 (interval) precedes Gate 4 (TWAP), so RebalanceTooSoon fires first.
+        vm.warp(block.timestamp + FeraConstants.MEME_OOR_DWELL_SEC + 100); // dwell satisfied again
+        vm.expectRevert(IFeraVault.RebalanceTooSoon.selector);
+        vault.rebalanceBase(memeId, 1, false); // blocked by the 6h base-recenter interval (Gate 3)
     }
 
     // ══════════════════════════════════════════════════════════════════════════════════════════
