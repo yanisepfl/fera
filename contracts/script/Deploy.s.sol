@@ -28,7 +28,7 @@ pragma solidity ^0.8.26;
 
 import {Script, console2} from "forge-std/Script.sol";
 
-import {Treasury} from "../src/Treasury.sol";
+import {GenesisVesting} from "../src/GenesisVesting.sol";
 import {FeraToken} from "../src/FeraToken.sol";
 import {FeraShare} from "../src/shares/FeraShare.sol";
 import {AnchorStaking} from "../src/AnchorStaking.sol";
@@ -54,9 +54,13 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 /// @notice Single-transaction-batch deploy of the FERA money-path contracts, resolving the three
 ///         constructor-arg cycles by nonce precompute (A/B/C above) + CREATE2 flag-mining for the
 ///         hook. Ownership/roles are set at construction to the Safe multisigs (no post-deploy
-///         transferOwnership). The two remaining config steps (`addRewardToken`, `createPool`) are
-///         onlyRewardTokenAdmin / onlyKeeper and therefore executed by the timelock / keeper Safes,
-///         NOT by this deployer EOA — the script prints the exact calldata to enqueue.
+///         transferOwnership). The remaining config step (`addRewardToken`) is onlyRewardTokenAdmin
+///         and therefore executed by the timelock Safe, NOT by this deployer EOA — the script
+///         prints the exact calldata to enqueue. Stage-4 (contracts/VAULT_STRATEGY_V3.md §11):
+///         `FeraVault.createBaseLimitPool` is now PERMISSIONLESS (no `onlyKeeper` gate) — anyone
+///         may call it directly once the timelock Safe has curated `setAllowedQuoteAsset`/
+///         `approveRwaFeed` for the relevant assets/feeds; it is no longer part of this script's
+///         "must be executed by a role Safe" config batch.
 contract Deploy is Script {
     // ── Hook flag mask (Uniswap v4 Hooks.sol low-14-bits) ──────────────────────────────────────
     uint160 internal constant HOOK_FLAG_MASK = 0x3FFF;
@@ -73,11 +77,21 @@ contract Deploy is Script {
         //    each before a mainnet run; a wrong byte on poolManager bricks hook+vault. ───────────
         address poolManager; // TODO(chain-confirm) v4 PoolManager (CHAIN.md #11)
         // ── Governance / ops Safes (INFRA.md §Safe policy) ───────────────────────────────────────
-        address timelock; // 48h Treasury timelock Safe — owns EmissionsController/Vault/Treasury + is rewardTokenAdmin
+        // "The team" — general team/admin address, NOT a DAO. Owns EmissionsController/Vault, is
+        // rewardTokenAdmin (AnchorStaking), and the venue-allowlist/tier-config/RWA-feed-registry
+        // approver in later stages. Stage-3: no longer wired as a Treasury.sol owner — Treasury.sol
+        // is kept in the codebase (unused) for future optionality; see FERA_TREASURY_EOA below.
+        address timelock; // FERA_TIMELOCK_SAFE — "the team" admin address (see above)
         address emissionsKeeper; // emissions keeper multisig (SEC-3 #3 / R-19)
         address rootPoster; // Merkle root-poster multisig (SEC-3 #3 / R-13 / R-19)
         address vaultKeeper; // Vault/RWA-strategy keeper (redundant across 2 providers, R-3)
         address opsSink; // RevenueDistributor 25% ops recipient
+        // Stage-3 (contracts/VAULT_STRATEGY_V3.md §10 / OPEN_DECISIONS.md#OD-9): the treasury is a
+        // PLAIN EOA (freely spendable, no timelock friction) — Treasury.sol is deliberately NOT
+        // wired into this deploy anymore. This is the RevenueDistributor 25% recipient AND the
+        // sole beneficiary of GenesisVesting (the genesis 10% is locked there, not sent here
+        // directly unlocked).
+        address treasuryEoa; // FERA_TREASURY_EOA
         // ── Revenue tokens to allowlist post-deploy (AnchorStaking.addRewardToken) ───────────────
         //    FERA is added implicitly below; list here the revenue ERC-20s (WETH, USDG, …).
         address weth; // TODO(chain-confirm) WETH on 4663 (CHAIN.md §8 B15)
@@ -85,7 +99,7 @@ contract Deploy is Script {
     }
 
     // Deployed addresses (populated by run()).
-    Treasury public treasury;
+    GenesisVesting public genesisVesting;
     FeraToken public feraToken;
     FeraShare public shareImpl;
     AnchorStaking public anchor;
@@ -103,6 +117,7 @@ contract Deploy is Script {
         c.rootPoster = vm.envAddress("FERA_ROOT_POSTER_SAFE");
         c.vaultKeeper = vm.envAddress("FERA_VAULT_KEEPER");
         c.opsSink = vm.envAddress("FERA_OPS_SINK");
+        c.treasuryEoa = vm.envAddress("FERA_TREASURY_EOA");
         c.weth = vm.envAddress("FERA_WETH");
         c.usdg = vm.envAddress("FERA_USDG");
     }
@@ -118,7 +133,11 @@ contract Deploy is Script {
 
         // ── 1) Precompute the full CREATE address map from D's nonce sequence ────────────────────
         //    Deploy order below MUST match these offsets exactly (asserted after each deploy).
-        address aTreasury = vm.computeCreateAddress(D, n + 0);
+        //    GenesisVesting has NO cyclic dependency — it only needs the (precomputed) FeraToken
+        //    address and the beneficiary EOA, both already known here, so it slots into the exact
+        //    n+0 offset Treasury.sol used to occupy without disturbing the n+1..n+9 offsets below
+        //    or the Cycle B (EsFera/Distributor/EmissionsController) resolution.
+        address aGenesisVesting = vm.computeCreateAddress(D, n + 0);
         address aFera = vm.computeCreateAddress(D, n + 1);
         address aShareImpl = vm.computeCreateAddress(D, n + 2);
         address aAnchor = vm.computeCreateAddress(D, n + 3);
@@ -146,19 +165,24 @@ contract Deploy is Script {
         // ── 3) Broadcast the deploy in the precomputed order ─────────────────────────────────────
         vm.startBroadcast(pk);
 
-        treasury = new Treasury(c.timelock); // n+0 — Ownable(timelock)
-        _eq(address(treasury), aTreasury, "treasury");
+        // Stage-3: GenesisVesting is deployed FIRST, referencing the PRECOMPUTED FeraToken address
+        // (its constructor only STORES the token reference — no external call at construction time,
+        // so it is safe to point at a not-yet-deployed address, exactly like the AnchorStaking ↔
+        // RevenueDistributor precompute below). The 1yr-cliff/3yr-linear schedule starts NOW.
+        genesisVesting = new GenesisVesting(IERC20(aFera), c.treasuryEoa); // n+0
+        _eq(address(genesisVesting), aGenesisVesting, "genesisVesting");
 
-        feraToken = new FeraToken(address(treasury)); // n+1 — 10% genesis mint to Treasury; D == _deployer
+        feraToken = new FeraToken(address(genesisVesting)); // n+1 — 10% genesis mint to GenesisVesting; D == _deployer
         _eq(address(feraToken), aFera, "feraToken");
 
         shareImpl = new FeraShare(); // n+2 — inert clone template (vault==0)
         _eq(address(shareImpl), aShareImpl, "shareImpl");
 
-        // Cycle A: AnchorStaking(fera, revDist*, rewardTokenAdmin=timelock) ↔ RevenueDistributor(anchor*, treasury, ops)
+        // Cycle A: AnchorStaking(fera, revDist*, rewardTokenAdmin=timelock) ↔ RevenueDistributor(anchor*, treasuryEoa, ops)
         anchor = new AnchorStaking(IERC20(address(feraToken)), IRevenueDistributor(aRevDist), c.timelock); // n+3
         _eq(address(anchor), aAnchor, "anchor");
-        revDist = new RevenueDistributor(aAnchor, address(treasury), c.opsSink); // n+4
+        // Stage-3: the 25% treasury leg is now the PLAIN EOA (FERA_TREASURY_EOA), never Treasury.sol.
+        revDist = new RevenueDistributor(aAnchor, c.treasuryEoa, c.opsSink); // n+4
         _eq(address(revDist), aRevDist, "revDist");
 
         // Cycle B (DEPLOY-1): EsFera(minter=Distributor*) → Distributor(esFera*, controller=Emissions*) → EmissionsController(esFera*)
@@ -174,11 +198,15 @@ contract Deploy is Script {
         // One-shot FERA↔EmissionsController wiring (deployer-only setter; breaks that cycle already).
         feraToken.setEmissionsController(address(emissions)); // n+8 (CALL)
 
-        // Cycle C: FeraVault(pm, hook=mined, revDist, shareImpl, keeper, timelock)
+        // Cycle C: FeraVault(pm, hook=mined, revDist, anchorStaking, shareImpl, keeper, timelock)
+        // v3.1 unified fee-routing (contracts/VAULT_STRATEGY_V3.md §9): wire the REAL AnchorStaking
+        // (already deployed at n+3) so the Vault can introspect the reward-token allowlist +
+        // totalStaked() at fee-collection time.
         vault = new FeraVault(
             IPoolManager(c.poolManager),
             IFeraHook(aHook),
             IRevenueDistributor(address(revDist)),
+            IAnchorStaking(address(anchor)),
             address(shareImpl),
             c.vaultKeeper,
             c.timelock
@@ -216,9 +244,12 @@ contract Deploy is Script {
     }
 
     /// @dev Prints the role-gated config batches the SAFES must execute after this deploy.
-    ///      addRewardToken + setForfeitNotifier are onlyRewardTokenAdmin (timelock); createPool is
-    ///      onlyKeeper (vaultKeeper).
+    ///      addRewardToken + setForfeitNotifier are onlyRewardTokenAdmin (timelock); `setAllowedQuoteAsset`
+    ///      / `approveRwaFeed` / `setEmissionsEligible` are onlyOwner (timelock). `createBaseLimitPool`
+    ///      itself is PERMISSIONLESS (contracts/VAULT_STRATEGY_V3.md §11) — no role Safe needs to call it.
     function _printPostDeploy(Config memory c) internal view {
+        console2.log("== GenesisVesting: 100,000,000 FERA locked (1yr cliff / 3yr linear / 4yr total) ==");
+        console2.log("  genesisVesting ->", address(genesisVesting), " beneficiary ->", c.treasuryEoa);
         console2.log("== TIMELOCK SAFE must enqueue AnchorStaking.addRewardToken for each revenue token ==");
         console2.log("  addRewardToken(FERA) ->", address(feraToken));
         console2.log("  addRewardToken(WETH) ->", c.weth);
@@ -229,7 +260,13 @@ contract Deploy is Script {
         // lost) until FERA is allowlisted and stakers exist.
         console2.log("== TIMELOCK SAFE must call AnchorStaking.setForfeitNotifier(esFera) (REC-8, one-time) ==");
         console2.log("  setForfeitNotifier ->", address(esFera));
-        console2.log("== VAULT KEEPER must call vault.createPool(...) per pool (regime binding happens there) ==");
+        console2.log("== v3.3: pool creation is now PERMISSIONLESS (contracts/VAULT_STRATEGY_V3.md sec11) ==");
+        console2.log("  anyone may call vault.createBaseLimitPool(...) directly; vaultKeeper is NOT required");
+        console2.log("== TIMELOCK SAFE (\"the team\") must curate BEFORE any pool can be created against a given pair ==");
+        console2.log("  vault.setAllowedQuoteAsset(WETH, true) ->", c.weth);
+        console2.log("  vault.setAllowedQuoteAsset(USDG, true) ->", c.usdg);
+        console2.log("  vault.approveRwaFeed(feed, description) -- once per verified Chainlink feed, RWA pools only");
+        console2.log("  vault.setEmissionsEligible(poolId, true) -- per pool, opt-in only, esFERA attribution ONLY");
         console2.log("  vault:", address(vault), " hook:", address(hook));
     }
 }

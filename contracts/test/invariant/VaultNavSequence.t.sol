@@ -11,6 +11,7 @@ import {RevenueDistributor} from "../../src/RevenueDistributor.sol";
 import {IFeraHook} from "../../src/interfaces/IFeraHook.sol";
 import {IFeraVault} from "../../src/interfaces/IFeraVault.sol";
 import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol";
+import {IAnchorStaking} from "../../src/interfaces/IAnchorStaking.sol";
 import {FeraTypes} from "../../src/libraries/FeraTypes.sol";
 import {FeraConstants} from "../../src/libraries/FeraConstants.sol";
 import {MockAggregatorV3} from "../utils/Mocks.sol";
@@ -23,15 +24,18 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @notice Multi-band + multi-tranche NAV conservation under interleaved deposit / withdraw / drip /
-///         partialWithdraw / compound / collectFees sequences (INV-4 / INV-15 / INV-16, per tranche).
+/// @notice Multi-tranche NAV conservation under interleaved deposit / withdraw / skimIdle /
+///         rebalanceLimit / collectFees sequences (INV-4 / INV-15 / INV-16, per tranche) — v3
+///         base+limit+idle surface (contracts/VAULT_STRATEGY_V3.md item 1: the legacy ladder +
+///         drip/partialWithdraw/compound sequence this suite originally drove is removed).
 ///
 ///         Design: SWAP-FREE. No swaps ⇒ spot price is pinned at the 1:1 init, so there is NO
 ///         impermanent loss and token0+token1 is a faithful NAV measure; and NO fees, so NAV can only
-///         move by rounding. Under those conditions a strategy rearrangement (drip splits a band,
-///         partialWithdraw parks Core principal into `reserve`) or any other actor's deposit/withdraw
-///         MUST leave a refHolder holder's redeemable value intact (never diluted, never inflated at
-///         others' expense). Fee/IL paths are separately covered by `ShareNavInvariant` (which swaps).
+///         move by rounding. Under those conditions a strategy rearrangement (skimIdle parks base
+///         principal into `reserve`, rebalanceLimit redeploys it swap-free) or any other actor's
+///         deposit/withdraw MUST leave a refHolder holder's redeemable value intact (never diluted,
+///         never inflated at others' expense). Fee/IL paths are separately covered by
+///         `ShareNavInvariant` (which swaps) and `BaseLimitNavInvariant` (self-swap/rebalanceBase).
 ///
 ///         A bounded action array (not StdInvariant) keeps each run a short, deterministic guarded
 ///         sequence — CI-safe, and avoids the TWAP deposit-gate going stale mid-run.
@@ -83,7 +87,7 @@ contract VaultNavSequenceTest is Deployers {
         );
         address hookAddr = address(flags | (uint160(0x2C71) << 14));
         vault = new FeraVault(
-            manager, IFeraHook(hookAddr), IRevenueDistributor(address(rev)), address(shareImpl), address(this), address(this)
+            manager, IFeraHook(hookAddr), IRevenueDistributor(address(rev)), IAnchorStaking(address(0)), address(shareImpl), address(this), address(this)
         );
         deployCodeTo("FeraHook.sol:FeraHook", abi.encode(manager, address(vault)), hookAddr);
         hook = FeraHook(hookAddr);
@@ -95,7 +99,10 @@ contract VaultNavSequenceTest is Deployers {
             tickSpacing: 60,
             hooks: IHooks(hookAddr)
         });
-        memeId = vault.createPool(memeKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, "MEME", "M");
+        // v3.3 permissionless creation: team-curation levers must be set before pool creation.
+        vault.setAllowedQuoteAsset(Currency.unwrap(currency0), true);
+        vault.approveRwaFeed(address(feed), "test RWA feed");
+        memeId = vault.createBaseLimitPool(memeKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "MEME", "M");
 
         rwaKey = PoolKey({
             currency0: currency0,
@@ -104,11 +111,11 @@ contract VaultNavSequenceTest is Deployers {
             tickSpacing: 10,
             hooks: IHooks(hookAddr)
         });
-        rwaId = vault.createPool(rwaKey, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, "RWA", "R");
+        rwaId = vault.createBaseLimitPool(rwaKey, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, true, "RWA", "R");
 
-        positions[0] = Pos(memeId, 0); // MEME 3-band single tranche
-        positions[1] = Pos(rwaId, 0); // RWA Core tranche
-        positions[2] = Pos(rwaId, 1); // RWA Anchor tranche
+        positions[0] = Pos(memeId, 0); // MEME Steady tranche
+        positions[1] = Pos(rwaId, 0); // RWA Steady tranche
+        positions[2] = Pos(rwaId, 1); // RWA Active tranche
 
         _fund(refHolder, 50_000e18);
         foreign[0] = makeAddr("foreignA");
@@ -172,13 +179,13 @@ contract VaultNavSequenceTest is Deployers {
             uint256 out = _foreignWithdraw(actor, pos);
             ghostForeignOut += out;
         } else if (op == 3) {
-            try vault.partialWithdraw(rwaId, uint128(bound(seed, 1, 1e15)), bytes32(0)) {} catch {}
+            try vault.skimIdle(pos.id, pos.t) {} catch {}
         } else if (op == 4) {
             try vault.collectFees(pos.id, pos.t) {} catch {}
         } else if (op == 5) {
-            vm.warp(block.timestamp + FeraConstants.MEME_DRIP_MIN_INTERVAL_SEC + 1);
-            try vault.drip(memeId, 0) {} catch {}
-            try vault.compound(rwaId, 0, bytes32(0)) {} catch {}
+            vm.warp(block.timestamp + FeraConstants.RWA_MIN_REBALANCE_INTERVAL_SEC + 1);
+            try vault.rebalanceLimit(memeId, 0) {} catch {}
+            try vault.rebalanceLimit(rwaId, 0) {} catch {}
         } else {
             vm.warp(block.timestamp + bound(seed, 1, 1_800));
         }
@@ -207,7 +214,7 @@ contract VaultNavSequenceTest is Deployers {
 
     /// @notice A refHolder holder that seeded every tranche is NEITHER diluted NOR enriched-at-others'-
     ///         expense by any interleaving of foreign deposits/withdraws and keeper strategy actions
-    ///         (drip / partialWithdraw / compound / collectFees) — swap-free, so NAV is conserved.
+    ///         (skimIdle / rebalanceLimit / collectFees) — swap-free, so NAV is conserved.
     function testFuzz_multiBandTranche_navConserved(uint256[10] calldata seeds) public {
         for (uint256 i; i < seeds.length; ++i) {
             _step(seeds[i]);

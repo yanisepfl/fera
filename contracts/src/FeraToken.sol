@@ -8,7 +8,10 @@ import {IFeraToken} from "./interfaces/IFeraToken.sol";
 import {FeraConstants} from "./libraries/FeraConstants.sol";
 
 /// @title FeraToken (FERA)
-/// @notice Fixed 1,000,000,000 supply. Genesis mints 10% to the Treasury (vested/timelocked there);
+/// @notice Fixed 1,000,000,000 supply. Genesis mints 10% to `GenesisVesting.sol` (a dedicated
+///         1yr-cliff/3yr-linear vesting contract whose sole beneficiary is the treasury EOA —
+///         `contracts/VAULT_STRATEGY_V3.md` §10; the constructor param below stays a generic
+///         `address` and does not care what it is, so this is not a breaking interface change);
 ///         the remaining 90% is mintable EXCLUSIVELY by the EmissionsController and can never push
 ///         totalSupply past MAX_SUPPLY. No upgradeability (INV-12). MASTER_SPEC §3, §7.
 /// @dev    Burnable so the esFERA instant-exit forfeit-burn third (INV-9) removes real supply;
@@ -23,11 +26,15 @@ contract FeraToken is ERC20, ERC20Permit, ERC20Burnable, IFeraToken {
     /// @dev Deployer that wires the EmissionsController exactly once (breaks the FERA↔EC cycle).
     address private immutable _deployer;
 
-    constructor(address treasury) ERC20("FERA", "FERA") ERC20Permit("FERA") {
-        if (treasury == address(0)) revert ZeroAddress();
+    /// @param genesisRecipient Where the genesis 10% mint lands. Deploy wires this to
+    ///        `GenesisVesting.sol` (locked, 1yr cliff / 3yr linear), NOT the treasury EOA directly —
+    ///        this constructor is intentionally agnostic to what `genesisRecipient` is.
+    constructor(address genesisRecipient) ERC20("FERA", "FERA") ERC20Permit("FERA") {
+        if (genesisRecipient == address(0)) revert ZeroAddress();
         _deployer = msg.sender;
-        // Genesis: 10% to Treasury. The other 90% is minted over time by the EmissionsController.
-        _mint(treasury, (MAX_SUPPLY * FeraConstants.GENESIS_TREASURY_BPS) / FeraConstants.BPS);
+        // Genesis: 10% to `genesisRecipient` (GenesisVesting in production). The other 90% is
+        // minted over time by the EmissionsController.
+        _mint(genesisRecipient, (MAX_SUPPLY * FeraConstants.GENESIS_TREASURY_BPS) / FeraConstants.BPS);
     }
 
     /// @notice One-shot wiring of the EmissionsController (the only future minter). Deployer-only.

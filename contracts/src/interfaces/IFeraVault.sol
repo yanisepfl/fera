@@ -1,18 +1,25 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {FeraTypes} from "../libraries/FeraTypes.sol";
 
-/// @title IFeraVault (v2 — band ladders + risk tranches, D-12/D-15..18)
-/// @notice The managed-liquidity layer: per-pool band ladders across ≤2 risk tranches, each tranche
-///         an independent ERC-20 share class over a DISJOINT band set (INV-15). Deposits are
-///         ratio-matched + TWAP-gated + cooled-down (Gamma hardening); fee collection skims exactly
-///         10% per tranche (INV-3); MEME strategy is principal-passive drip (kind=5) plus the
-///         guarded principal recenter (INV-5″); RWA strategy is oracle-anchored within on-chain
-///         verified bounds (INV-6, PT-6/PT-7 frozen). Deposit-only pause (INV-11).
-///         MASTER_SPEC §3, §6 (F-8 batch: `uint8 tranche` fields + kind=5).
+/// @title IFeraVault (v3 — base+limit+idle is the ONLY strategy; contracts/VAULT_STRATEGY_V3.md)
+/// @notice The managed-liquidity layer. `createBaseLimitPool` builds, per pool, TWO risk tranches
+///         (Steady/Active), each an independent ERC-20 share class over a DISJOINT band set
+///         (INV-15): a wide vol-adaptive BASE band, an on-demand inventory-skewed LIMIT band, and
+///         an explicit IDLE reserve. Deposits are ratio-matched + TWAP-gated + cooled-down (Gamma
+///         hardening); fee collection skims exactly 10% per tranche (INV-3). The legacy Core/Mid/
+///         Tail band-ladder + drip + INV-5″ guarded-recenter surface (`createPool`, `drip`,
+///         `recenterMeme`, `pokeDepthBreach`, `recenter`, `widen`, `partialWithdraw`, `compound`) is
+///         REMOVED — nothing was ever deployed, so there is no compatibility obligation.
+///         v3.3 (contracts/VAULT_STRATEGY_V3.md §11): `createBaseLimitPool` is PERMISSIONLESS —
+///         team-curation now happens via `allowedQuoteAssets` (quote-asset allowlist, both regimes)
+///         and `approvedRwaFeeds` (RWA-only oracle-feed registry), plus the independent, team-only
+///         `emissionsEligible` per-pool flag (off-chain esFERA emission attribution — never fee
+///         generation/routing, which every pool participates in regardless of this flag).
+///         MASTER_SPEC §3, §6 (F-8 batch: `uint8 tranche` fields).
 interface IFeraVault {
     // ── Events (frozen MASTER_SPEC §6 + F-8 batch: `uint8 tranche` appended) ───────────────
     event Deposit(
@@ -34,17 +41,51 @@ interface IFeraVault {
     event FeesCollected(
         bytes32 indexed poolId, uint256 fee0, uint256 fee1, uint256 perfFee0, uint256 perfFee1, uint8 tranche
     );
+    /// @dev `kind` per `FeraTypes.StrategyKind` (0=initialMint, 7-12 the base+limit+idle actions;
+    ///      1-6 are legacy values retained only so historical event decoding never shifts — no
+    ///      current code path emits them). `oraclePrice` is a generic contextual scalar re-used
+    ///      per-action (e.g. the IL budget for a base recenter); it is NOT always a price.
     event StrategyAction(
-        bytes32 indexed poolId,
-        uint8 kind, // 0=initialMint 1=recenter 2=widen 3=partialWithdraw 4=compoundInPlace 5=dripDeploy
-        int24 tickLower,
-        int24 tickUpper,
-        uint256 oraclePrice,
-        bytes32 justificationHash
+        bytes32 indexed poolId, uint8 kind, int24 tickLower, int24 tickUpper, uint256 oraclePrice, bytes32 justificationHash
     );
     event SharePriceCheckpoint(bytes32 indexed poolId, uint256 sharePriceX96, uint256 epochId, uint8 tranche); // INV-4
     /// @notice Emitted when the owner (timelock) rotates the strategy keeper.
     event KeeperUpdated(address indexed keeper);
+    /// @notice Emitted when governance (timelock owner) toggles a whitelisted external rebalance
+    ///         venue (router/pool the Vault may route a bounded rebalancing swap through).
+    event VenueAllowed(address indexed venue, bool allowed);
+    /// @notice Emitted when the tier / IDLE-buffer config of a (pool,tranche) changes.
+    event TierConfigured(bytes32 indexed poolId, uint8 tranche, uint8 tier, uint16 idleBps);
+    /// @notice A single-coin redemption (shares burned into ONE token within the slippage bound).
+    event WithdrawSingle(bytes32 indexed poolId, address indexed user, address tokenOut, uint256 amountOut, uint256 sharesBurned, uint8 tranche);
+    /// @notice v3: governance (timelocked owner) moved the vol-adaptive width-multiplier clamp band,
+    ///         WITHIN the immutable [VOL_WIDTH_MULT_MIN_LEGAL_BPS, VOL_WIDTH_MULT_MAX_LEGAL_BPS] range.
+    event VolWidthMultBoundsUpdated(uint256 minBps, uint256 maxBps);
+    /// @notice v3.1 unified fee-routing (contracts/VAULT_STRATEGY_V3.md §9): a native-side perf fee
+    ///         was bound-self-swapped into the pool's quote asset (the swap path — the no-swap and
+    ///         fallback paths do NOT emit this).
+    event PerfFeeSwapped(
+        bytes32 indexed poolId, uint8 tranche, address nativeToken, uint256 nativeAmountIn, address quoteToken, uint256 quoteAmountOut
+    );
+    /// @notice v3.1 unified fee-routing: the bounded self-swap of a native-side perf fee either
+    ///         exceeded the slippage bound or reverted for any other reason (hostile/thin pool,
+    ///         reverting/fee-on-transfer native token) — the amount was forwarded IN-KIND, entirely
+    ///         to treasury (never split 50/25/25). `forwarded` is false if even the raw fallback
+    ///         transfer itself failed (an unconditionally-hostile token) — collectFees still did NOT
+    ///         revert; the dust simply remains in the Vault's own balance in that case.
+    event PerfFeeInKindFallback(bytes32 indexed poolId, uint8 tranche, address token, uint256 amount, bool forwarded);
+    /// @notice v3.3 permissionless pool creation (contracts/VAULT_STRATEGY_V3.md §11): the team
+    ///         (timelocked owner) toggled whether `token` may be used as a pool's QUOTE-side asset.
+    event QuoteAssetAllowed(address indexed token, bool allowed);
+    /// @notice v3.3: the team approved `feed` as a verified Chainlink feed RWA pools may bind to.
+    event RwaFeedApproved(address indexed feed, string description);
+    /// @notice v3.3: the team revoked a previously-approved RWA feed (does not affect existing pools).
+    event RwaFeedRevoked(address indexed feed);
+    /// @notice v3.3 (item 3): the team (timelocked owner) changed a pool's esFERA
+    ///         emissions-eligibility flag. Consumed OFF-CHAIN by the emissions pipeline that builds
+    ///         each epoch's Merkle leaves (`EmissionsController`/`Distributor` have no on-chain
+    ///         notion of per-pool eligibility) — has NO on-chain effect on fee generation/routing.
+    event EmissionsEligibilityChanged(bytes32 indexed poolId, bool eligible);
 
     // ── Errors ───────────────────────────────────────────────────────────────────────────
     error ZeroAddress(); // zero-address rejected on keeper setter + immutable ctor wiring
@@ -52,32 +93,54 @@ interface IFeraVault {
     error CooldownActive(); // PARAMS.md#DEPOSIT_COOLDOWN_SEC — depositor's OWN fresh shares
     error TwapGateExceeded(); // PARAMS.md#DEPOSIT_TWAP_GATE_BPS — deposits revert outside the gate
     error GateOutOfBounds(); // setter outside the immutable [50,500]bp legal range (Gamma lesson)
-    error NotMeme(); // MEME-only action (drip / guarded recenter / depth poke)
-    error NotRwa(); // RWA-only action (oracle recenter / widen / partialWithdraw)
-    error DepthNotBreached(); // INV-5″: at-spot depth ≥ 1.0× v1-full-range equivalent
-    error BreachNotPersistent(); // INV-5″: breach younger than MEME_RECENTER_PERSIST_SEC (24h)
-    error RecenterTooSoon(); // INV-5″ 7d / PT-6 RWA 4h minimum interval
-    error ValueSlippage(); // INV-5″: recenter value conservation beyond MEME_RECENTER_MAX_SLIPPAGE_BPS
-    error WithdrawFracExceeded(); // PT-7: RWA partial withdraw above the q-bound
-    error DripTooSoon(); // PARAMS.md#MEME_DRIP_MIN_INTERVAL_SEC
-    error DripTooSmall(); // PARAMS.md#MEME_DRIP_MIN_SIZE_BPS
     error MarketClosed();
     error MarketOpen();
-    error OracleStale();
     error TwapOutOfBand();
     /// @notice REC-9 fail-closed: the pool's newest TWAP observation is older than TWAP_MAX_STALENESS_SEC
-    ///         (a dormant pool) — the deposit gate + recenter TWAP-sanity legs revert rather than trust a
+    ///         (a dormant pool) — the deposit gate + rebalance TWAP-sanity legs revert rather than trust a
     ///         stale, near-spot extrapolation. NEVER on the swap path (INV-2). A single swap re-arms it.
     error TwapStale();
-    error HysteresisNotMet();
     error LaunchpadDisabled();
     error OnlyKeeper();
     error Slippage();
     error UnknownPool();
     error UnknownTranche();
     error ZeroDeposit();
+    // ── base+limit+idle strategy errors (contracts/VAULT_STRATEGY_V3.md) ────────────────
+    error NotBaseLimitPool(); // action requires a tier-configured tranche (always true post-v3)
+    error RebalanceTooSoon(); // min-interval bound (MEME/RWA) — no unbounded rebalance frequency (R-15)
+    error NotOutOfRange(); // guarded base recenter needs spot OUTSIDE the base band
+    error OorNotPersistent(); // OOR younger than the regime dwell interval (anti-whipsaw)
+    error RebalanceSlippage(); // self-swap / venue output below the TWAP-bounded minimum
+    error VenueNotAllowed(); // external venue is not on the governance allowlist
+    error IdleBpsOutOfBounds(); // idle fraction outside the immutable [0, IDLE_BPS_MAX] legal range
+    error BadTier(); // unknown tier id / bad tokenOut selection
+    error SingleOutTooLow(); // withdrawSingle could not meet minOut within the slippage bound
+    /// @notice v3 NEW: a standalone `selfSwap` call's requested notional exceeds the per-call IL
+    ///         budget (MAX_IL_BPS_PER_RECENTER of the tranche's current NAV) — call with a smaller
+    ///         `amountIn`, or let `rebalanceBase`'s own internal self-swap size itself (it clamps
+    ///         instead of reverting — a PARTIAL recenter, never a revert).
+    error IlBudgetExceeded();
+    /// @notice v3 NEW: `setVolWidthMultBounds` argument outside the immutable legal range, or
+    ///         min > max.
+    error WidthMultOutOfBounds();
+    /// @notice v3.3 NEW: `createBaseLimitPool`'s designated quote-side token (per `quoteIsToken0`)
+    ///         is not on the team-set `allowedQuoteAssets` allowlist. Applies to BOTH regimes.
+    error QuoteAssetNotAllowed();
+    /// @notice v3.3 NEW: an RWA `createBaseLimitPool` call supplied `oracleFeed == address(0)` or a
+    ///         feed not on the team-curated `approvedRwaFeeds` registry. Never applies to MEME.
+    error RwaFeedNotApproved();
+    /// @notice v3.3 FIX (H-1, memo 09): `createBaseLimitPool`'s `key.hooks` is not the Vault's own
+    ///         immutable `hook`. With permissionless creation, a pool whose actual v4 hook is
+    ///         `address(0)` (static-fee) or an attacker-deployed hook would bypass the real
+    ///         FeraHook's callbacks entirely — its manipulation-resistant cumulative-tick TWAP would
+    ///         never populate, silently degrading EVERY self-swap bound (§9 fee-routing, `selfSwap`,
+    ///         `rebalanceBase`, `withdrawSingle`) to atomically-manipulable spot. The Vault must
+    ///         symmetrically require the pool it registers is a real-hook pool (mirrors the hook's
+    ///         own `_beforeInitialize` `sender == vault` guard).
+    error WrongHook();
 
-    /// @notice Deposit into a tranche of `poolId`, ratio-matched across its band ladder; mints the
+    /// @notice Deposit into a tranche of `poolId`, ratio-matched across its band set; mints the
     ///         tranche's ERC-20 shares at NAV. Respects pause + TWAP gate (INV-11 — pausable side).
     function deposit(PoolId poolId, uint8 tranche, uint256 amount0, uint256 amount1, uint256 minShares)
         external
@@ -90,7 +153,7 @@ interface IFeraVault {
         returns (uint256 amount0, uint256 amount1);
 
     /// @notice Checkpoint a tranche: poke its bands, realize fees, skim EXACTLY 10% to the
-    ///         RevenueDistributor (INV-3 per tranche, INV-15), retain 90% as drip income.
+    ///         RevenueDistributor (INV-3 per tranche, INV-15), retain 90% as pending LP income.
     function collectFees(PoolId poolId, uint8 tranche)
         external
         returns (uint256 fee0, uint256 fee1, uint256 perfFee0, uint256 perfFee1);
@@ -101,30 +164,118 @@ interface IFeraVault {
         pure
         returns (uint256 perfFee0, uint256 perfFee1, uint256 lpFee0, uint256 lpFee1);
 
-    /// @notice MEME drip (StrategyAction kind=5): deploy retained fee income as a no-swap
-    ///         single-sided limit band (Charm pattern), consolidating per D-17. onlyKeeper.
-    function drip(PoolId poolId, uint8 tranche) external;
+    // ── BASE + LIMIT + IDLE (contracts/VAULT_STRATEGY_V3.md) — the ONLY strategy ────────────
 
-    /// @notice Record / refresh the INV-5″ depth-breach clock. Permissionless (it can only make
-    ///         recentering STRICTER — clearing a stale breach or arming a real one).
-    function pokeDepthBreach(PoolId poolId) external returns (bool breached);
+    /// @notice Register a pool. Builds tranche 0 = Steady + tranche 1 = Active, each a single
+    ///         wide vol-adaptive BASE band + a keeper-maintained IDLE reserve; LIMIT bands are
+    ///         deployed on demand by `rebalanceLimit`. `quoteIsToken0` (v3.1, §9) fixes which side
+    ///         is the liquid quote asset (WETH/USDG-like) for unified fee-routing — immutable
+    ///         thereafter. v3.3 (contracts/VAULT_STRATEGY_V3.md §11): PERMISSIONLESS — any address
+    ///         may call this now. The caller-gate is replaced by two admin-curated levers: (1) the
+    ///         designated quote-side token MUST be on `allowedQuoteAssets` (both regimes) or this
+    ///         reverts `QuoteAssetNotAllowed`; (2) for `regime == RWA`, `oracleFeed` MUST be on
+    ///         `approvedRwaFeeds` (reverts `RwaFeedNotApproved` otherwise) — MEME needs no such
+    ///         check (no oracle dependency). The created pool's `emissionsEligible` flag always
+    ///         defaults to FALSE regardless of caller; only the team can opt it in
+    ///         (`setEmissionsEligible`).
+    function createBaseLimitPool(
+        PoolKey calldata key,
+        FeraTypes.Regime regime,
+        address oracleFeed,
+        uint160 sqrtPriceX96,
+        bool quoteIsToken0,
+        string calldata name_,
+        string calldata symbol_
+    ) external returns (PoolId poolId);
 
-    /// @notice Guarded MEME principal recenter (INV-5″). Keeper triggers; the contract re-verifies
-    ///         ALL of: depth breach sustained ≥24h, ≥7d since last, TWAP sanity, value conservation.
-    function recenterMeme(PoolId poolId, bytes32 justificationHash) external;
+    /// @notice Set a (pool,tranche)'s tier / idle fraction within the immutable legal bounds.
+    ///         onlyOwner (timelocked). v3: the limit skew is NO LONGER a configurable parameter here
+    ///         — it is derived deterministically from the tranche's actual token surplus (§3); this
+    ///         setter cannot influence it.
+    function configureTier(PoolId poolId, uint8 tranche, uint8 tier, uint16 idleBps) external;
 
-    /// @notice RWA oracle-anchored recenter (INV-6 + PT-6 min interval). onlyKeeper.
-    function recenter(PoolId poolId, int24 newTickLower, int24 newTickUpper, bytes32 justificationHash) external;
+    /// @notice Pull the configured IDLE fraction of the base band into the tranche reserve (the
+    ///         instant-withdraw + rebalancing buffer). Value-conserving (band→reserve). onlyKeeper.
+    function skimIdle(PoolId poolId, uint8 tranche) external;
 
-    /// @notice RWA off-hours widen. onlyKeeper.
-    function widen(PoolId poolId, int24 newTickLower, int24 newTickUpper, bytes32 justificationHash) external;
+    /// @notice Record / refresh the base out-of-range (OOR) dwell clock. Permissionless (it can only
+    ///         make the guarded base recenter STRICTER — arm a real breach or clear a stale one).
+    ///         IDEMPOTENT while OOR persists: only the FIRST out-of-range poke starts the clock;
+    ///         repeated pokes while still OOR are a no-op on the timer (audited, contracts/
+    ///         VAULT_STRATEGY_V3.md §6 / contracts/THREAT_MODEL.md).
+    function pokeOutOfRange(PoolId poolId, uint8 tranche) external returns (bool outOfRange);
 
-    /// @notice RWA off-hours partial de-risk, bounded by q (0.60; 0.80 in a keeper-flagged event
-    ///         session — PT-7/D-M11). Core tranche only; Anchor is exempt (already wide). onlyKeeper.
-    function partialWithdraw(PoolId poolId, uint128 liquidityToPull, bytes32 justificationHash) external;
+    /// @notice LIMIT-FIRST rebalance: collect the (largely filled) limit band(s) into reserve and
+    ///         redeploy ONE limit near spot whose width is VOL-ADAPTIVE (§2) and whose SKEW is
+    ///         DETERMINISTICALLY derived from the tranche's actual token surplus, mean-reversion-
+    ///         biased toward the Chainlink oracle for RWA pools (§3) — swap-free. Bounded by the
+    ///         regime min-interval + TWAP sanity. PERMISSIONLESS (v3): every safety property is
+    ///         enforced on-chain regardless of caller (Uniswap-v3-collect / Aave-liquidation
+    ///         pattern) — see contracts/THREAT_MODEL.md.
+    function rebalanceLimit(PoolId poolId, uint8 tranche) external;
 
-    /// @notice Compound retained fee income into a tranche's primary band (kind=4). onlyKeeper.
-    function compound(PoolId poolId, uint8 tranche, bytes32 justificationHash) external;
+    /// @notice GUARDED wide-BASE recenter: permitted only on sustained OOR (≥ regime dwell), ≥ the
+    ///         regime min-interval since the last rebalance, TWAP-sanity, a hard SWAP-SLIPPAGE bound
+    ///         (`MAX_REBALANCE_SLIPPAGE_BPS`, execution quality vs TWAP), AND (v3 NEW) a SEPARATE
+    ///         IMPERMANENT-LOSS cap (`MAX_IL_BPS_PER_RECENTER`, absolute NAV-fraction at risk in one
+    ///         call): if the self-swap that would balance the recentered base exceeds that NAV
+    ///         budget, the call executes a PARTIAL recenter (bounded swap, `BaseRecenterPartial`
+    ///         event) instead of reverting — the base band is still fully re-anchored; the leftover
+    ///         imbalance is picked up by a later action. PERMISSIONLESS (v3) — see item 6 in
+    ///         contracts/VAULT_STRATEGY_V3.md.
+    function rebalanceBase(PoolId poolId, uint8 tranche, bool selfSwap) external;
+
+    /// @notice Standalone bounded self-swap against the OWN v4 pool (ratio balancing). Spends only
+    ///         the tranche's own reserve. Bounded by BOTH the execution-slippage-vs-TWAP check and
+    ///         (v3 NEW) the SAME per-call IL-budget notional cap `rebalanceBase` uses (reverts
+    ///         `IlBudgetExceeded` rather than silently truncating a user-specified `amountIn` — the
+    ///         caller picks a smaller amount instead). PERMISSIONLESS (v3).
+    function selfSwap(PoolId poolId, uint8 tranche, bool zeroForOne, uint256 amountIn)
+        external
+        returns (uint256 amountOut);
+
+    /// @notice Route a bounded ratio-balancing swap through a whitelisted EXTERNAL venue. Executed
+    ///         output re-verified ≥ (1 − MAX_REBALANCE_SLIPPAGE_BPS) × pool-TWAP-implied.
+    ///         PERMISSIONLESS (v3).
+    function rebalanceViaVenue(PoolId poolId, uint8 tranche, address venue, bool zeroForOne, uint256 amountIn)
+        external
+        returns (uint256 amountOut);
+
+    /// @notice Governance allowlist toggle for an external rebalance venue. onlyOwner (timelocked) —
+    ///         a trust/governance decision, unlike the mechanical rebalance actions above.
+    function setVenueAllowed(address venue, bool allowed) external;
+
+    /// @notice v3.3: team-set allowlist toggle for a QUOTE-side asset `createBaseLimitPool` may
+    ///         pair a pool against (both regimes). onlyOwner (timelocked).
+    function setAllowedQuoteAsset(address token, bool allowed) external;
+
+    /// @notice v3.3: team-curated RWA oracle-feed registry — approve `feed` (with an off-chain-
+    ///         verified `description`) so RWA `createBaseLimitPool` calls may bind to it. onlyOwner
+    ///         (timelocked).
+    function approveRwaFeed(address feed, string calldata description) external;
+
+    /// @notice v3.3: remove `feed` from the approved RWA registry (does not affect existing pools
+    ///         already bound to it). onlyOwner (timelocked).
+    function revokeRwaFeed(address feed) external;
+
+    /// @notice v3.3 (item 3): team-only per-pool esFERA emissions-eligibility toggle. Defaults FALSE
+    ///         for every pool. Gates ONLY off-chain emissions attribution — NEVER fee generation/
+    ///         collection/routing (see the event's NatSpec). onlyOwner (timelocked).
+    function setEmissionsEligible(PoolId poolId, bool eligible) external;
+
+    /// @notice v3 NEW: timelocked-owner setter for the vol-adaptive width-multiplier clamp band,
+    ///         bounded WITHIN the immutable [VOL_WIDTH_MULT_MIN_LEGAL_BPS,
+    ///         VOL_WIDTH_MULT_MAX_LEGAL_BPS] legal range (the Gamma lesson).
+    function setVolWidthMultBounds(uint256 minBps, uint256 maxBps) external;
+
+    /// @notice Redeem `shares` of a tranche into ONE token (`tokenOut`), swapping the other leg
+    ///         internally against the own pool within the slippage bound; reverts if `minOut` unmet.
+    ///         NEVER returns more than the pro-rata NAV. The always-available IN-KIND fallback is the
+    ///         plain `withdraw` (never pausable, no swap, no venue) — so redemptions are unblockable
+    ///         (INV-11) even if every swap venue is down. NEVER pausable.
+    function withdrawSingle(PoolId poolId, uint8 tranche, uint256 shares, address tokenOut, uint256 minOut)
+        external
+        returns (uint256 amountOut);
 
     // ── Views ────────────────────────────────────────────────────────────────────────────
     /// @notice The per-(pool, tranche) ERC-20 share token address.
@@ -134,22 +285,21 @@ interface IFeraVault {
     function regimeOf(PoolId poolId) external view returns (FeraTypes.Regime);
 
     /// @notice Whether `poolId`'s underlying market is currently OPEN, per the same fail-static
-    ///         holiday → keeper-flag → on-chain schedule logic the RWA strategy gate enforces
-    ///         (`_isMarketOpen`). MEME pools read `true` while their keeper flag is up. Read-only
-    ///         mirror of the internal gate — F-12 (Backend marketHours/rwaStrategy keepers).
+    ///         holiday → keeper-flag → on-chain schedule logic the hook's RWA fee overlay reads.
+    ///         MEME pools read `true` while their keeper flag is up. Read-only mirror of the
+    ///         internal gate — F-12 (Backend marketHours keepers).
     function isMarketOpen(PoolId poolId) external view returns (bool open);
 
-    /// @notice Whether a keeper-flagged scheduled-event session (D-M11) is active on `poolId`
-    ///         (raises the off-hours partial-withdraw cap 0.60 → 0.80). F-12 (Backend eventCalendar).
+    /// @notice Whether a keeper-flagged scheduled-event session (D-M11) is active on `poolId`.
     function isEventWindow(PoolId poolId) external view returns (bool active);
 
     /// @notice Whether deposits are paused for `poolId`.
     function depositsPaused(PoolId poolId) external view returns (bool);
 
-    /// @notice Number of tranches on `poolId` (MEME 1, RWA 2 — D-16).
+    /// @notice Number of tranches on `poolId` (always 2: Steady, Active — D-16).
     function trancheCount(PoolId poolId) external view returns (uint8);
 
-    /// @notice Number of live bands in a tranche (≤ MEME_MAX_BANDS_PER_TRANCHE).
+    /// @notice Number of live bands in a tranche (≤ MAX_BANDS_PER_TRANCHE).
     function bandCount(PoolId poolId, uint8 tranche) external view returns (uint256);
 
     /// @notice Band descriptor (ticks, liquidity, principal-vs-fee class — D-17).
@@ -158,9 +308,48 @@ interface IFeraVault {
         view
         returns (int24 tickLower, int24 tickUpper, uint128 liquidity, bool isPrincipal);
 
-    /// @notice Retained (90%) fee income awaiting drip, per tranche.
+    /// @notice Full band descriptor incl. the base/limit role (isPrincipal ⇒ BASE; isLimit ⇒ the
+    ///         inventory-skewed LIMIT; neither ⇒ unused in v3).
+    function bandInfo(PoolId poolId, uint8 tranche, uint256 index)
+        external
+        view
+        returns (int24 tickLower, int24 tickUpper, uint128 liquidity, bool isPrincipal, bool isLimit);
+
+    /// @notice Retained (90%) fee income awaiting the next checkpoint/withdraw, per tranche.
     function pendingFees(PoolId poolId, uint8 tranche) external view returns (uint256 pending0, uint256 pending1);
 
-    /// @notice First-breach timestamp of the INV-5″ depth condition (0 = not breached).
-    function depthBreachSince(PoolId poolId) external view returns (uint64);
+    /// @notice The base+limit+idle tier config of a (pool,tranche): (tier, base/limit half-widths in
+    ///         ticks — the TIER MAGNITUDE fed to the vol-adaptive multiplier, not necessarily the
+    ///         final on-chain width — idle fraction, whether tier-configured).
+    function tierOf(PoolId poolId, uint8 tranche)
+        external
+        view
+        returns (uint8 tier, int24 baseHalfTicks, int24 limitHalfTicks, uint16 idleBps, bool set);
+
+    /// @notice First-timestamp the base band went out of range (0 = in range) — the dwell clock.
+    function outOfRangeSince(PoolId poolId, uint8 tranche) external view returns (uint64);
+
+    /// @notice The IDLE reserve balances (uninvested buffer) of a (pool,tranche).
+    function idleReserves(PoolId poolId, uint8 tranche) external view returns (uint256 reserve0, uint256 reserve1);
+
+    /// @notice Whether `venue` is a governance-whitelisted external rebalance venue.
+    function isVenueAllowed(address venue) external view returns (bool);
+
+    /// @notice v3: the current governance-set vol-width-multiplier clamp band (bps of 1x).
+    function volWidthMultBounds() external view returns (uint256 minBps, uint256 maxBps);
+
+    /// @notice v3.1 unified fee-routing (§9): whether `poolId`'s token0 is the liquid QUOTE asset
+    ///         (the complementary token is the pool's NATIVE/project token). Set once at
+    ///         `createBaseLimitPool`, immutable thereafter.
+    function quoteIsToken0(PoolId poolId) external view returns (bool);
+
+    /// @notice v3.3: whether `token` is on the team-set quote-asset allowlist (both regimes).
+    function allowedQuoteAssets(address token) external view returns (bool);
+
+    /// @notice v3.3: whether `feed` is on the team-curated approved RWA oracle-feed registry.
+    function approvedRwaFeeds(address feed) external view returns (bool);
+
+    /// @notice v3.3 (item 3): whether `poolId` is currently opted into esFERA emissions attribution
+    ///         by the team. Defaults FALSE. Has NO effect on fee generation/collection/routing.
+    function emissionsEligible(PoolId poolId) external view returns (bool);
 }

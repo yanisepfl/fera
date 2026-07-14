@@ -4,8 +4,9 @@ pragma solidity ^0.8.26;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @title IFeraToken
-/// @notice Fixed 1,000,000,000 supply governance/emission token. 10% genesis to Treasury,
-///         90% mintable exclusively by the EmissionsController (MASTER_SPEC §3, §7).
+/// @notice Fixed 1,000,000,000 supply governance/emission token. 10% genesis to `GenesisVesting.sol`
+///         (locked, 1yr cliff / 3yr linear — `contracts/VAULT_STRATEGY_V3.md` §10), 90% mintable
+///         exclusively by the EmissionsController (MASTER_SPEC §3, §7).
 interface IFeraToken is IERC20 {
     error MintCapExceeded();
     error OnlyEmissionsController();

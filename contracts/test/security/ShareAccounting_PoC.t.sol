@@ -11,6 +11,7 @@ import {RevenueDistributor} from "../../src/RevenueDistributor.sol";
 import {IFeraHook} from "../../src/interfaces/IFeraHook.sol";
 import {IFeraVault} from "../../src/interfaces/IFeraVault.sol";
 import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol";
+import {IAnchorStaking} from "../../src/interfaces/IAnchorStaking.sol";
 import {FeraTypes} from "../../src/libraries/FeraTypes.sol";
 import {FeraConstants} from "../../src/libraries/FeraConstants.sol";
 import {MockAggregatorV3} from "../utils/Mocks.sol";
@@ -23,7 +24,10 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @notice SECURITY AGENT 6 — R-17 (Bunni-class share-accounting) + the deposit-NAV finding.
+/// @notice SECURITY AGENT 6 — R-17 (Bunni-class share-accounting) + the deposit-NAV finding, now
+///         re-pointed at the v3 base+limit+idle surface (contracts/VAULT_STRATEGY_V3.md item 1 —
+///         the legacy ladder + RWA off-hours `partialWithdraw` this PoC originally exercised is
+///         removed; `skimIdle` is the base+limit analogue that parks band value into `reserve`).
 ///
 ///   Two distinct properties are probed against the REAL v4 PoolManager + FeraVault:
 ///
@@ -31,15 +35,11 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 ///               share->amount conversion floors against the actor, so N tiny withdrawals can
 ///               never extract above pro-rata and never inflate a stayer's claim. CONFIRMED SAFE.
 ///
-///   (B) EXPLOITABLE — the deposit share price (`FeraVault.deposit`, line ~280) is
-///               `sharesMinted = mulDiv(sumDL, totalShares, sumLBefore)` where `sumLBefore` is the
-///               sum of BANDED liquidity ONLY. It ignores the tranche's `pending` (retained fee
-///               income) and `reserve` (RWA off-hours de-risk holdings / recenter dust). A withdraw,
-///               however, pays a pro-rata slice of pending+reserve. So a depositor who deposits while
-///               pending/reserve > 0 is OVER-MINTED shares and captures a slice of pending+reserve
-///               they never funded — stolen pro-rata from existing holders. RWA off-hours
-///               `partialWithdraw` parks up to 60% of principal in `reserve` as STANDARD operation,
-///               so the leak is large and standing, not an edge case.
+///   (B) SAFE (post R-18/INV-16 fix) — deposit share pricing values the FULL tranche NAV (banded
+///               liquidity + `pending` retained fee income + `reserve` idle/recenter holdings), so
+///               mint-NAV == redeem-NAV. `skimIdle` parks up to `idleBps` (10%/3% by tier) of the
+///               base band into `reserve` as STANDARD operation — this PoC confirms a deposit made
+///               while that reserve is non-zero still cannot over-mint / steal from existing holders.
 contract ShareAccountingPoCTest is Deployers {
     FeraVault internal vault;
     FeraHook internal hook;
@@ -83,7 +83,7 @@ contract ShareAccountingPoCTest is Deployers {
         address hookAddr = address(flags | (uint160(0x7A71) << 14));
         // keeper == owner == this test contract.
         vault = new FeraVault(
-            manager, IFeraHook(hookAddr), IRevenueDistributor(address(rev)), address(shareImpl), address(this), address(this)
+            manager, IFeraHook(hookAddr), IRevenueDistributor(address(rev)), IAnchorStaking(address(0)), address(shareImpl), address(this), address(this)
         );
         deployCodeTo("FeraHook.sol:FeraHook", abi.encode(manager, address(vault)), hookAddr);
         hook = FeraHook(hookAddr);
@@ -95,7 +95,10 @@ contract ShareAccountingPoCTest is Deployers {
             tickSpacing: 60,
             hooks: IHooks(hookAddr)
         });
-        memeId = vault.createPool(memeKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, "MEME", "M");
+        // v3.3 permissionless creation: team-curation levers must be set before pool creation.
+        vault.setAllowedQuoteAsset(Currency.unwrap(currency0), true);
+        vault.approveRwaFeed(address(feed), "test RWA feed");
+        memeId = vault.createBaseLimitPool(memeKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "MEME", "M");
 
         rwaKey = PoolKey({
             currency0: currency0,
@@ -104,7 +107,7 @@ contract ShareAccountingPoCTest is Deployers {
             tickSpacing: 10,
             hooks: IHooks(hookAddr)
         });
-        rwaId = vault.createPool(rwaKey, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, "RWA", "R");
+        rwaId = vault.createBaseLimitPool(rwaKey, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, true, "RWA", "R");
 
         _fund(honest, 1_000e18);
         _fund(attacker, 1_000e18);
@@ -125,34 +128,35 @@ contract ShareAccountingPoCTest is Deployers {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    // (B) EXPLOITABLE — deposit-during-reserve theft on an RWA pool (60% reserve is normal off-hours)
+    // (B) SAFE — deposit-during-idle-reserve theft attempt on a base+limit RWA tranche (skimIdle
+    //     parking 10% of the Steady base into `reserve` is normal, standard operation)
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    function test_EXPLOIT_rwaReserveDepositTheft() public {
-        // 1) Honest LP deposits into the RWA Core tranche (tranche 0).
+    function test_INV16_idleReserveDeposit_noTheft() public {
+        // 1) Honest LP deposits into the RWA Steady tranche (tranche 0).
         (uint256 h0b, uint256 h1b) = _bal(honest);
         vm.prank(honest);
         uint256 hShares = vault.deposit(rwaId, 0, 100e18, 100e18, 0);
         (uint256 h0m, uint256 h1m) = _bal(honest);
         uint256 hIn = (h0b - h0m) + (h1b - h1m); // honest capital in (value @ 1:1)
 
-        // 2) Keeper performs the STANDARD PT-7 off-hours de-risk: park 60% of the Core band into
-        //    reserve. RWA pools start `marketOpen=false`, so this is allowed immediately.
-        (,, uint128 coreLiq,) = vault.bandAt(rwaId, 0, 0);
-        uint128 pull = uint128((uint256(coreLiq) * FeraConstants.RWA_OFFHOURS_WITHDRAW_FRAC_BPS) / FeraConstants.BPS);
-        vault.partialWithdraw(rwaId, pull, bytes32(0));
+        // 2) Keeper performs the STANDARD skimIdle de-risk: park idleBps (10% Steady default) of the
+        //    base band into reserve — the base+limit analogue of the legacy off-hours reserve park.
+        vault.skimIdle(rwaId, 0);
+        (uint256 r0, uint256 r1) = vault.idleReserves(rwaId, 0);
+        assertGt(r0 + r1, 0, "skimIdle did not establish an idle reserve (exploit precondition)");
 
         (uint256 pend0, uint256 pend1) = vault.pendingFees(rwaId, 0);
-        // Confirm the reserve is now large (this is the exploit precondition, standard off-hours).
         assertEq(pend0 + pend1, 0, "no fees expected");
 
-        // 3) Attacker deposits during off-hours (deposits are NOT market-hours gated).
+        // 3) Attacker deposits while idle reserve > 0 (deposits are not reserve-gated).
         (uint256 a0b, uint256 a1b) = _bal(attacker);
         vm.prank(attacker);
         uint256 aShares = vault.deposit(rwaId, 0, 10e18, 10e18, 0);
         (uint256 a0m, uint256 a1m) = _bal(attacker);
         uint256 aIn = (a0b - a0m) + (a1b - a1m);
 
-        // 4) After cooldown, attacker withdraws — extracting a slice of the reserve it never funded.
+        // 4) After cooldown, attacker withdraws — would extract a slice of the reserve it never
+        //    funded IF the deposit had over-minted against banded liquidity alone (the pre-R-18 bug).
         vm.warp(block.timestamp + COOLDOWN);
         vm.prank(attacker);
         vault.withdraw(rwaId, 0, aShares, 0, 0);
@@ -165,7 +169,7 @@ contract ShareAccountingPoCTest is Deployers {
             emit log_named_decimal_uint("ATTACKER PROFIT (stolen from honest LP)", aOut - aIn, 18);
         }
 
-        // 5) Honest LP exits: after the R-18 fix it recovers ~all of its deposit (no theft).
+        // 5) Honest LP exits: recovers ~all of its deposit (no theft).
         vm.prank(honest);
         vault.withdraw(rwaId, 0, hShares, 0, 0);
         (uint256 h0a, uint256 h1a) = _bal(honest);
@@ -174,11 +178,10 @@ contract ShareAccountingPoCTest is Deployers {
         emit log_named_decimal_uint("honest recovered (value)", hOut, 18);
         if (hIn > hOut) emit log_named_decimal_uint("honest residual (dust/MIN_LIQ)", hIn - hOut, 18);
 
-        // VERDICT: SAFE after the R-18 / INV-16 fix. Deposits are priced against the FULL tranche
-        // NAV (banded value + pending + reserve), so mint-NAV == redeem-NAV: the attacker's deposit
-        // no longer over-mints and its round trip returns ≤ what it put in (was +120%/cycle before).
-        // The honest holder is NOT diluted — it recovers its full deposit minus only rounding /
-        // the permanently-locked MINIMUM_LIQUIDITY dust (the exact 24-value theft is eliminated).
+        // VERDICT: SAFE (R-18 / INV-16). Deposits are priced against the FULL tranche NAV (banded
+        // value + pending + reserve), so mint-NAV == redeem-NAV: the attacker's deposit does not
+        // over-mint and its round trip returns ≤ what it put in. The honest holder is NOT diluted —
+        // it recovers its full deposit minus only rounding / the permanently-locked MINIMUM_LIQUIDITY dust.
         assertLe(aOut, aIn, "R-18 REGRESSION: attacker profited from the reserve deposit (INV-16 broken)");
         assertApproxEqRel(hOut, hIn, 0.001e18, "R-18 REGRESSION: honest holder was diluted (INV-16 broken)");
     }

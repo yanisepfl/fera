@@ -21,18 +21,30 @@ library FeraTypes {
         LAUNCHPAD // 1 — non-redeemable, locked, auto-compounding (v1: gated OFF)
     }
 
-    /// @notice StrategyAction.kind encoding — MUST match MASTER_SPEC §6 StrategyAction comment
-    ///         (+ the F-8 batch: kind=5 dripDeploy; + F-9: kind=6 bandConsolidate).
-    /// 0=initialMint 1=recenter 2=widen(RWA off-hours) 3=partialWithdraw(RWA) 4=compoundInPlace
-    /// 5=dripDeploy (fee-income into a NEW band) 6=bandConsolidate (D-17 fee-band merge).
+    /// @notice StrategyAction.kind encoding — MUST match MASTER_SPEC §6 StrategyAction comment.
+    ///         v3 (contracts/VAULT_STRATEGY_V3.md): the legacy ladder-only kinds (1=Recenter as the
+    ///         MEME INV-5″ path, 2=Widen, 3=PartialWithdraw, 4=CompoundInPlace, 5=DripDeploy,
+    ///         6=BandConsolidate) are NO LONGER EMITTED — the code paths that emitted them are
+    ///         removed, not stubbed. Values are kept (not renumbered) purely so historical event
+    ///         decoding never shifts; new pools only ever emit 0 (shared InitialMint) and 7-12.
+    /// 0=initialMint 7=limitDeploy 8=baseRecenter(full) 9=selfSwap 10=venueSwap 11=skimIdle
+    /// 12=baseRecenterPartial (v3: IL-budget-capped, staged recenter).
     enum StrategyKind {
         InitialMint, // 0
-        Recenter, // 1 — RWA oracle-anchored recenter AND the guarded MEME recenter (INV-5″)
-        Widen, // 2
-        PartialWithdraw, // 3
-        CompoundInPlace, // 4 — keeper `compound()` fee income into a tranche's PRIMARY band
-        DripDeploy, // 5 — fee income into a NEW single-sided no-swap band (F-8 / D-15)
-        BandConsolidate // 6 — drip merged into an EXISTING fee band (F-9 / D-17; was mis-tagged 4)
+        Recenter, // 1 — LEGACY, no longer emitted (was: RWA oracle recenter / MEME INV-5″ recenter)
+        Widen, // 2 — LEGACY, no longer emitted
+        PartialWithdraw, // 3 — LEGACY, no longer emitted
+        CompoundInPlace, // 4 — LEGACY, no longer emitted
+        DripDeploy, // 5 — LEGACY, no longer emitted
+        BandConsolidate, // 6 — LEGACY, no longer emitted
+        // base+limit+idle strategy (contracts/VAULT_STRATEGY_V3.md) — THE canonical/only strategy:
+        LimitDeploy, // 7 — collect the filled LIMIT + redeploy an inventory-skewed limit (§3)
+        BaseRecenter, // 8 — guarded wide-BASE recenter, FULLY executed (dwell + TWAP + slippage + IL-cap)
+        SelfSwap, // 9 — bounded ratio-balancing swap against the vault's OWN v4 pool
+        VenueSwap, // 10 — bounded ratio-balancing swap through a whitelisted EXTERNAL venue
+        SkimIdle, // 11 — pull the configured IDLE fraction of the base into reserve
+        BaseRecenterPartial // 12 — v3 NEW: guarded recenter whose self-swap was IL-budget-capped
+            // (partial execution; the leftover imbalance is completed by a later action, §4)
     }
 
     /// @notice Risk tranche index on a pool (D-12/D-16). MEME pools ship Core only; RWA pools ship

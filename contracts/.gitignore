@@ -1,3 +1,54 @@
+# ── Secrets: NEVER commit ──────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# ── Node ───────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ── Foundry (contracts) ────────────────────────────────────────────────
+/contracts/lib/
+/contracts/out/
+/contracts/cache/
+/contracts/broadcast/
+/contracts/.git/
+!/contracts/broadcast/**/dry-run/   # keep nothing sensitive; dir excluded anyway
+lcov.info
+coverage/
+
+# ── Next.js (frontend) ─────────────────────────────────────────────────
+/frontend/.next/
+/frontend/out/
+/frontend/.vercel/
+/frontend/next-env.d.ts
+
+# ── Ponder (backend) ───────────────────────────────────────────────────
+/backend/.ponder/
+/backend/generated/
+
+# ── Internal working tree: local-only, kept OFF the public GitHub repo ──
+# Internal engineering process artifacts (OPEN_DECISIONS, memos, GTM playbooks,
+# vault review, raw brief, go-live plan) live here. See internal/CLEANUP_MANIFEST.md.
+/internal/
+
+# ── Python (mechanism / pressure-test sims) ────────────────────────────
+__pycache__/
+*.pyc
+
+# ── OS / editor ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
 lib/
 cache/
 out/

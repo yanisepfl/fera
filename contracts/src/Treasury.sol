@@ -11,6 +11,13 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 ///         48h, so there is no hot key over protocol funds (INV-12). No proxy (INV-12).
 /// @dev    Minimal self-timelock: the governor (Ownable owner) queues → waits DELAY → executes.
 ///         Receiving funds is unrestricted; only spends are delayed.
+///
+///         STATUS (stage-3, `contracts/VAULT_STRATEGY_V3.md` §10 / `contracts/OPEN_DECISIONS.md`
+///         #OD-9): the decided spec makes the treasury a PLAIN EOA for now (freely spendable, no
+///         timelock friction) — `script/Deploy.s.sol` no longer deploys or wires THIS contract.
+///         It is kept in the codebase, unmodified and fully functional, purely for the OPTION to
+///         move to a contract-based (timelocked) treasury later; it is currently dead code from the
+///         live deploy's point of view, not a mistake.
 contract Treasury is ITreasury, Ownable {
     /// @inheritdoc ITreasury
     uint256 public constant DELAY = FeraConstants.TIMELOCK_DELAY; // 48h, immutable

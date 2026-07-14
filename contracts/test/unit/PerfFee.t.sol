@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {FeraVault} from "../../src/FeraVault.sol";
 import {IFeraHook} from "../../src/interfaces/IFeraHook.sol";
 import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol";
+import {IAnchorStaking} from "../../src/interfaces/IAnchorStaking.sol";
 import {FeraConstants} from "../../src/libraries/FeraConstants.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 
@@ -22,6 +23,7 @@ contract PerfFeeTest is Test {
             IPoolManager(address(0xA11)),
             IFeraHook(address(0xB22)),
             IRevenueDistributor(address(0xC33)),
+            IAnchorStaking(address(0)), // no unified fee-routing introspection needed for this pure-fn test
             address(0xD44), // share impl
             address(0xE55), // keeper
             address(this) // timelock owner

@@ -11,6 +11,7 @@ import {RevenueDistributor} from "../../src/RevenueDistributor.sol";
 import {IFeraHook} from "../../src/interfaces/IFeraHook.sol";
 import {IFeraVault} from "../../src/interfaces/IFeraVault.sol";
 import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol";
+import {IAnchorStaking} from "../../src/interfaces/IAnchorStaking.sol";
 import {FeraTypes} from "../../src/libraries/FeraTypes.sol";
 import {FeraConstants} from "../../src/libraries/FeraConstants.sol";
 import {MockAggregatorV3} from "../utils/Mocks.sol";
@@ -23,9 +24,12 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @notice INV-16 (R-18 fix) — Share-NAV completeness. Deposit share-minting values the FULL tranche
-///         NAV = value(banded liquidity) + pending (undripped fees) + reserve (RWA off-hours /
-///         recenter holdings), so mint-NAV == redeem-NAV. Two testable properties:
+/// @notice INV-16 (R-18 fix) — Share-NAV completeness, re-pointed at the v3 base+limit+idle surface
+///         (contracts/VAULT_STRATEGY_V3.md item 1: the legacy ladder + RWA `partialWithdraw` this
+///         suite originally exercised is removed; `skimIdle` is the base+limit analogue that parks
+///         band value into `reserve`). Deposit share-minting values the FULL tranche NAV =
+///         value(banded liquidity) + pending (undripped fees) + reserve (idle buffer), so
+///         mint-NAV == redeem-NAV. Two testable properties:
 ///
 ///          (1) ROUND-TRIP: with ANY pre-existing pending/reserve, a deposit→(cooldown)→withdraw
 ///              round trip never returns more than was deposited (no value is minted from nothing).
@@ -78,7 +82,7 @@ contract ShareNavInvariantTest is Deployers {
         );
         address hookAddr = address(flags | (uint160(0x1B16) << 14));
         vault = new FeraVault(
-            manager, IFeraHook(hookAddr), IRevenueDistributor(address(rev)), address(shareImpl), address(this), address(this)
+            manager, IFeraHook(hookAddr), IRevenueDistributor(address(rev)), IAnchorStaking(address(0)), address(shareImpl), address(this), address(this)
         );
         deployCodeTo("FeraHook.sol:FeraHook", abi.encode(manager, address(vault)), hookAddr);
         hook = FeraHook(hookAddr);
@@ -90,7 +94,10 @@ contract ShareNavInvariantTest is Deployers {
             tickSpacing: 60,
             hooks: IHooks(hookAddr)
         });
-        memeId = vault.createPool(memeKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, "MEME", "M");
+        // v3.3 permissionless creation: team-curation levers must be set before pool creation.
+        vault.setAllowedQuoteAsset(Currency.unwrap(currency0), true);
+        vault.approveRwaFeed(address(feed), "test RWA feed");
+        memeId = vault.createBaseLimitPool(memeKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "MEME", "M");
 
         rwaKey = PoolKey({
             currency0: currency0,
@@ -99,7 +106,7 @@ contract ShareNavInvariantTest is Deployers {
             tickSpacing: 10,
             hooks: IHooks(hookAddr)
         });
-        rwaId = vault.createPool(rwaKey, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, "RWA", "R");
+        rwaId = vault.createBaseLimitPool(rwaKey, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, true, "RWA", "R");
 
         _fund(honest, 100_000e18);
         _fund(foreign, 100_000e18);
@@ -138,17 +145,17 @@ contract ShareNavInvariantTest is Deployers {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    // (1) ROUND-TRIP never profits — RWA reserve present (the standard PT-7 off-hours 60% park).
+    // (1) ROUND-TRIP never profits — idle reserve present (the base+limit `skimIdle` park, the
+    //     analogue of the legacy RWA off-hours reserve park this suite originally exercised).
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    function testFuzz_INV16_roundTrip_neverProfits_rwaReserve(uint256 depAmt, uint256 pullBps) public {
+    function testFuzz_INV16_roundTrip_neverProfits_idleReserve(uint256 depAmt, uint16 idleBps) public {
         depAmt = bound(depAmt, 1e18, 5_000e18);
-        pullBps = bound(pullBps, 0, FeraConstants.RWA_OFFHOURS_WITHDRAW_FRAC_BPS); // ≤ 0.60
+        idleBps = uint16(bound(idleBps, 0, FeraConstants.IDLE_BPS_MAX));
 
-        // Honest seeds; keeper parks part of Core into reserve (standard off-hours de-risk).
+        // Honest seeds; keeper parks part of the base into reserve (standard skimIdle de-risk).
         _deposit(honest, rwaId, 1_000e18, 1_000e18);
-        (,, uint128 coreLiq,) = vault.bandAt(rwaId, 0, 0);
-        uint128 pull = uint128((uint256(coreLiq) * pullBps) / FeraConstants.BPS);
-        if (pull != 0) vault.partialWithdraw(rwaId, pull, bytes32(0));
+        vault.configureTier(rwaId, 0, FeraConstants.TIER_STEADY, idleBps);
+        vault.skimIdle(rwaId, 0);
 
         // Foreign deposit into the SAME tranche while reserve > 0, then a clean round-trip exit.
         (uint256 fShares, uint256 fIn) = _deposit(foreign, rwaId, depAmt, depAmt);
@@ -162,15 +169,14 @@ contract ShareNavInvariantTest is Deployers {
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // (2) NON-DILUTION — a foreign deposit while reserve>0 does not dilute the honest holder.
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    function testFuzz_INV16_foreignDeposit_noDilution_rwaReserve(uint256 depAmt) public {
+    function testFuzz_INV16_foreignDeposit_noDilution_idleReserve(uint256 depAmt) public {
         depAmt = bound(depAmt, 1e18, 5_000e18);
 
         (uint256 hShares, uint256 hIn) = _deposit(honest, rwaId, 1_000e18, 1_000e18);
 
-        // Park the full off-hours 60% into reserve (maximum standing NAV outside the bands).
-        (,, uint128 coreLiq,) = vault.bandAt(rwaId, 0, 0);
-        uint128 pull = uint128((uint256(coreLiq) * FeraConstants.RWA_OFFHOURS_WITHDRAW_FRAC_BPS) / FeraConstants.BPS);
-        vault.partialWithdraw(rwaId, pull, bytes32(0));
+        // Park the max idle fraction into reserve (maximum standing NAV outside the bands).
+        vault.configureTier(rwaId, 0, FeraConstants.TIER_STEADY, FeraConstants.IDLE_BPS_MAX);
+        vault.skimIdle(rwaId, 0);
 
         // Foreign deposits + exits (fair, no fees). This must not transfer value away from honest.
         (uint256 fShares, uint256 fIn) = _deposit(foreign, rwaId, depAmt, depAmt);

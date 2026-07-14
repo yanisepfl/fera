@@ -2,11 +2,18 @@
 pragma solidity ^0.8.26;
 
 /// @title FeraConstants
-/// @notice Frozen-shape accounting constants (MASTER_SPEC §7) + Mechanism-frozen v2 params
+/// @notice Frozen-shape accounting constants (MASTER_SPEC §7) + Mechanism-frozen v2/v3 params
 ///         (docs/mechanism/PARAMS.md, 97 keys). Values LOCKED by the spec are hardcoded; values
 ///         Mechanism has NOT yet frozen are placeholders tagged `TODO(spec-freeze): PARAMS.md#<key>`
 ///         and MUST NOT be treated as final.
 /// @dev    Everything here is a compile-time constant so it is auditably immutable and free.
+///
+///         V3 NOTE (contracts/VAULT_STRATEGY_V3.md): the legacy Core/Mid/Tail band-ladder + drip +
+///         INV-5″ guarded-recenter constants are REMOVED (not deprecated — deleted). Nothing was
+///         ever deployed, so there is no backward-compatibility surface; base+limit+idle is now the
+///         ONLY vault strategy, for BOTH regimes. Do not re-add MEME_LADDER_*/MEME_DRIP_*/
+///         MEME_RECENTER_*/RWA_HYSTERESIS_*/RWA_*_WITHDRAW_FRAC_* — they described a mechanism that
+///         no longer exists in `FeraVault.sol`.
 library FeraConstants {
     // ─────────────────────────────────────────────────────────────────────────────────────
     // LOCKED (MASTER_SPEC §7 — immutable rows). These are contractual and safe to hardcode.
@@ -39,8 +46,19 @@ library FeraConstants {
     /// @notice FERA fixed supply: 1,000,000,000 * 1e18 — immutable (§7).
     uint256 internal constant FERA_MAX_SUPPLY = 1_000_000_000e18;
 
-    /// @notice Genesis mint to Treasury: 10% of max supply — immutable (§7).
+    /// @notice Genesis mint: 10% of max supply — immutable (§7). Stage-3 (v3.2,
+    ///         `contracts/VAULT_STRATEGY_V3.md` §10): this 10% (100,000,000 FERA) is minted to
+    ///         `GenesisVesting.sol`, NOT directly to the treasury EOA — see the two constants below.
     uint256 internal constant GENESIS_TREASURY_BPS = 1_000; // 10%
+
+    /// @notice `GenesisVesting` cliff — 1 year. Nothing is claimable before `start + this`.
+    uint256 internal constant GENESIS_VESTING_CLIFF_DURATION = 365 days;
+
+    /// @notice `GenesisVesting` total horizon — 4 years (1yr cliff + 3yr linear release after it).
+    ///         Deliberately mirrors `EmissionsController.capAt`'s own `horizon = 4 * 365 days` —
+    ///         a tokenomics-consistency choice (both the genesis unlock and the 90% emission cap
+    ///         complete on the same 4-year horizon), not a technical dependency between the two.
+    uint256 internal constant GENESIS_VESTING_TOTAL_DURATION = 4 * 365 days;
 
     /// @notice Timelock delay governing all "timelocked" params — immutable 48h (§7, INV-12).
     uint256 internal constant TIMELOCK_DELAY = 48 hours;
@@ -86,7 +104,9 @@ library FeraConstants {
     uint256 internal constant EPOCH_LENGTH = 7 days;
 
     // ─────────────────────────────────────────────────────────────────────────────────────
-    // MEME regime fee curve — PARAMS.md §A (v2 freeze).
+    // MEME regime fee curve — PARAMS.md §A (v2 freeze). Consumed by FeraHook/FeeLogic; also the
+    // SOLE data source (via FeeLogic.sigmaTicks/widthMultiplierBps) for the v3 vol-adaptive band
+    // sizing in FeraVault — see §2 below. Do NOT duplicate the estimator; read it.
     // ─────────────────────────────────────────────────────────────────────────────────────
 
     /// PARAMS.md#MEME_FEE_FLOOR_PIPS (**v2 FROZEN: 3000 → 3400**, PT-3: 0.9·34bp > 30bp so regime
@@ -171,16 +191,15 @@ library FeraConstants {
     uint16 internal constant TWAP_OBS_CARDINALITY = 24; // [PROVISIONAL] (CARD−1)·SPACING = 2070s ≥ 1800s
 
     /// @notice Max age of the newest TWAP observation before a reading is treated as UNUSABLE by the
-    ///         manipulation-sensitive strategy consumers — the deposit gate and the recenter TWAP-sanity
-    ///         legs (REC-9 / convergence N4/N5). On a DORMANT pool (no swaps for longer than this) the
-    ///         newest observation is old and `consultTwapTick` would extrapolate `_lastTick` across an
-    ///         unbounded gap, yielding a near-spot average with false confidence. Those consumers
-    ///         FAIL-CLOSED (revert `TwapStale`) instead of trusting it. This bounds ONLY the
-    ///         strategy/deposit-gate paths — it NEVER touches swaps (INV-2: swaps never revert; the swap
-    ///         path does not read this oracle). Spot can only move via a swap, and every swap refreshes
-    ///         the oracle, so a live pool is never stale; only a genuinely inactive pool trips it, and a
-    ///         single swap (permissionless) re-arms deposits. Must exceed the widest TWAP window (1800s)
-    ///         with headroom so normal quiet periods do not block deposits.
+    ///         manipulation-sensitive strategy consumers — the deposit gate and the rebalance TWAP-
+    ///         sanity legs (REC-9 / convergence N4/N5). On a DORMANT pool (no swaps for longer than
+    ///         this) the newest observation is old and `consultTwapTick` would extrapolate `_lastTick`
+    ///         across an unbounded gap, yielding a near-spot average with false confidence. Those
+    ///         consumers FAIL-CLOSED (revert `TwapStale`) instead of trusting it. This bounds ONLY the
+    ///         strategy/deposit-gate paths — it NEVER touches swaps (INV-2: swaps never revert; the
+    ///         swap path does not read this oracle). Spot can only move via a swap, and every swap
+    ///         refreshes the oracle, so a live pool is never stale; only a genuinely inactive pool
+    ///         trips it, and a single swap (permissionless) re-arms deposits.
     /// @dev    TODO(spec-freeze): PARAMS.md#TWAP_MAX_STALENESS_SEC — [PROVISIONAL] pending the same
     ///         Mechanism sim (M4/DM-4) that freezes TWAP_OBS_*. The MECHANISM (fail-closed) is final.
     uint32 internal constant TWAP_MAX_STALENESS_SEC = 7_200; // [PROVISIONAL] 2h ≫ 1800s window
@@ -191,74 +210,138 @@ library FeraConstants {
     uint256 internal constant DEPOSIT_TWAP_GATE_MAX_BPS = 500; // immutable legal ceiling
     // PARAMS.md#DEPOSIT_RATIO_MATCHED = true (immutable — structural: pro-rata band mints).
 
-    // ─────────────────────────────────────────────────────────────────────────────────────
-    // MEME vault strategy — band ladder + drip + guarded recenter — PARAMS.md §D (v2 FROZEN).
-    // Ladder 30/40/30 at k=1.3 / 2.0 / full-range. k frozen as k, converted to ticks here:
-    //   k=1.3 → log_1.0001(1.3) ≈ 2624 ticks; k=2.0 → ≈ 6932 ticks; ±10% → ≈ 953 ticks.
-    // ─────────────────────────────────────────────────────────────────────────────────────
+    /// @notice Hard cap on live bands per tranche (D-17 legacy naming kept for the constant's
+    ///         identity in prior audits; v3 semantics: base + limit rarely exceed 2, this is a
+    ///         defensive ceiling, not a ladder-sizing knob).
+    uint256 internal constant MAX_BANDS_PER_TRANCHE = 8;
 
-    uint256 internal constant MEME_LADDER_CORE_WEIGHT_BPS = 3_000; // PARAMS.md#MEME_LADDER_CORE_WEIGHT_BPS
-    uint256 internal constant MEME_LADDER_MID_WEIGHT_BPS = 4_000; // PARAMS.md#MEME_LADDER_MID_WEIGHT_BPS
-    uint256 internal constant MEME_LADDER_TAIL_WEIGHT_BPS = 3_000; // PARAMS.md#MEME_LADDER_TAIL_WEIGHT_BPS
-    int24 internal constant MEME_LADDER_CORE_TICKS = 2_624; // k=1.3 (PARAMS.md#MEME_LADDER_CORE_K)
-    int24 internal constant MEME_LADDER_MID_TICKS = 6_932; // k=2.0 (PARAMS.md#MEME_LADDER_MID_K)
-
-    /// PARAMS.md#MEME_TRANCHE_COUNT (FROZEN v2, D-16): MEME ships single-tranche (Core only).
-    uint8 internal constant MEME_TRANCHE_COUNT = 1;
-    uint8 internal constant RWA_TRANCHE_COUNT = 2; // Core + Anchor (D-16)
-    uint8 internal constant MAX_TRANCHES = 2;
-
-    /// PARAMS.md#MEME_DRIP_MIN_INTERVAL_SEC (FROZEN v2). Daily drip cadence.
-    uint32 internal constant MEME_DRIP_MIN_INTERVAL_SEC = 86_400;
-    /// PARAMS.md#MEME_DRIP_MIN_SIZE_BPS (FROZEN v2). Skip dust drips (< 0.10% of tranche TVL).
-    uint256 internal constant MEME_DRIP_MIN_SIZE_BPS = 10;
-    /// PARAMS.md#MEME_DRIP_BAND_K (FROZEN v2): k=1.3 single-sided limit band (no swap — Charm).
-    int24 internal constant MEME_DRIP_BAND_TICKS = 2_624;
-    /// PARAMS.md#MEME_DRIP_CONSOLIDATE_BPS (FROZEN v2, D-17): compound into an existing FEE band
-    /// whose center is within ±10% of spot instead of minting a new band. ±10% ≈ 953 ticks.
-    int24 internal constant MEME_DRIP_CONSOLIDATE_TICKS = 953;
-    /// PARAMS.md#MEME_MAX_BANDS_PER_TRANCHE (FROZEN v2, immutable hard cap, D-17).
-    uint256 internal constant MEME_MAX_BANDS_PER_TRANCHE = 8;
-
-    // Guarded principal recenter (D-15 / INV-5″ — the ONLY principal-touching MEME action):
-    /// PARAMS.md#MEME_RECENTER_DEPTH_FLOOR_MULT_BPS (FROZEN v2): 1.0× v1-full-range equivalent.
-    uint256 internal constant MEME_RECENTER_DEPTH_FLOOR_MULT_BPS = 10_000;
-    /// PARAMS.md#MEME_RECENTER_PERSIST_SEC (FROZEN v2): breach must persist ≥ 24h.
-    uint32 internal constant MEME_RECENTER_PERSIST_SEC = 86_400;
-    /// PARAMS.md#MEME_MIN_RECENTER_INTERVAL_SEC (FROZEN v2): ≥ 7d between recenters.
-    uint32 internal constant MEME_MIN_RECENTER_INTERVAL_SEC = 604_800;
-    /// PARAMS.md#MEME_RECENTER_TWAP_WINDOW_SEC / #MEME_RECENTER_TWAP_SANITY_BPS (FROZEN v2).
-    uint32 internal constant MEME_RECENTER_TWAP_WINDOW_SEC = 1_800;
-    uint256 internal constant MEME_RECENTER_TWAP_SANITY_BPS = 500; // ±5%
-    /// PARAMS.md#MEME_RECENTER_MAX_SLIPPAGE_BPS (FROZEN v2): value-conservation bound on execution.
-    uint256 internal constant MEME_RECENTER_MAX_SLIPPAGE_BPS = 100; // 1%
-    // PARAMS.md#MEME_RECENTER_RANDOM_WINDOW_SEC = 300 — keeper-side timing discipline (off-chain).
-
-    // ─────────────────────────────────────────────────────────────────────────────────────
-    // RWA vault strategy — PARAMS.md §C (v2 additions frozen).
-    // ─────────────────────────────────────────────────────────────────────────────────────
-
-    /// PARAMS.md#RWA_RECENTER_HYSTERESIS_BPS (FROZEN). Oracle move required to recenter (H < w).
-    uint256 internal constant RWA_HYSTERESIS_BPS = 50; // 0.50%
-    /// PARAMS.md#RWA_TWAP_SANITY_BPS (FROZEN). Max |pool-TWAP − oracle| to allow recenter (INV-6).
-    uint256 internal constant RWA_TWAP_SANITY_BPS = 200; // 2.00%
-    /// PARAMS.md#RWA_TWAP_WINDOW_SEC (FROZEN). Pool-TWAP sanity window.
-    uint32 internal constant RWA_TWAP_WINDOW = 1_800; // 30 min
-    /// PARAMS.md#RWA_MIN_RECENTER_INTERVAL_SEC (**v2 FROZEN — PT-6 ENFORCED**): bounds
-    /// tick-boundary griefing to ≤0.48%/day worst case. Timelocked legal range [3600,86400].
-    uint32 internal constant RWA_MIN_RECENTER_INTERVAL_SEC = 14_400; // 4h
-    /// PARAMS.md#RWA_OFFHOURS_WITHDRAW_FRAC (**v2 FROZEN — PT-7**): q=0.60 off-hours de-risk cap.
-    uint256 internal constant RWA_OFFHOURS_WITHDRAW_FRAC_BPS = 6_000;
-    /// PARAMS.md#RWA_EVENT_WITHDRAW_FRAC (**v2 FROZEN — D-M11**): q=0.80 on keeper-flagged
-    /// scheduled-event sessions only (bounded, fail-static: flag absent ⇒ normal q).
-    uint256 internal constant RWA_EVENT_WITHDRAW_FRAC_BPS = 8_000;
-    /// TODO(spec-freeze): PARAMS.md#RWA_BAND_HALFWIDTH_BPS = 100 — [PROVISIONAL] (DM-6 / V4).
-    /// 1 tick ≈ 1bp; scaffold converts bps→ticks 1:1 (exact conversion at wire time).
-    int24 internal constant RWA_BAND_HALF_WIDTH_TICKS = 100; // PROVISIONAL (±1.0%)
-    /// TODO(spec-freeze): PARAMS.md#RWA_ANCHOR_BAND_HALFWIDTH_BPS = 500 — [PROVISIONAL].
-    int24 internal constant RWA_ANCHOR_BAND_HALF_WIDTH_TICKS = 500; // PROVISIONAL (±5%)
-    /// TODO(spec-freeze): PARAMS.md#RWA_STALE_AFTER_OPEN_SEC — [PROVISIONAL] per-feed (D-9).
+    /// @notice RWA Chainlink-feed staleness bound used by the (non-reverting) oracle read that feeds
+    ///         the v3 inventory-driven limit skew's mean-reversion bias (§3 below). A stale/absent
+    ///         feed degrades to pure inventory-driven skew (never reverts the rebalance).
     uint256 internal constant ORACLE_STALENESS_MAX = 3_600; // PROVISIONAL (1h)
+
+    // ─────────────────────────────────────────────────────────────────────────────────────
+    // v3 BASE + LIMIT + IDLE strategy — contracts/VAULT_STRATEGY_V3.md. THE ONLY vault strategy
+    // (the legacy Core/Mid/Tail ladder + drip + INV-5″ guarded recenter is REMOVED, not stubbed).
+    // The industry-standard shape (Arrakis/Gamma/Charm/Steer): ONE wide symmetric BASE around spot
+    // holding most of the capital (its width now VOL-ADAPTIVE, §2), ONE narrow LIMIT near spot whose
+    // skew is INVENTORY-DRIVEN (§3, deterministic — never a static config knob), and an explicit
+    // IDLE reserve (% of NAV) for instant withdrawals + a rebalancing buffer. Per-tranche TIER config:
+    // Steady (wide base / small limit / larger idle) vs Active (narrow base / aggressive limit / small
+    // idle) — these are now base MAGNITUDES the vol multiplier scales, not the final width.
+    // ─────────────────────────────────────────────────────────────────────────────────────
+
+    /// @notice Tier ids passed to `createBaseLimitPool` / stored per (pool,tranche).
+    uint8 internal constant TIER_STEADY = 0;
+    uint8 internal constant TIER_ACTIVE = 1;
+
+    // Steady tier — wide base, small limit, larger idle (conservative capital). Half-widths below are
+    // the TIER BASE MAGNITUDE fed into the vol-adaptive multiplier (§2), not necessarily the final
+    // on-chain width.
+    int24 internal constant STEADY_BASE_HALF_TICKS = 6_932; // ±100% (k=2.0) wide symmetric base
+    int24 internal constant STEADY_LIMIT_HALF_TICKS = 2_624; // ±30% narrow limit
+    uint16 internal constant STEADY_IDLE_BPS = 1_000; // 10% of NAV kept idle
+
+    // Active tier — narrow base, aggressive limit, small idle (yield-max capital).
+    int24 internal constant ACTIVE_BASE_HALF_TICKS = 2_624; // ±30% narrow base (8.1x CE)
+    int24 internal constant ACTIVE_LIMIT_HALF_TICKS = 953; // ±10% aggressive limit
+    uint16 internal constant ACTIVE_IDLE_BPS = 300; // 3% idle
+
+    /// @notice Hard bound on the keeper/owner-settable idle fraction (misuse-resistance: an idle of
+    ///         100% would silently un-invest the whole vault). Timelocked-owner set WITHIN this.
+    uint16 internal constant IDLE_BPS_MAX = 3_000; // 30%
+
+    /// @notice Limit-skew must stay in (5000, 9500] — always straddles spot (never strictly
+    ///         single-sided) so the limit both improves CE AND holds a rebalancing sliver. v3: the
+    ///         VALUE within this bound is now DERIVED from the tranche's actual token surplus
+    ///         (`FeraVault._inventorySkewBps`), never a static/governed number (§3).
+    uint16 internal constant LIMIT_SKEW_MIN_BPS = 5_001;
+    uint16 internal constant LIMIT_SKEW_MAX_BPS = 9_500;
+
+    /// @notice v3: RWA mean-reversion oracle bias on the inventory-driven limit skew (§3). The signed
+    ///         pool-vs-oracle deviation is clamped to ± this bound before blending into the skew score
+    ///         (bounds the influence of an extreme/manipulated oracle read), and its BLEND WEIGHT
+    ///         against the pure-inventory score is capped at `ORACLE_BIAS_WEIGHT_BPS` — inventory
+    ///         surplus remains the dominant signal; the oracle only nudges within it.
+    uint256 internal constant ORACLE_BIAS_MAX_DEV_BPS = 1_000; // ±10% cap on the deviation INPUT
+    uint256 internal constant ORACLE_BIAS_WEIGHT_BPS = 3_000; // oracle contributes ≤30% of the score
+
+    /// @notice v3: anti-whipsaw DWELL (how long an out-of-range base must persist before a guarded
+    ///         recenter may fire) is now DECOUPLED from the min-interval floor between rebalances
+    ///         (previously the SAME constant served both, conflating "is this move real" with "how
+    ///         often can we act at all"). MEME goes out of range OFTEN and is expected to — the dwell
+    ///         is kept short (still non-zero + TWAP-confirmed) so it recenters reasonably promptly;
+    ///         RWA's dwell stays long (a real stock's price is comparatively stable, it should not
+    ///         need to move often).
+    uint32 internal constant MEME_OOR_DWELL_SEC = 900; // 15 min — confirm a real move quickly
+    uint32 internal constant RWA_OOR_DWELL_SEC = 14_400; // 4h — unchanged, RWA is calm
+
+    /// @notice Min spacing between successive rebalance actions (R-15 anti-griefing floor), PER
+    ///         REGIME. MEME shortened 3_600→1_800 (v3): safety comes from the PER-ACTION bounds
+    ///         (dwell + TWAP-confirm + slippage + the new IL cap, §4) — NOT from making recentering
+    ///         rare — so the interval only needs to be non-zero/bounded, not long. RWA unchanged
+    ///         (slow cadence is appropriate for a comparatively stable reference price).
+    uint32 internal constant MEME_MIN_REBALANCE_INTERVAL_SEC = 1_800; // 30 min (was 3_600 in v2)
+    uint32 internal constant RWA_MIN_REBALANCE_INTERVAL_SEC = 14_400; // 4h (unchanged)
+
+    /// @notice Pool-TWAP window + spot-vs-TWAP sanity for the rebalance gates (price can snap back;
+    ///         a lone spot spike whose TWAP disagrees must NOT trigger a base recenter).
+    uint32 internal constant REBALANCE_TWAP_WINDOW_SEC = 1_800; // 30 min
+    uint256 internal constant REBALANCE_TWAP_SANITY_BPS = 500; // ±5% spot-vs-TWAP
+
+    /// @notice Hard max-SLIPPAGE bound on ANY rebalancing token-ratio swap — whether executed as a
+    ///         self-swap against the vault's OWN v4 pool or routed through a whitelisted external
+    ///         venue. Executed output MUST be ≥ (1 − this) × the pool-TWAP-implied output, else the
+    ///         action reverts. This bounds EXECUTION QUALITY (price impact vs the TWAP reference) —
+    ///         it is a DIFFERENT bound from `MAX_IL_BPS_PER_RECENTER` below (v3 clarification): a
+    ///         trade can clear this ratio bound (e.g. execute within 1% of TWAP-implied) and still put
+    ///         a large ABSOLUTE fraction of tranche NAV at risk in one shot if the trade itself is
+    ///         huge — that absolute-NAV-fraction risk is what the IL cap bounds.
+    uint256 internal constant MAX_REBALANCE_SLIPPAGE_BPS = 100; // 1%
+
+    /// @notice v3 NEW — IL-AWARE STAGED RECENTER. Caps the NOTIONAL (value, in token1 terms) that any
+    ///         ONE guarded-base-recenter self-swap (or standalone `selfSwap` call) may put at risk, as
+    ///         a fraction of the tranche's pre-action NAV. If the "ideal" 50/50-rebalancing amount
+    ///         exceeds this budget, `rebalanceBase` swaps ONLY up to the budget (a PARTIAL recenter —
+    ///         `StrategyKind.BaseRecenterPartial`) and re-anchors the base band regardless (re-ticking
+    ///         alone does not realize IL — only the swap's price impact does); the leftover imbalance
+    ///         stays in the tranche's reserve for a LATER action (once the min-interval has re-elapsed)
+    ///         to continue via `selfSwap` or the swap-free `rebalanceLimit`. PROVABLY BOUNDED: a swap
+    ///         can never lose more value than it puts in (amountOut ≥ 0 always), so capping the
+    ///         notional to `ilBudget = NAV × MAX_IL_BPS_PER_RECENTER / BPS` trivially bounds the
+    ///         worst-case realized loss of that swap to ≤ `ilBudget` — independent of price-gap size.
+    uint256 internal constant MAX_IL_BPS_PER_RECENTER = 300; // 3% of tranche NAV per call [PROVISIONAL]
+
+    // ─────────────────────────────────────────────────────────────────────────────────────
+    // v3 NEW — VOL-ADAPTIVE POSITION SIZING (§2). Base/limit half-widths scale off the SAME
+    // realized-volatility EWMA the MEME dynamic fee already reads (FeraHook's packed `_memeState`,
+    // read via `IFeraHook.memeStateOf` — NEVER re-estimated here, only converted to σ via the SAME
+    // conversion FeeLogic.quoteLpFee uses: `FeeLogic.sigmaTicks`). Width multiplier is a linear ramp
+    // with a dead-band, mirroring the fee curve's shape for calibration consistency, CLAMPED to a
+    // governance-set [min,max] band (`FeraVault.volWidthMultMinBps/MaxBps`, timelocked-owner-settable
+    // WITHIN the immutable legal range below — the Gamma lesson: bounds live in code) so the width
+    // can never degenerate to zero nor blow out unbounded. RWA has no EWMA vol signal wired (its
+    // dynamic fee uses oracle deviation, not an EWMA) — RWA multiplier is fixed at 1x (BPS).
+    // ─────────────────────────────────────────────────────────────────────────────────────
+
+    /// @notice Default governance-set clamp band (bps of 1x = BPS). 0.5x floor / 2.5x ceiling.
+    uint256 internal constant VOL_WIDTH_MULT_MIN_BPS_DEFAULT = 5_000; // 0.5x
+    uint256 internal constant VOL_WIDTH_MULT_MAX_BPS_DEFAULT = 25_000; // 2.5x
+    /// @notice Immutable LEGAL range the timelocked owner's `setVolWidthMultBounds` can never widen
+    ///         past (the Gamma lesson — bounds live in code, not just in a mutable default).
+    uint256 internal constant VOL_WIDTH_MULT_MIN_LEGAL_BPS = 1_000; // 0.1x hard floor
+    uint256 internal constant VOL_WIDTH_MULT_MAX_LEGAL_BPS = 50_000; // 5.0x hard ceiling
+    /// @notice Dead-band (ticks of σ) below which the multiplier sits at its floor — mirrors
+    ///         `MEME_FEE_SIGMA0_TICKS`'s intuition (micro-noise should not widen the band) but is a
+    ///         DISTINCT, independently-tunable constant (sizing and fee-pricing are separate concerns
+    ///         that happen to share the same σ input).
+    uint256 internal constant VOL_WIDTH_MULT_SIGMA0_TICKS = 4;
+    /// @notice Linear ramp slope (bps of multiplier per tick of σ above the dead-band). Calibrated so
+    ///         the multiplier reaches its default ceiling (25_000bps) at σ≈137 ticks — the same
+    ///         realized-vol regime the MEME fee curve reaches ITS ceiling at (internal consistency:
+    ///         the pair the fee curve already calls "very volatile" is also the pair this curve calls
+    ///         "needs the widest band").
+    uint256 internal constant VOL_WIDTH_MULT_SLOPE_BPS_PER_TICK = 150;
 
     // ─────────────────────────────────────────────────────────────────────────────────────
     // cap(t) logistic (S-curve, ~4-year horizon) — PARAMS.md §E.

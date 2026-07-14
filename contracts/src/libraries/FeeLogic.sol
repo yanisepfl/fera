@@ -50,11 +50,10 @@ library FeeLogic {
         uint256 floorPips = FeraConstants.MEME_FEE_FLOOR_PIPS;
         uint256 ceilPips = FeraConstants.MEME_FEE_CEIL_PIPS;
 
-        // σ = RMS per-swap tick move ≈ per-swap bps of realized vol.
-        // volEwmaX = EWMA(r²)·2^16 ⇒ isqrt(volEwmaX) = √(EWMA(r²))·2^8 ⇒ (>>8) = √(EWMA(r²)) = σ.
-        // (The hook clamps volEwmaX to 2^50; the library is defensively overflow-safe for ANY input so
-        //  the §5/INV-2 "never reverts" holds even if a caller passes an unclamped value.)
-        uint256 sigma = _isqrt(in_.volEwmaX) >> 8;
+        // σ = RMS per-swap tick move ≈ per-swap bps of realized vol. Shared conversion — see
+        // `sigmaTicks` (also consumed by FeraVault's vol-adaptive band-width multiplier so both
+        // readers of the estimator agree numerically; the estimator itself is NEVER duplicated).
+        uint256 sigma = sigmaTicks(in_.volEwmaX);
 
         // feeBase = clamp(FLOOR + SLOPE·max(0, σ − SIGMA0), FLOOR, CEIL). Dead-band keeps micro-noise at
         // the floor; the ramp is linear in σ (not σ²) — LVR per-trade compensation intuition §1.5. The
@@ -170,5 +169,41 @@ library FeeLogic {
         if (x < lo) x = lo;
         if (x > hi) x = hi;
         return uint24(x);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────
+    // v3 (contracts/VAULT_STRATEGY_V3.md §2) — shared EWMA-state conversion. `sigmaTicks` is the
+    // ONE place `volEwmaX` (EWMA(r²)·2^16, the packed MEME state slot) is converted to a per-swap
+    // RMS tick move σ; both the dynamic-fee curve (`_memeFee` above) and FeraVault's vol-adaptive
+    // band-width multiplier (`widthMultiplierBps`) call it, so a single estimator has exactly ONE
+    // reader-side interpretation — the Vault does not (and must not) re-derive vol independently.
+    // ─────────────────────────────────────────────────────────────────────────────────────
+
+    /// @notice σ = √(EWMA(r²)) from the packed Q16 state. Never reverts (see `_isqrt`).
+    function sigmaTicks(uint256 volEwmaX) internal pure returns (uint256) {
+        // isqrt(volEwmaX) = √(EWMA(r²))·2^8 ⇒ (>>8) = √(EWMA(r²)) = σ.
+        return _isqrt(volEwmaX) >> 8;
+    }
+
+    /// @notice Vol-adaptive band-width multiplier (bps of 1x) from the SAME EWMA(r²) the dynamic fee
+    ///         reads — wider bands for a volatile pool, tighter for a calm one. A linear ramp with a
+    ///         dead-band (mirrors the fee curve's shape for calibration consistency — see
+    ///         FeraConstants.VOL_WIDTH_MULT_SIGMA0_TICKS/_SLOPE_BPS_PER_TICK), clamped to the CALLER-
+    ///         supplied [minBps, maxBps] so the result can never degenerate to zero width nor blow out
+    ///         unbounded — those bounds are governance-set but themselves immutable-legal-range-
+    ///         bounded in `FeraVault` (the Gamma lesson). Pure; never reverts.
+    /// @param volEwmaX the packed EWMA(r²)·2^16 read from `IFeraHook.memeStateOf` — NOT re-estimated.
+    /// @param minBps   floor of the governance-set clamp band (bps of 1x).
+    /// @param maxBps   ceiling of the governance-set clamp band (bps of 1x); MUST be ≥ minBps.
+    function widthMultiplierBps(uint256 volEwmaX, uint256 minBps, uint256 maxBps)
+        internal
+        pure
+        returns (uint256 multBps)
+    {
+        uint256 sigma = sigmaTicks(volEwmaX);
+        uint256 sigma0 = FeraConstants.VOL_WIDTH_MULT_SIGMA0_TICKS;
+        if (sigma <= sigma0) return minBps;
+        uint256 raw = minBps + FeraConstants.VOL_WIDTH_MULT_SLOPE_BPS_PER_TICK * (sigma - sigma0);
+        return raw > maxBps ? maxBps : raw;
     }
 }

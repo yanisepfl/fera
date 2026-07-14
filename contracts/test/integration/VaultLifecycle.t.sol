@@ -11,11 +11,10 @@ import {RevenueDistributor} from "../../src/RevenueDistributor.sol";
 import {IFeraHook} from "../../src/interfaces/IFeraHook.sol";
 import {IFeraVault} from "../../src/interfaces/IFeraVault.sol";
 import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol";
+import {IAnchorStaking} from "../../src/interfaces/IAnchorStaking.sol";
 import {FeraTypes} from "../../src/libraries/FeraTypes.sol";
-import {FeraConstants} from "../../src/libraries/FeraConstants.sol";
 
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
-import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -23,10 +22,12 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @notice Vault v2 lifecycle over a real v4 PoolManager: MEME band-ladder createPool → tranche
-///         deposit → cooldown → withdraw; R-12 first-depositor defense per tranche; INV-11
+/// @notice Vault v3 lifecycle over a real v4 PoolManager: base+limit+idle createBaseLimitPool →
+///         tranche deposit → cooldown → withdraw; R-12 first-depositor defense per tranche; INV-11
 ///         (deposits pausable + TWAP-gated, withdrawals never); the immutable [50,500]bp gate
-///         bounds (Gamma lesson); and the INV-5″ default posture (healthy pool ⇒ no recenter).
+///         bounds (Gamma lesson). The legacy MEME ladder + drip + INV-5″ guarded-recenter surface
+///         is removed (contracts/VAULT_STRATEGY_V3.md item 1) — its gate-matrix coverage now lives
+///         in test/integration/BaseLimitStrategy.t.sol.
 contract VaultLifecycleTest is Deployers {
     FeraVault internal vault;
     FeraHook internal hook;
@@ -58,7 +59,7 @@ contract VaultLifecycleTest is Deployers {
 
         // keeper = owner = this test (so we can createPool / pause / strategize).
         vault = new FeraVault(
-            manager, IFeraHook(hookAddr), IRevenueDistributor(address(rev)), address(shareImpl), address(this), address(this)
+            manager, IFeraHook(hookAddr), IRevenueDistributor(address(rev)), IAnchorStaking(address(0)), address(shareImpl), address(this), address(this)
         );
         deployCodeTo("FeraHook.sol:FeraHook", abi.encode(manager, address(vault)), hookAddr);
         hook = FeraHook(hookAddr);
@@ -71,7 +72,9 @@ contract VaultLifecycleTest is Deployers {
             hooks: IHooks(hookAddr)
         });
 
-        id = vault.createPool(poolKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, "FERA-LP", "fLP");
+        // v3.3 permissionless creation: team-curation lever must be set before pool creation.
+        vault.setAllowedQuoteAsset(Currency.unwrap(currency0), true);
+        id = vault.createBaseLimitPool(poolKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "FERA-LP", "fLP");
 
         MockERC20(Currency.unwrap(currency0)).approve(address(vault), type(uint256).max);
         MockERC20(Currency.unwrap(currency1)).approve(address(vault), type(uint256).max);
@@ -81,21 +84,15 @@ contract VaultLifecycleTest is Deployers {
         return IERC20(vault.shareToken(id, 0));
     }
 
-    // ── D-12/D-16: MEME createPool builds the 30/40/30 single-tranche ladder ─────────────────
-    function test_createPool_memeLadderShape() public view {
-        assertEq(vault.trancheCount(id), 1, "MEME must be single-tranche (D-16)");
-        assertEq(vault.bandCount(id, 0), 3, "ladder is 3 principal bands");
+    // ── base+limit+idle shape: 2 tranches (Steady/Active), one BASE band each at genesis ─────
+    function test_createBaseLimitPool_shape() public view {
+        assertEq(vault.trancheCount(id), 2, "base+limit pool ships Steady + Active");
+        assertEq(vault.bandCount(id, 0), 1, "one BASE band at genesis (Steady)");
+        assertEq(vault.bandCount(id, 1), 1, "one BASE band at genesis (Active)");
 
-        (int24 lo0, int24 hi0,, bool p0) = vault.bandAt(id, 0, 0); // core ±k=1.3
-        (int24 lo1, int24 hi1,, bool p1) = vault.bandAt(id, 0, 1); // mid ±k=2.0
-        (int24 lo2, int24 hi2,, bool p2) = vault.bandAt(id, 0, 2); // tail full range
-        assertTrue(p0 && p1 && p2, "all inception bands are principal");
-        assertEq(lo0, -2640, "core lower");
-        assertEq(hi0, 2640, "core upper");
-        assertEq(lo1, -6960, "mid lower");
-        assertEq(hi1, 6960, "mid upper");
-        assertEq(lo2, TickMath.minUsableTick(60), "tail lower");
-        assertEq(hi2, TickMath.maxUsableTick(60), "tail upper");
+        (int24 lo0, int24 hi0,, bool p0) = vault.bandAt(id, 0, 0);
+        assertTrue(p0, "the genesis band is principal (BASE)");
+        assertTrue(lo0 < 0 && hi0 > 0, "base straddles the genesis spot");
     }
 
     // ── R-12: first-depositor / share-inflation defense (per tranche) ────────────────────────
@@ -107,15 +104,9 @@ contract VaultLifecycleTest is Deployers {
         assertGt(shares, 0, "no shares minted");
         assertEq(_share().totalSupply(), shares + MIN_LIQ, "total supply != shares + locked");
 
-        // All three ladder bands are funded.
+        // The single BASE band is funded.
         (,, uint128 l0,) = vault.bandAt(id, 0, 0);
-        (,, uint128 l1,) = vault.bandAt(id, 0, 1);
-        (,, uint128 l2,) = vault.bandAt(id, 0, 2);
-        assertGt(l0, 0, "core unfunded");
-        assertGt(l1, 0, "mid unfunded");
-        assertGt(l2, 0, "tail unfunded");
-        // Concentration sanity: core (30% of capital, ±30% band) quotes DEEPER than tail (30%, full).
-        assertGt(l0, l2, "ladder not concentrated");
+        assertGt(l0, 0, "base band unfunded");
     }
 
     /// A second depositor of the same size gets ~proportional shares (ratio-matched pro-rata add).
@@ -205,40 +196,24 @@ contract VaultLifecycleTest is Deployers {
         vault.setDepositTwapGate(200);
     }
 
-    // ── INV-5″ default posture: a healthy ladder REFUSES to recenter ─────────────────────────
-    function test_INV5pp_healthyPoolRejectsRecenter() public {
-        vault.deposit(id, 0, 100e18, 100e18, 0);
-
-        assertFalse(vault.pokeDepthBreach(id), "healthy 4.1x ladder flagged as breached");
-        assertEq(vault.depthBreachSince(id), 0, "breach clock armed on healthy pool");
-
-        vm.expectRevert(IFeraVault.DepthNotBreached.selector);
-        vault.recenterMeme(id, bytes32(0));
-    }
-
-    /// RWA-only actions revert on MEME (and the RWA entry rejects MEME pools).
-    function test_INV5pp_memeRejectsRwaActions() public {
-        vm.expectRevert(IFeraVault.NotRwa.selector);
-        vault.recenter(id, -60, 60, bytes32(0));
-        vm.expectRevert(IFeraVault.NotRwa.selector);
-        vault.widen(id, -60, 60, bytes32(0));
-        vm.expectRevert(IFeraVault.NotRwa.selector);
-        vault.partialWithdraw(id, 1, bytes32(0));
-    }
-
-    /// Drip is gated by the dust floor (PARAMS.md#MEME_DRIP_MIN_SIZE_BPS) when no fees exist.
-    function test_drip_revertsOnDust() public {
-        vault.deposit(id, 0, 100e18, 100e18, 0);
-        vm.warp(block.timestamp + FeraConstants.MEME_DRIP_MIN_INTERVAL_SEC + 1);
-        vm.expectRevert(IFeraVault.DripTooSmall.selector);
-        vault.drip(id, 0);
-    }
-
     // ── access control ───────────────────────────────────────────────────────────────────────
-    function test_createPool_onlyKeeper() public {
+    /// @notice v3.3 (contracts/VAULT_STRATEGY_V3.md §11): pool creation is now PERMISSIONLESS — the
+    ///         former `onlyKeeper` gate is gone. A random, non-keeper caller may create a NEW pool
+    ///         (distinct key from `poolKey`, which is already initialized by `setUp`) against the
+    ///         SAME already-allowlisted quote asset. The comprehensive permissionless-creation +
+    ///         quote-allowlist + RWA-feed-registry + emissions-eligible-flag matrix lives in
+    ///         `test/integration/PermissionlessPoolCreation.t.sol`.
+    function test_createBaseLimitPool_permissionless_notKeeperSucceeds() public {
+        PoolKey memory freshKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: 100, // distinct from setUp's poolKey (spacing 60) ⇒ distinct pool id
+            hooks: IHooks(address(hook))
+        });
         vm.prank(makeAddr("notKeeper"));
-        vm.expectRevert(IFeraVault.OnlyKeeper.selector);
-        vault.createPool(poolKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, "x", "x");
+        PoolId freshId = vault.createBaseLimitPool(freshKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "x", "x");
+        assertEq(vault.trancheCount(freshId), 2, "permissionless creation must still build both tranches");
     }
 
     function test_pauseDeposits_onlyOwner() public {
@@ -249,6 +224,6 @@ contract VaultLifecycleTest is Deployers {
 
     function test_unknownTranche_reverts() public {
         vm.expectRevert(IFeraVault.UnknownTranche.selector);
-        vault.deposit(id, 1, 1e18, 1e18, 0); // MEME has only tranche 0 (D-16)
+        vault.deposit(id, 2, 1e18, 1e18, 0); // base+limit pools have exactly 2 tranches (0,1)
     }
 }

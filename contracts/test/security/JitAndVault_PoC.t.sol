@@ -13,6 +13,7 @@ import {IFeraHook} from "../../src/interfaces/IFeraHook.sol";
 import {IFeraVault} from "../../src/interfaces/IFeraVault.sol";
 import {IFeraShare} from "../../src/interfaces/IFeraShare.sol";
 import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol";
+import {IAnchorStaking} from "../../src/interfaces/IAnchorStaking.sol";
 import {FeraTypes} from "../../src/libraries/FeraTypes.sol";
 import {FeraConstants} from "../../src/libraries/FeraConstants.sol";
 
@@ -64,7 +65,7 @@ contract JitAndVaultPoCTest is Deployers {
         );
         address hookAddr = address(flags | (uint160(0x3B17) << 14));
         vault = new FeraVault(
-            manager, IFeraHook(hookAddr), IRevenueDistributor(address(rev)), address(shareImpl), address(this), address(this)
+            manager, IFeraHook(hookAddr), IRevenueDistributor(address(rev)), IAnchorStaking(address(0)), address(shareImpl), address(this), address(this)
         );
         deployCodeTo("FeraHook.sol:FeraHook", abi.encode(manager, address(vault)), hookAddr);
         hook = FeraHook(hookAddr);
@@ -76,7 +77,9 @@ contract JitAndVaultPoCTest is Deployers {
             tickSpacing: 60,
             hooks: IHooks(hookAddr)
         });
-        id = vault.createPool(pk, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, "MEME", "M");
+        // v3.3 permissionless creation: team-curation lever must be set before pool creation.
+        vault.setAllowedQuoteAsset(Currency.unwrap(currency0), true);
+        id = vault.createBaseLimitPool(pk, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "MEME", "M");
 
         _fund(honest, 1_000e18);
         _fund(attacker, 1_000e18);

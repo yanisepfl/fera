@@ -35,7 +35,7 @@ contract TwapWindowPoCTest is Deployers {
     PoolKey internal pkey;
     PoolId internal id;
 
-    uint32 internal constant WINDOW = FeraConstants.RWA_TWAP_WINDOW; // 1800s — the widest TWAP window
+    uint32 internal constant WINDOW = FeraConstants.REBALANCE_TWAP_WINDOW_SEC; // 1800s — the widest TWAP window
     uint256 internal constant T0 = 2_000_000;
 
     function setUp() public {
@@ -94,7 +94,7 @@ contract TwapWindowPoCTest is Deployers {
         assertEq(uint256(FeraConstants.TWAP_OBS_CARDINALITY), 24, "cardinality drift");
         assertGe(
             (uint256(FeraConstants.TWAP_OBS_CARDINALITY) - 1) * FeraConstants.TWAP_OBS_SPACING_SEC,
-            FeraConstants.RWA_TWAP_WINDOW,
+            FeraConstants.REBALANCE_TWAP_WINDOW_SEC,
             "CARD*SPACING must span the max TWAP window"
         );
     }

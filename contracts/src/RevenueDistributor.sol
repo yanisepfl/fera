@@ -41,6 +41,19 @@ contract RevenueDistributor is IRevenueDistributor {
     ///      (which would permanently brick pull for that token), so we revert. This makes crediting
     ///      permissionless-but-safe: only funds actually received can ever be booked.
     function notifyRevenue(address token, uint256 amount) external {
+        _notify(token, amount, true);
+    }
+
+    /// @inheritdoc IRevenueDistributor
+    function notifyRevenueNoStakers(address token, uint256 amount) external {
+        _notify(token, amount, false);
+    }
+
+    /// @dev Shared 50/25/25 partition + balance-delta guard (R-22). `stakersEligible=false` folds
+    ///      the stakers' leg into treasury instead (v3.1 no-staker routing, §9 of
+    ///      contracts/VAULT_STRATEGY_V3.md) — the ONLY difference from the historical `notifyRevenue`
+    ///      behavior; `notifyRevenue` itself (stakersEligible=true) is byte-for-byte unchanged.
+    function _notify(address token, uint256 amount, bool stakersEligible) internal {
         if (amount == 0) return;
 
         // Balance-delta / pull-in guard (R-22). balanceOf ≥ _accounted + amount ⇔ the `amount` was
@@ -52,6 +65,14 @@ contract RevenueDistributor is IRevenueDistributor {
         uint256 toStakers = (amount * FeraConstants.REV_STAKERS_BPS) / FeraConstants.BPS;
         uint256 toTreasury = (amount * FeraConstants.REV_TREASURY_BPS) / FeraConstants.BPS;
         uint256 toOps = amount - toStakers - toTreasury; // remainder-to-last ⇒ no dust (INV-10)
+
+        if (!stakersEligible) {
+            // v3.1 no-staker routing: nobody is staked to fairly divide this pro-rata to — route the
+            // would-be stakers' half to treasury instead of stranding it as an unclaimable pending
+            // balance (or worse, a windfall for whoever stakes first). Still an EXACT partition.
+            toTreasury += toStakers;
+            toStakers = 0;
+        }
 
         _pending[stakers][token] += toStakers;
         _pending[treasury][token] += toTreasury;

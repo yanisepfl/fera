@@ -9,6 +9,7 @@ import {FeraShare} from "../../src/shares/FeraShare.sol";
 import {RevenueDistributor} from "../../src/RevenueDistributor.sol";
 import {IFeraHook} from "../../src/interfaces/IFeraHook.sol";
 import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol";
+import {IAnchorStaking} from "../../src/interfaces/IAnchorStaking.sol";
 import {FeraTypes} from "../../src/libraries/FeraTypes.sol";
 
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
@@ -57,7 +58,7 @@ contract RatchetPoCTest is Deployers {
         );
         address hookAddr = address(flags | (uint160(0x9999) << 14));
         vault = new FeraVault(
-            manager, IFeraHook(hookAddr), IRevenueDistributor(address(rev)), address(shareImpl), address(this), address(this)
+            manager, IFeraHook(hookAddr), IRevenueDistributor(address(rev)), IAnchorStaking(address(0)), address(shareImpl), address(this), address(this)
         );
         deployCodeTo("FeraHook.sol:FeraHook", abi.encode(manager, address(vault)), hookAddr);
 
@@ -68,7 +69,9 @@ contract RatchetPoCTest is Deployers {
             tickSpacing: 60,
             hooks: IHooks(hookAddr)
         });
-        id = vault.createPool(poolKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, "FERA-LP", "fLP");
+        // v3.3 permissionless creation: team-curation lever must be set before pool creation.
+        vault.setAllowedQuoteAsset(Currency.unwrap(currency0), true);
+        id = vault.createBaseLimitPool(poolKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "FERA-LP", "fLP");
 
         _fund(honest, 200e18);
         _fund(attacker, 20e18);

@@ -19,6 +19,7 @@ yarn-error.log*
 /contracts/broadcast/
 /contracts/.git/
 !/contracts/broadcast/**/dry-run/   # keep nothing sensitive; dir excluded anyway
+contracts/.env
 lcov.info
 coverage/
 

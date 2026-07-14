@@ -292,4 +292,65 @@ contract FormalMoneyInvariants is Test {
         uint256 acc = accBase + d;
         assert(_credit(s1, acc, accBase) + _credit(s2, acc, accBase) <= pulled);
     }
+
+    // ════════════════════════════════════════════════════════════════════════════════════════════
+    // withdrawSingle ≤ pro-rata NAV (Attack-4 / VAULT_STRATEGY_V2.md §4 — AGENT-6 re-audit extension).
+    // The withdrawer takes their floored pro-rata IN-KIND slice (out0,out1), then self-swaps the unwanted
+    // leg into `tokenOut`. A pool swap only LOSES value (taker receives ≤ spot). Proven: the single-token
+    // output valued at spot is NEVER more than the in-kind slice value (≤ +1 wei of floor rounding) — a
+    // single-coin exit can never over-pay vs a plain in-kind `withdraw`, so no value is extracted from the
+    // remaining holders. Mirrors src/FeraVault.sol::_cbWithdrawSingle (floored slice + value-losing swap).
+    // ════════════════════════════════════════════════════════════════════════════════════════════
+
+    /// HALMOS: price P = pNum/pDen (token1 per token0). `got` is the fair-or-worse self-swap output — a
+    /// pool swap of `leg` never yields more numeraire than `leg` at spot. For ALL slices/prices/outputs,
+    /// value(single-token output) ≤ value(in-kind slice) + 1 wei. `wantToken0` selects the leg swapped.
+    function check_withdrawSingle_leProRata(
+        uint256 out0,
+        uint256 out1,
+        uint256 got,
+        uint256 pNum,
+        uint256 pDen,
+        bool wantToken0
+    ) public pure {
+        vm.assume(pNum > 0 && pDen > 0 && pNum < 2 ** 128 && pDen < 2 ** 128);
+        vm.assume(out0 < 2 ** 120 && out1 < 2 ** 120 && got < 2 ** 120);
+
+        uint256 proRata = out0.mulDiv(pNum, pDen) + out1; // in-kind slice, in token1 numeraire
+        if (wantToken0) {
+            // swap out1 → token0 (fair-or-worse: the token0 received is worth ≤ the token1 leg spent).
+            vm.assume(got.mulDiv(pNum, pDen) <= out1);
+            uint256 single = (out0 + got).mulDiv(pNum, pDen); // all token0, valued in token1
+            assert(single <= proRata + 1); // +1: floor superadditivity, NOT a real over-payment
+        } else {
+            // swap out0 → token1 (fair-or-worse: the token1 received is worth ≤ the token0 leg spent).
+            vm.assume(got <= out0.mulDiv(pNum, pDen));
+            uint256 single = out1 + got; // all token1
+            assert(single <= proRata);
+        }
+    }
+
+    function testFuzz_withdrawSingle_leProRata(
+        uint256 out0,
+        uint256 out1,
+        uint256 got,
+        uint256 pNum,
+        uint256 pDen,
+        bool wantToken0
+    ) public pure {
+        pNum = bound(pNum, 1, 2 ** 128 - 1);
+        pDen = bound(pDen, 1, 2 ** 128 - 1);
+        out0 = bound(out0, 0, 2 ** 120 - 1);
+        out1 = bound(out1, 0, 2 ** 120 - 1);
+        uint256 proRata = out0.mulDiv(pNum, pDen) + out1;
+        if (wantToken0) {
+            got = bound(got, 0, 2 ** 120 - 1);
+            vm.assume(got.mulDiv(pNum, pDen) <= out1);
+            assert((out0 + got).mulDiv(pNum, pDen) <= proRata + 1);
+        } else {
+            uint256 cap = out0.mulDiv(pNum, pDen);
+            got = bound(got, 0, cap);
+            assert(out1 + got <= proRata);
+        }
+    }
 }

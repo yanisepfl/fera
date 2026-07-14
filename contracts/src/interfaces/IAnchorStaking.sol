@@ -68,4 +68,10 @@ interface IAnchorStaking {
 
     /// @notice Total staked FERA (basis for the 50% revenue-share pro-rata).
     function totalStaked() external view returns (uint256);
+
+    /// @notice Whether `token` is on the curated reward-token allowlist (REC-6/REC-7). Consulted by
+    ///         FeraVault's v3.1 unified fee-routing (contracts/VAULT_STRATEGY_V3.md §9) to decide
+    ///         whether a pool's native/quote tokens are already liquid reward assets (no-swap path)
+    ///         or whether the native side needs a bounded self-swap into the quote asset first.
+    function isRewardToken(address token) external view returns (bool);
 }
