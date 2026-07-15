@@ -14,13 +14,37 @@ optimizer = true
 optimizer_runs = 44444444
 via_ir = true                   # required: 8-field §6 Swap event + v4 flash-accounting locals overflow the legacy stack
 bytecode_hash = "none"
-ffi = false
 # Gas snapshots: hook beforeSwap+afterSwap combined budget <= 40k (MASTER_SPEC §5). CI reports.
 gas_reports = ["FeraHook"]
 fs_permissions = [{ access = "read", path = "./" }]
 remappings = [
     # populated by remappings.txt; kept here empty so `forge remappings` is authoritative
 ]
+
+# EIP-170 size control: FeraVault is a large orchestrator (no hot swap path — that's FeraHook). The
+# global optimizer_runs is tuned high so v4-core Pool.swap compiles (see note above), but that
+# aggressive inlining bloats FeraVault past the 24576-byte runtime limit. Compile FeraVault + its
+# extracted delegatecall libraries for SIZE (runs=1) via a dedicated compiler profile — the concrete
+# v4-core PoolManager keeps the high global default it needs to compile Pool.swap.
+# NOTE (TOML): these sub-table blocks MUST come AFTER every [profile.default] scalar key above — a
+# scalar placed below an array-of-tables header is swallowed into that table, not the profile.
+[[profile.default.additional_compiler_profiles]]
+name = "size"
+via_ir = true
+optimizer_runs = 1
+
+[[profile.default.compilation_restrictions]]
+paths = "src/FeraVault.sol"
+optimizer_runs = 1
+via_ir = true
+
+# The heavy unlockCallback bodies + strategy math were moved into VaultOps/VaultActions/VaultMath/
+# VaultFees/VaultRwa (delegatecalled from FeraVault). Compile those size-split libraries low too so
+# they stay small; the glob also covers any future Vault*.sol split.
+[[profile.default.compilation_restrictions]]
+paths = "src/libraries/Vault*.sol"
+optimizer_runs = 1
+via_ir = true
 
 # Money-path files demand 100% branch coverage (SHARED_CONTEXT eng rules). CI enforces.
 # NOTE: optimizer_runs is NOT lowered here — the concrete v4 PoolManager compiled by integration
