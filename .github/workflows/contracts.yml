@@ -37,12 +37,11 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
         with: {version: stable}
       - run: forge --version
-      - name: Build
-        run: forge build
-      - name: Contract sizes (informational)
-        # FeraVault currently exceeds EIP-170 (24576 B) and is being split into libraries/modules
-        # (tracked). Report sizes but don't gate CI on it until the size-reduction refactor lands.
-        run: forge build --sizes || true
+      - name: Build (+ EIP-170 size gate)
+        # --sizes fails the build if any contract exceeds the 24576-byte runtime limit. FeraVault was
+        # split under the limit (22,373 B, commit 06beade); this hard gate now guards against future
+        # size regressions — it is exactly the check that surfaced the original 54KB over-limit vault.
+        run: forge build --sizes
       - name: Verify no upgradeable-proxy import on money paths (INV-12)
         run: |
           if grep -RIlE "TransparentUpgradeableProxy|ERC1967|UUPSUpgradeable|Initializable" src/; then
@@ -76,39 +75,22 @@ jobs:
         with: {submodules: recursive}
       - uses: foundry-rs/foundry-toolchain@v1
         with: {version: stable}
-      - name: Gas report
-        run: forge test --gas-report | tee gas-report.txt
-      - name: Assert beforeSwap+afterSwap ≤ HOOK_GAS_BUDGET
-        # Parses the FeraHook section of the forge --gas-report table and sums the median (col 4) of
-        # the beforeSwap + afterSwap rows. Fails if the combined swap-path gas exceeds the §5 budget
-        # OR if either row is missing (hook not exercised ⇒ the gate is not actually measuring).
-        run: |
-          python3 - "$HOOK_GAS_BUDGET" <<'PY'
-          import re, sys
-          budget = int(sys.argv[1])
-          rows = {}
-          # gas-report rows look like: | beforeSwap | 1234 | 5678 | 5700 | 9000 | 12 |
-          for line in open("gas-report.txt"):
-              m = re.match(r"\s*\|\s*(beforeSwap|afterSwap)\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|", line)
-              if m:
-                  fn = m.group(1)
-                  median = int(m.group(4).replace(",", ""))  # median column
-                  rows[fn] = max(rows.get(fn, 0), median)
-          missing = [f for f in ("beforeSwap", "afterSwap") if f not in rows]
-          if missing:
-              print(f"::error::gas-report has no rows for {missing} — hook swap path not exercised; gate cannot verify §5.")
-              sys.exit(1)
-          total = rows["beforeSwap"] + rows["afterSwap"]
-          print(f"hook swap-path gas: beforeSwap={rows['beforeSwap']} + afterSwap={rows['afterSwap']} = {total} (budget {budget})")
-          if total > budget:
-              print(f"::error::Hook swap-path gas {total} exceeds §5 budget {budget}.")
-              sys.exit(1)
-          print("::notice::hook swap-path within §5 budget.")
-          PY
-      - name: Upload gas report
+      - name: Gas budget gate (in-test gasleft() assertions, PLAIN mode)
+        # The §5 hook swap-path budget (beforeSwap+afterSwap ≤ 40k) is asserted INSIDE the tests via
+        # gasleft() deltas — DynamicFeeGas.t.sol (MEME + RWA cold/warm, BUDGET=40_000) and
+        # TwapWindow_PoC.t.sol (GAS-1, assertLt(gBefore+gAfter, 40_000)). These MUST run WITHOUT
+        # --gas-report: gas-report instrumentation adds per-call metering overhead that inflates the
+        # gasleft() readings (~89.5k instrumented vs within-budget in plain mode) and trips the
+        # assertion falsely. Plain mode is the accurate, deployable-gas gate; a real regression above
+        # 40k still fails here, and -vv surfaces the exact console-logged gas in the run log.
+        # (Replaces the former --gas-report table-regex parser, which the forge ≥1.6 report-format
+        # change broke and which mismeasured self-metering tests anyway. pipefail => a gas regression
+        # fails this step.)
+        run: forge test --match-contract 'DynamicFeeGas|TwapWindowPoC' -vv | tee gas-budget.txt
+      - name: Upload gas budget log
         if: always()
         uses: actions/upload-artifact@v4
-        with: {name: gas-report, path: contracts/gas-report.txt}
+        with: {name: gas-budget, path: contracts/gas-budget.txt}
 
   slither:
     name: slither (fail-on high)
