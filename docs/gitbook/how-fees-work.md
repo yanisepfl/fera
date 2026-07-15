@@ -34,6 +34,20 @@ input. The signal is already in the pool.
   hard maximum of **5.00%**. Buys in the same moment (dip-buying that heals the pool) are *not*
   surcharged, so arbitrage can repair the pool at the cheaper base fee. Asymmetry by design.
 
+The shape, at a glance (illustrative, not live data):
+
+```
+ fee
+5.0% ┤                                    · sell-side hard max
+     │                               ·
+3.0% ┤                     ·─────────·  ceiling (both sides)
+     │              ·
+     │        ·
+0.34%┤·───────·  floor (quiet market)
+     └──────────────────────────────────▶  realized volatility
+       calm                        violent
+```
+
 **Worked examples** (from the reference engine in
 [`docs/mechanism/sims/`](../mechanism/sims/)):
 
@@ -71,6 +85,20 @@ from it:
   oracle**, up to a **100 bps ceiling**. A typical 1–3% weekend gap therefore prices at roughly
   30–90 bps, enough to pay the liquidity provider while still leaving the arbitrageur a profit for
   closing the gap.
+
+The shape, at a glance (illustrative, not live data):
+
+```
+ fee
+100bp┤                          ·──────  ceiling (drift ≥ ~3.5%)
+     │                    ·
+     │              ·   +20 bps per 1% drift from the oracle
+ 30bp┤        ·  closed-market base
+     │        ┊
+  2bp┤·───────┘  open-market base
+     └──────────────────────────────────▶
+      market open   │   market closed, widening with drift
+```
 
 | Scenario | Fee |
 |----------|-----|

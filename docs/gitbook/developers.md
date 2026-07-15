@@ -15,8 +15,8 @@ specs rather than restating them. Those documents are the source of truth and ar
                    │ beforeSwap → dynamic fee   (MEME: vol-scaled | RWA: drift-scaled)
                    ▼
              ┌───────────┐        deposits / withdrawals        ┌──────────────┐
-             │ FeraHook  │◄────────────────────────────────────►│  FeraVault   │  shaped band ladders,
-             └───────────┘   fee checkpoint / JIT forfeiture    │  + FeraShare │  risk profiles, drip
+             │ FeraHook  │◄────────────────────────────────────►│  FeraVault   │  wide base + limit
+             └───────────┘   fee checkpoint / JIT forfeiture    │  + FeraShare │  + idle, risk profiles
                                                                 └──────┬───────┘
                                                                        │ 10% performance fee (revenue)
                             ┌──────────────────────────────────────────┼───────────────────────────┐
@@ -50,7 +50,7 @@ Ten money-path contracts under `contracts/src/`:
 | Contract | Role |
 |----------|------|
 | `FeraHook.sol` | Uniswap v4 hook: sets the per-swap dynamic fee, checkpoints fees, enforces the anti-JIT forfeiture. |
-| `FeraVault.sol` | Managed vault: shaped band ladders, risk profiles, deposit/withdraw, drip/recenter strategy. |
+| `FeraVault.sol` | Managed vault: wide vol-adaptive base + near-price limit + idle reserve, risk profiles, deposit/withdraw, swap-free limit-fill with a rare, IL-capped base re-anchor. |
 | `FeraShare.sol` | ERC-20 share token per pool/profile. |
 | `FeraToken.sol` | FERA: fixed 1,000,000,000 supply, no inflation knob. |
 | `EsFera.sol` | Escrowed FERA: linear 6-month vest, 50% instant-exit haircut with the 3-way forfeit split. |

@@ -30,3 +30,4 @@
 ## Help
 
 * [FAQ](faq.md)
+* [Glossary](glossary.md)

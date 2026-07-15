@@ -49,8 +49,10 @@ You already LP the hot WETH/memecoin pairs and chase emissions. FERA gives you:
   door to them. But read [Emissions](emissions-and-tokenomics.md) first: early emissions are
   **small** by design, because emissions are capped by real protocol revenue. We are not selling you
   a fat emission APR.
-- **The "Active" risk profile.** On memecoin pools, your liquidity sits concentrated near the price
-  for maximum fee capture (and maximum IL, which is the trade-off).
+- **The "Active" risk profile.** On memecoin pools, a band near the price does the fee capture while
+  a wide base holds your position through big moves, so the strategy earns from volatility instead of
+  churning your principal to chase it. You still take impermanent loss when the price moves; that's
+  the trade-off for the higher fee capture.
 
 ## For someone LPing NVDA
 

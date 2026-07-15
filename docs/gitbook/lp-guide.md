@@ -28,7 +28,7 @@ impermanent loss you take.**
 
 | | **Active** | **Steady** |
 |---|-----------|-----------|
-| Where your money sits | Concentrated near the current price (core + mid bands) | Wide / tail bands, always-in-range |
+| Where your money sits | Weighted toward a near-price band for fee capture, backed by a wide base that holds through big moves | A wide range that stays in-range through swings |
 | Fee capture | Higher, it sits where most volume trades | Lower, a thinner slice of the fees |
 | Impermanent loss | Higher, a big price move hits it harder | Lower, the wide range keeps you in-range through swings |
 | Built for | Yield-seeking capital comfortable with volatility | Conservative capital, e.g. someone LPing a stock token who wants exposure, not a trading desk |
@@ -77,23 +77,32 @@ earns you little, and a sharp adverse move still costs you IL. See
 
 ### How the memecoin strategy actually handles your principal
 
-FERA does **not** say "we never rebalance," and it does not churn your principal either. The honest
-version:
+FERA does **not** chase a memecoin's price with your principal. Chasing a trending asset is a known
+way to *lock in* losses: each time you recenter into a move that keeps going, you sell low and buy
+high. A memecoin trends more than it snaps back, so the strategy is built to **hold, not chase**:
 
-- Your principal is placed once as a **shaped ladder** of bands: concentrated near price for fee
-  capture, with a full-range tail for crash coverage (weights roughly 30% core / 40% mid / 30%
-  tail). **No strategy action ever closes or swaps a principal band**, so your principal never
-  realizes impermanent loss from the strategy itself.
-- What *does* move is **fee income**: collected fees are dripped daily into fresh bands at the
-  current price, so the shape follows the market using income only.
-- In a fast, sustained trend the drip can lag. So the strategy *may* recenter principal, but only
-  when **every** on-chain condition holds: at-spot depth has stayed degraded for **≥24 hours**, it's
-  been **≥7 days** since the last recenter, and the pool's time-weighted price is within a **±5%**
-  sanity band (with slippage caps and randomized timing). If those conditions aren't met, the
-  contract reverts the attempt. A keeper can trigger it; it can never override the rules.
+- **Your principal sits in a wide base range that scales with volatility.** The more volatile the
+  pair, the wider the base, so it stays in-range through big moves instead of being knocked out of
+  position. It is designed to *not* need constant repositioning, and the higher swap fee on volatile
+  flow is what pays you for the risk of holding through it.
+- **A narrower band near the current price does the everyday work of capturing fees.** As trading
+  pushes the price around, that band is refilled from the assets already in your position, with **no
+  swap**, so it realizes **no loss** from repositioning. This is the routine rebalancing, and it
+  never disturbs the wide base.
+- **The base is only re-anchored as a rare, capped safety valve**, never as an active loop. If an
+  extreme, sustained move ever pushes the price out of even the wide base, a re-anchor may happen,
+  but only when strict on-chain conditions hold: the move has persisted, a minimum interval since the
+  last one has elapsed, and the pool's time-weighted price confirms it is real, not a brief wick. Any
+  single re-anchor is also **capped in how much value it can put at risk**, so it can never realize a
+  large loss in one shot. Anyone can trigger it, but no one can override the rules; if the conditions
+  aren't met, the contract reverts.
+- **Withdrawing never depends on any of this.** Your withdrawal always returns your fair share of
+  whatever the position currently holds, in-kind, even if the price is far out of range and nothing
+  has rebalanced recently. The vault is never locked, and a rebalance is never a prerequisite for
+  getting your money out.
 
-Every drip, consolidation, and recenter is an on-chain action with a justification you can inspect
-in the pool's strategy log.
+Every rebalance and re-anchor is an on-chain action with a justification you can inspect in the
+pool's strategy log.
 
 ## 5. The 10% performance fee: only when you earn
 
@@ -151,7 +160,7 @@ directly is **FERA emissions**. Those accrue only to vault share holders. The va
 one-click, emissions-eligible door.
 
 **Straight talk:** a skilled liquidity provider hand-managing a tight range can capture more fees per
-dollar than the vault's ladder. We do **not** market the vault as higher-yield. It's the managed,
+dollar than the vault's managed strategy. We do **not** market the vault as higher-yield. It's the managed,
 emissions-eligible, passive option, and the sophisticated providers who LP directly deepen the same
 pool for everyone. Choose the vault for management and emissions; choose direct if you want to run
 your own range and don't need the token.
