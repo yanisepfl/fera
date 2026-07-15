@@ -48,10 +48,15 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 ///          - D-18   : fee-checkpoint-before-mint — every deposit/withdraw first pokes the
 ///            tranche's bands (v4 auto-collects on modifyLiquidity, so mints would otherwise
 ///            misprice); the JIT guard (INV-1″) applies to the Vault exactly like any other LP.
-///          - v3 §6  : `rebalanceLimit`/`rebalanceBase`/`selfSwap`/`rebalanceViaVenue` are
-///            PERMISSIONLESS (Uniswap-v3-collect / Aave-liquidation pattern) — every safety bound
-///            (interval, dwell, TWAP-confirmation, execution-slippage, IL-cap) is re-verified
-///            ON-CHAIN regardless of caller. `pokeOutOfRange` stays permissionless + IDEMPOTENT.
+///          - v3.4   : ALL position-moving strategy actions (`rebalanceLimit`/`rebalanceBase`/
+///            `selfSwap`/`rebalanceViaVenue`/`rebalanceRwaOracle`/`defendRwaOffHours`/`skimIdle`)
+///            are KEEPER-ONLY (founder decision, reversing v3 §6: even swap-free actions carry a
+///            residual timing-choice edge — zero grief surface beats bounded grief surface). Every
+///            on-chain bound (interval, dwell, TWAP-confirmation, execution-slippage, IL-cap) is
+///            still verified — as a check on keeper mistakes/compromise. ONLY `pokeOutOfRange`
+///            stays permissionless: it MOVES NOTHING (an idempotent OOR-timer observation, audited
+///            un-gameable) and lets anyone/UIs surface state. Withdraw/deposit/collectFees are of
+///            course not strategy actions and remain open (withdraw NEVER gated, INV-11).
 ///          - v3.3 §11: `createBaseLimitPool` is ALSO now PERMISSIONLESS (no DAO — a team-run
 ///            protocol; "team"/"admin" everywhere, never "governance"). This does NOT weaken INV-1″
 ///            (open liquidity) or INV-14 (emissions only to vault shares) — it only removes the
@@ -431,10 +436,11 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    // BASE + LIMIT + IDLE — the ONLY strategy (contracts/VAULT_STRATEGY_V3.md). v3: `rebalanceLimit`,
-    // `rebalanceBase`, `selfSwap`, `rebalanceViaVenue` are PERMISSIONLESS — every safety bound is
-    // re-verified ON-CHAIN regardless of caller (item 6). `configureTier`/`setVenueAllowed` stay
-    // owner-gated (trust/governance decisions, not mechanical/safety-bounded actions).
+    // BASE + LIMIT + IDLE — the ONLY strategy (contracts/VAULT_STRATEGY_V3.md). v3.4: `rebalanceLimit`,
+    // `rebalanceBase`, `selfSwap`, `rebalanceViaVenue` (and the RWA defenses) are KEEPER-ONLY — every
+    // safety bound is STILL re-verified on-chain (they now guard keeper mistakes/compromise). Only the
+    // idempotent, nothing-moving `pokeOutOfRange` stays permissionless. `configureTier`/
+    // `setVenueAllowed` stay owner-gated (trust/governance decisions).
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc IFeraVault
@@ -601,9 +607,12 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     }
 
     /// @inheritdoc IFeraVault
-    /// @dev v3: PERMISSIONLESS. Every bound (min-interval, TWAP sanity) is re-verified on-chain
-    ///      regardless of caller; no function of `msg.sender` appears anywhere in this call.
-    function rebalanceLimit(PoolId id, uint8 t) external nonReentrant notPaused(id) knownTranche(id, t) {
+    /// @dev KEEPER-ONLY (founder decision: even swap-free strategy actions carry a residual
+    ///      timing-choice edge — an adversary picking WHEN a bounded action fires, cf. the F1
+    ///      clock-starvation grief this codebase already patched once — so every position-MOVING
+    ///      action is gated; zero grief surface beats bounded grief surface). All on-chain bounds
+    ///      (min-interval, TWAP sanity) still verify — they now guard keeper mistakes/compromise.
+    function rebalanceLimit(PoolId id, uint8 t) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) {
         _requireBaseLimit(id, t);
         _requireRebalanceInterval(id, t); // R-15: bounded frequency (MEME shorter than RWA, both > 0)
         // Anti-whipsaw: never (re)deploy a limit onto a spot spike the TWAP disagrees with.
@@ -617,9 +626,8 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     }
 
     /// @inheritdoc IFeraVault
-    /// @dev PERMISSIONLESS when swap-free (useSelfSwap=false — re-ticking realises no IL); KEEPER-ONLY
-    ///      when useSelfSwap=true (the swap path, gated below). Gate 1-4 are unchanged from v2; Gate 5
-    ///      (execution slippage) is a
+    /// @dev KEEPER-ONLY for BOTH modes (founder decision — see rebalanceLimit). Gate 1-4 are
+    ///      unchanged from v2; Gate 5 (execution slippage) is a
     ///      DIFFERENT bound from the NEW IL-budget cap (item 4 / FeraConstants.MAX_IL_BPS_PER_RECENTER):
     ///      Gate 5 bounds price-impact RATIO vs TWAP; the IL cap bounds the ABSOLUTE NAV-fraction any
     ///      one call's self-swap may put at risk. When the ideal rebalancing swap exceeds the IL
@@ -628,13 +636,8 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///      impact does); the leftover imbalance is completed by a LATER call once the min-interval
     ///      has re-elapsed (via another `rebalanceBase`, a standalone `selfSwap`, or the swap-free
     ///      `rebalanceLimit`).
-    function rebalanceBase(PoolId id, uint8 t, bool useSelfSwap) external nonReentrant notPaused(id) knownTranche(id, t) {
+    function rebalanceBase(PoolId id, uint8 t, bool useSelfSwap) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) {
         _requireBaseLimit(id, t);
-        // Keeper-only when this recenter also SWAPS. Sandwich surface reduction: a swap-requiring
-        // rebalance can only be triggered by the trusted keeper (the TWAP-slippage bound is the second
-        // line of defence, not the first). The swap-FREE recenter (useSelfSwap=false) stays
-        // permissionless — re-ticking realises no IL, so anyone may keep the band anchored.
-        if (useSelfSwap && msg.sender != keeper) revert OnlyKeeper();
         // EIP-170 size-split: gate + recenter body in VaultActions (delegatecalled). Every gate,
         // the IL-budget cap, Gate-5 slippage bound, both clocks + StrategyAction are byte-identical.
         VaultActions.rebalanceBase(
@@ -698,7 +701,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     // RWA prices MEAN-REVERT to the underlying real stock (unlike a memecoin), so the correct
     // posture is the OPPOSITE of MEME: in-hours we recenter TOWARD the oracle when the pool drifts;
     // off-hours / during an event window we batten down (widen + partial-withdraw). Both are
-    // permissionless (every bound re-verified on-chain, like §6), RWA-only, swap-free (band<->reserve
+    // KEEPER-ONLY (v3.4 — every bound still re-verified on-chain), RWA-only, swap-free (band<->reserve
     // ⇒ zero IL by construction), and gated by the dedicated slow base-recenter clock (§5.1).
     // ═══════════════════════════════════════════════════════════════════════════════════════
 
@@ -708,8 +711,8 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///         oracle price — RWA mean-reverts to the real stock, so providing liquidity at the true
     ///         price is correct (the OPPOSITE of MEME, where chasing the price loses money). Swap-free
     ///         (close base -> reserve -> re-mint around the oracle tick), so it realises ZERO IL and
-    ///         value is conserved (Gate-5-style guard). PERMISSIONLESS; every bound is on-chain.
-    function rebalanceRwaOracle(PoolId id, uint8 t) external nonReentrant notPaused(id) knownTranche(id, t) {
+    ///         value is conserved (Gate-5-style guard). KEEPER-ONLY (v3.4); every bound is on-chain.
+    function rebalanceRwaOracle(PoolId id, uint8 t) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) {
         // EIP-170 size-split: body in VaultRwa (separate bytecode, delegatecalled). Gates, swap-free
         // value-conservation bound, dedicated base-recenter clock + StrategyAction are byte-identical.
         VaultRwa.rebalanceRwaOracle(
@@ -730,8 +733,8 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///         into idle reserve — so weekend drift + a Monday open gap cannot realise IL into a tight,
     ///         stale-priced band, and a fraction sits instantly-withdrawable in reserve. Swap-free
     ///         (band<->reserve only), value-conserving. RE-WIRES the previously-vestigial `eventWindow`
-    ///         (OD-4). PERMISSIONLESS; RWA-only; gated by the dedicated slow base-recenter clock.
-    function defendRwaOffHours(PoolId id, uint8 t) external nonReentrant notPaused(id) knownTranche(id, t) {
+    ///         (OD-4). KEEPER-ONLY (v3.4); RWA-only; gated by the dedicated slow base-recenter clock.
+    function defendRwaOffHours(PoolId id, uint8 t) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) {
         // EIP-170 size-split: body in VaultRwa (separate bytecode, delegatecalled). Gates, swap-free
         // value-conservation bound, dedicated base-recenter clock + StrategyAction are byte-identical.
         VaultRwa.defendRwaOffHours(

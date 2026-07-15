@@ -24,7 +24,7 @@ import {TrancheState, PoolInfo} from "./VaultTypes.sol";
 
 /// @title VaultActions
 /// @notice EIP-170 SIZE-SPLIT of FeraVault (companion to VaultOps/VaultMath/VaultFees/VaultRwa).
-///         Holds the heavy permissionless-rebalance / single-coin-redeem entrypoint bodies
+///         Holds the heavy keeper-gated-rebalance / single-coin-redeem entrypoint bodies
 ///         (`rebalanceBase`, `selfSwap`, `rebalanceViaVenue`, `withdrawSingle`) as PUBLIC library
 ///         functions, deployed as SEPARATE bytecode and delegatecalled from FeraVault. Behavior —
 ///         every gate, bound, clock write, reserve-accounting update, and emitted event — is
@@ -41,7 +41,7 @@ library VaultActions {
     uint8 internal constant CB_SELF_SWAP = 7;
     uint8 internal constant CB_WITHDRAW_SINGLE = 8;
 
-    /// @notice GUARDED wide-BASE recenter (permissionless; every bound on-chain). See FeraVault NatSpec.
+    /// @notice GUARDED wide-BASE recenter (KEEPER-ONLY v3.4, gated on the vault; every bound on-chain). See FeraVault NatSpec.
     function rebalanceBase(
         TrancheState storage tr,
         PoolInfo storage p,
@@ -110,7 +110,7 @@ library VaultActions {
         emit IFeraVault.StrategyAction(PoolId.unwrap(c.id), uint8(FeraTypes.StrategyKind.SelfSwap), 0, 0, amountOut, bytes32(0));
     }
 
-    /// @notice Bounded ratio-balancing swap through a whitelisted EXTERNAL venue (permissionless).
+    /// @notice Bounded ratio-balancing swap through a whitelisted EXTERNAL venue (KEEPER-ONLY, gated on the vault).
     ///         The venue allowlist check stays on the vault wrapper (its safety boundary).
     function rebalanceViaVenue(
         TrancheState storage tr,

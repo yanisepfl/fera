@@ -152,13 +152,18 @@ contract PermissionlessRebalancePoC is Deployers {
         vm.warp(uint256(armed) + FeraConstants.MEME_OOR_DWELL_SEC + 100);
         _refreshTwap();
 
-        // The attacker front-runs with a swap-free `rebalanceLimit(1)` — which stamps the GENERAL
-        // `lastRebalanceTs`, NOT the dedicated base-recenter clock.
+        // v3.4: the attacker can no longer drive `rebalanceLimit` AT ALL (keeper-only) — the grief
+        // CHANNEL this test originally documented is now closed at the caller gate, not just bounded.
         vm.prank(attacker);
+        vm.expectRevert(IFeraVault.OnlyKeeper.selector);
+        vault.rebalanceLimit(memeId, 1);
+        // Defense-in-depth (the original F1 fix, KEPT): even the KEEPER's own limit action stamps only
+        // the GENERAL `lastRebalanceTs`, NOT the dedicated base-recenter clock — a limit action can
+        // never starve the high-value base recenter regardless of who triggers it.
         vault.rebalanceLimit(memeId, 1);
 
         // FIXED: the honest base recenter is NOT blocked by the limit's clock — its Gate-3 reads only
-        // `lastBaseRecenterTs` (still 0 here). It succeeds despite the limit spam.
+        // `lastBaseRecenterTs` (still 0 here). It succeeds despite the limit action.
         vault.rebalanceBase(memeId, 1, false);
         assertEq(vault.outOfRangeSince(memeId, 1), 0, "OOR cleared by a SUCCESSFUL recenter (not starved)");
         assertFalse(vault.pokeOutOfRange(memeId, 1), "base re-anchored - bulk capital recentered");

@@ -798,63 +798,62 @@ contract BaseLimitStrategyTest is Deployers {
     }
 
     // ═════════════════════════════════════════════════════════════════════════════════════
-    // KEEPER-ONLY SWAPS (sandwich-surface reduction): swap-FREE rebalances stay PERMISSIONLESS
-    // (anyone keeps the vault healthy — re-ticking / limit-fill realises no IL), but any rebalance
-    // that SWAPS (selfSwap / rebalanceViaVenue / rebalanceBase useSelfSwap=true) is KEEPER-ONLY. The
-    // TWAP-slippage bound is the second line of defence, not the first, so a random caller cannot even
-    // attempt a sandwich by driving a swap. All the swap-free bounds (RebalanceTooSoon, dwell, TWAP
-    // confirm) still apply identically to whoever calls.
+    // v3.4 KEEPER-ONLY STRATEGY (founder decision): EVERY position-moving action — swap-free or
+    // swapping — is keeper-gated. Even a bounded swap-free rebalance leaves an adversary the choice
+    // of WHEN it fires (cf. the F1 clock-starvation grief this codebase already patched once); zero
+    // grief surface beats bounded grief surface. Only the idempotent, nothing-moving pokeOutOfRange
+    // stays permissionless. All on-chain bounds (interval, dwell, TWAP) still bind the keeper.
     // ═════════════════════════════════════════════════════════════════════════════════════
 
-    function test_swapFreeRebalancePermissionless_butSwapsAreKeeperOnly() public {
+    function test_allStrategyActionsKeeperOnly_pokeStaysPermissionless() public {
         address rando = makeAddr("totally-random-adversary");
         _seedMeme();
         vault.skimIdle(memeId, 0);
 
-        // rebalanceLimit (SWAP-FREE) — succeeds for a random caller within bounds.
-        vm.prank(rando);
-        vault.rebalanceLimit(memeId, 0);
-        assertGt(vault.bandCount(memeId, 0), 1, "limit band was not deployed by the random caller");
-
-        // Immediately again ⇒ the SAME bound (RebalanceTooSoon) still applies to the random caller.
-        vm.prank(rando);
-        vm.expectRevert(IFeraVault.RebalanceTooSoon.selector);
-        vault.rebalanceLimit(memeId, 0);
-
-        // selfSwap (SWAPS) — a random caller is now REJECTED (keeper-only); the keeper may, within the
-        // SAME TWAP-slippage bound. The rando call reverts before any clock/state change, so the
-        // keeper's call proceeds in the same interval window.
-        vm.warp(block.timestamp + FeraConstants.MEME_MIN_REBALANCE_INTERVAL_SEC + 1);
-        _refreshTwap(memeKey);
+        // Every strategy entrypoint rejects a random caller with OnlyKeeper (the gate precedes all
+        // state reads/writes, so nothing is stamped or moved by the attempt).
         (uint256 r0,) = vault.idleReserves(memeId, 0);
-        vm.prank(rando);
+        vm.startPrank(rando);
+        vm.expectRevert(IFeraVault.OnlyKeeper.selector);
+        vault.rebalanceLimit(memeId, 0);
+        vm.expectRevert(IFeraVault.OnlyKeeper.selector);
+        vault.rebalanceBase(memeId, 0, false);
         vm.expectRevert(IFeraVault.OnlyKeeper.selector);
         vault.selfSwap(memeId, 0, true, r0 / 50);
-        uint256 out = vault.selfSwap(memeId, 0, true, r0 / 50); // keeper == this test contract
-        assertGt(out, 0, "keeper self-swap produced nothing");
+        vm.expectRevert(IFeraVault.OnlyKeeper.selector);
+        vault.rebalanceViaVenue(memeId, 0, address(venue), true, r0 / 10);
+        vm.expectRevert(IFeraVault.OnlyKeeper.selector);
+        vault.skimIdle(memeId, 0);
+        vm.stopPrank();
 
-        // rebalanceViaVenue (SWAPS) — allowlist is the trust boundary AND the caller must be the keeper.
-        vault.setVenueAllowed(address(venue), true);
+        // The keeper (this test contract) CAN act — within the UNCHANGED on-chain bounds.
+        vault.rebalanceLimit(memeId, 0);
+        assertGt(vault.bandCount(memeId, 0), 1, "keeper limit deploy failed");
+        vm.expectRevert(IFeraVault.RebalanceTooSoon.selector); // the bounds still bind the keeper
+        vault.rebalanceLimit(memeId, 0);
+
         vm.warp(block.timestamp + FeraConstants.MEME_MIN_REBALANCE_INTERVAL_SEC + 1);
         _refreshTwap(memeKey);
         (uint256 r0b,) = vault.idleReserves(memeId, 0);
-        vm.prank(rando);
-        vm.expectRevert(IFeraVault.OnlyKeeper.selector);
-        vault.rebalanceViaVenue(memeId, 0, address(venue), true, r0b / 10);
-        uint256 out2 = vault.rebalanceViaVenue(memeId, 0, address(venue), true, r0b / 10); // keeper
+        uint256 out = vault.selfSwap(memeId, 0, true, r0b / 50);
+        assertGt(out, 0, "keeper self-swap produced nothing");
+
+        vault.setVenueAllowed(address(venue), true);
+        vm.warp(block.timestamp + FeraConstants.MEME_MIN_REBALANCE_INTERVAL_SEC + 1);
+        _refreshTwap(memeKey);
+        (uint256 r0c,) = vault.idleReserves(memeId, 0);
+        uint256 out2 = vault.rebalanceViaVenue(memeId, 0, address(venue), true, r0c / 10);
         assertGt(out2, 0, "keeper venue rebalance produced nothing");
 
-        // rebalanceBase (SWAP-FREE, useSelfSwap=false) — STAYS permissionless: push tranche 1 (Active)
-        // OOR, satisfy dwell + TWAP-confirm, then a random caller re-anchors the base (re-ticking
-        // realises no IL, so there is no sandwich surface to protect).
+        // pokeOutOfRange — the ONE permissionless survivor (moves nothing, idempotent): a rando can
+        // still arm the OOR observation, and the keeper recenters within dwell + TWAP bounds.
         _pushToTick(memeKey, 2_200); // Active OOR, Steady stays put (v3 vol-adaptive calm-floor sizing)
         vm.prank(rando);
-        assertTrue(vault.pokeOutOfRange(memeId, 1), "expected Active base OOR");
+        assertTrue(vault.pokeOutOfRange(memeId, 1), "rando must still be able to poke the OOR state");
         vm.warp(block.timestamp + FeraConstants.MEME_OOR_DWELL_SEC + 100); // v3-hardening: 1h dwell
         swap(memeKey, false, -1e15, "");
-        vm.prank(rando);
-        vault.rebalanceBase(memeId, 1, false);
-        assertFalse(vault.pokeOutOfRange(memeId, 1), "base did not re-anchor after the random caller's swap-free recenter");
+        vault.rebalanceBase(memeId, 1, false); // keeper recenter
+        assertFalse(vault.pokeOutOfRange(memeId, 1), "base did not re-anchor after the keeper recenter");
     }
 
     // ═════════════════════════════════════════════════════════════════════════════════════

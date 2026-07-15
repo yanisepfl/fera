@@ -264,34 +264,38 @@ contract Phase2FuzzTest is Deployers {
     }
 
     // ═════════════════════════════════════════════════════════════════════════════════════════
-    // P5 — the swap-FREE paths NEVER revert OnlyKeeper for a random caller (stay permissionless)
+    // P5 — v3.4: the swap-FREE strategy paths are ALSO keeper-only (founder decision — zero grief
+    // surface; even a bounded action leaves an adversary the choice of WHEN it fires). A non-keeper
+    // ALWAYS reverts OnlyKeeper; the keeper positive-control still works within unchanged bounds.
     // ═════════════════════════════════════════════════════════════════════════════════════════
-    function testFuzz_swapFreeRebalancesNeverRevertOnlyKeeper(address caller, uint8 tRaw) public {
+    function testFuzz_nonKeeperCannotDriveSwapFreeRebalances(address caller, uint8 tRaw) public {
         vm.assume(caller != address(this));
         vm.assume(caller != address(0));
         uint8 t = uint8(bound(uint256(tRaw), 0, 1));
         _seedMeme();
 
-        // rebalanceLimit (swap-free) — may revert for OTHER reasons but MUST NOT be gated by keeper.
+        // rebalanceLimit — the keeper gate is the FIRST modifier: always OnlyKeeper for a non-keeper.
         vm.prank(caller);
         (, bytes memory r1) = address(vault).call(abi.encodeCall(vault.rebalanceLimit, (memeId, t)));
-        assertTrue(_sel(r1) != IFeraVault.OnlyKeeper.selector, "rebalanceLimit must never revert OnlyKeeper");
+        assertEq(_sel(r1), IFeraVault.OnlyKeeper.selector, "rebalanceLimit: expected OnlyKeeper for a non-keeper");
 
-        // rebalanceBase(useSelfSwap=false) (swap-free) — never OnlyKeeper.
+        // rebalanceBase(useSelfSwap=false) — same: always OnlyKeeper for a non-keeper.
         vm.prank(caller);
         (, bytes memory r2) = address(vault).call(abi.encodeCall(vault.rebalanceBase, (memeId, t, false)));
-        assertTrue(_sel(r2) != IFeraVault.OnlyKeeper.selector, "rebalanceBase(false) must never revert OnlyKeeper");
+        assertEq(_sel(r2), IFeraVault.OnlyKeeper.selector, "rebalanceBase(false): expected OnlyKeeper for a non-keeper");
     }
 
-    /// Positive control: a totally random caller CAN drive the swap-free limit deploy.
-    function test_swapFreeRebalanceLimit_permissionlessSucceeds() public {
+    /// Positive control: the KEEPER can drive the swap-free limit deploy; a rando cannot.
+    function test_keeperDrivesSwapFreeLimit_randoCannot() public {
         address rando = makeAddr("rando");
         _seedMeme();
         vault.skimIdle(memeId, 0);
         uint256 before = vault.bandCount(memeId, 0);
         vm.prank(rando);
+        vm.expectRevert(IFeraVault.OnlyKeeper.selector);
         vault.rebalanceLimit(memeId, 0);
-        assertEq(vault.bandCount(memeId, 0), before + 1, "random caller could not deploy the swap-free limit");
+        vault.rebalanceLimit(memeId, 0); // keeper == this test contract
+        assertEq(vault.bandCount(memeId, 0), before + 1, "keeper could not deploy the swap-free limit");
     }
 
     // ═════════════════════════════════════════════════════════════════════════════════════════
