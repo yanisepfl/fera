@@ -1,14 +1,13 @@
 /**
  * FERA illustrative data-viz - shared, self-contained SVG charts (no chart lib).
- * All figures here are MODELED / ILLUSTRATIVE and carry a visible honesty tag;
- * never render live on-chain data through these. See REDESIGN_PLAN.md §3.
+ * These show the SHAPE of a mechanism on relative, unlabeled axes - never live
+ * on-chain data and never specific returns. See REDESIGN_PLAN.md §3.
  */
 export { LpOutcomeChart } from "./LpOutcomeChart";
 export { FeeResponseChart } from "./FeeResponseChart";
 export { CountUp } from "./CountUp";
 export {
   IllustrativeChart,
-  TagPill,
   LegendChip,
   PrimaryEndpoint,
   HollowEndpoint,

@@ -15,44 +15,44 @@ export function feeReason(
   if (regime === "RWA") {
     if (marketState && marketState !== "OPEN") {
       const venue =
-        marketState === "HOLIDAY" ? "market holiday" : "underlying market closed";
+        marketState === "HOLIDAY" ? "market holiday" : "market closed";
       return {
         headline: `Fee widened: ${venue}`,
         detail:
-          "Off-hours the band widens and the fee scales with the pool↔Chainlink gap, so weekend drift arbitrage pays LPs instead of draining them.",
+          "The underlying market is closed, so the price can drift. The range widens and the fee rises - turning that off-hours drift into income for you instead of a loss.",
         tone: "warn",
       };
     }
     return {
-      headline: "Tight fee: market open",
+      headline: "Low fee: market open",
       detail:
-        "During underlying market hours the oracle-anchored band holds a low fee (~1–5bps) and recenters only on oracle hysteresis.",
+        "While the underlying market is open, the range stays tight and the fee stays low to keep volume flowing.",
       tone: "calm",
     };
   }
 
-  // MEME - volatility-scaled
+  // MEME - fee scales with how volatile trading is.
   const pct = pips / 10_000;
   if (pct >= 2.5) {
     return {
-      headline: `Fee ${feePipsToPct(pips)}: volatility high`,
+      headline: `Fee ${feePipsToPct(pips)}: high volatility`,
       detail:
-        "EWMA realized-vol is elevated and net flow is one-sided; the sell-side fee is scaled up so violent/mechanical flow becomes LP income.",
+        "It's volatile and one-sided out there. The fee is scaled up so the fast, sharp trades that are riskiest to sit against pay the most - and that goes to you.",
       tone: "hot",
     };
   }
   if (pct >= 1.0) {
     return {
-      headline: `Fee ${feePipsToPct(pips)}: volatility elevated`,
+      headline: `Fee ${feePipsToPct(pips)}: getting volatile`,
       detail:
-        "Realized volatility is above baseline. Principal bands aren't churned; impermanent loss is compensated by the fee rather than chased with constant repositioning.",
+        "The market's moving more than usual, so traders pay a higher fee. You earn more right when providing liquidity carries the most risk.",
       tone: "warn",
     };
   }
   return {
     headline: `Fee ${feePipsToPct(pips)}: calm`,
     detail:
-      "Realized volatility is near the 0.34% floor. Principal stays put while fee income drips to follow price; the fee rises automatically if flow turns toxic.",
+      "Trading is quiet, so the fee sits near its floor to keep volume flowing. It rises automatically if the market turns volatile.",
     tone: "calm",
   };
 }

@@ -11,11 +11,11 @@ export function OpenLiquidityNote({ compact = false }: { compact?: boolean }) {
   if (compact) {
     return (
       <div className="rounded-lg border border-line bg-well p-3 text-caption text-mute">
-        <span className="font-semibold text-dim">Anyone can LP this pool directly</span>. The
-        hook is permissionless. Only <span className="text-accent">vault</span> deposits
-        earn FERA emissions. Direct LPs earn swap fees but no esFERA. We don&apos;t
-        claim the vault out-yields hand-managing your own range. It&apos;s the managed,
-        emissions-eligible, one-click option.
+        <span className="font-semibold text-dim">You don&apos;t have to use the vault</span>.
+        This pool is open - anyone can provide liquidity directly and manage their own
+        range. The <span className="text-accent">vault</span> is the managed, one-tap
+        option (and the only one that earns FERA rewards); a skilled hands-on provider
+        can earn more per dollar. We won&apos;t pretend otherwise.
       </div>
     );
   }
@@ -23,8 +23,8 @@ export function OpenLiquidityNote({ compact = false }: { compact?: boolean }) {
   return (
     <Card>
       <CardHeader
-        eyebrow="Open liquidity"
-        title="Two ways to LP this pool"
+        eyebrow="Two ways in"
+        title="Two ways to provide liquidity"
       />
       <div className="px-5 pb-5 space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -33,30 +33,30 @@ export function OpenLiquidityNote({ compact = false }: { compact?: boolean }) {
               Deposit into the vault
             </div>
             <ul className="mt-1.5 space-y-1 text-caption text-dim">
-              <li>· Managed shaped-ladder strategy, one click</li>
-              <li>· Hold a normal ERC-20 share; fees auto-compound</li>
+              <li>· Managed for you, one tap</li>
+              <li>· Hold a normal token share; fees auto-compound</li>
               <li>
-                · <span className="text-accent">Eligible for FERA emissions</span> (esFERA)
+                · <span className="text-accent">Earns FERA rewards</span>
               </li>
             </ul>
           </div>
           <div className="rounded-lg border border-line bg-well p-3">
-            <div className="text-body-sm font-semibold text-text">LP directly</div>
+            <div className="text-body-sm font-semibold text-text">Provide directly</div>
             <ul className="mt-1.5 space-y-1 text-caption text-dim">
-              <li>· Permissionless: pick your own range</li>
-              <li>· Earn swap fees; full manual control</li>
+              <li>· Open to anyone: pick your own range</li>
+              <li>· Earn trading fees; full manual control</li>
               <li>
-                · <span className="text-mute">No FERA emissions</span>. Those are the
-                vault&apos;s only carrot
+                · <span className="text-mute">No FERA rewards</span> - those are the
+                vault&apos;s edge
               </li>
             </ul>
           </div>
         </div>
         <p className="text-caption text-mute">
-          Straight talk: a skilled LP hand-managing a tight range can capture more fees per
-          dollar than the vault. We don&apos;t market the vault as higher-yield. It&apos;s the{" "}
-          <span className="text-dim">managed, emissions-eligible, passive</span> door.
-          Sophisticated LPs who want a custom range deepen this same pool for free.
+          Straight talk: a skilled provider hand-managing a tight range can earn more fees
+          per dollar than the vault. We don&apos;t market the vault as higher-yield -
+          it&apos;s the <span className="text-dim">managed, hands-off</span> door. Anyone
+          who wants a custom range can deepen this same pool for free.
         </p>
       </div>
     </Card>

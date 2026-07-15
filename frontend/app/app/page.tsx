@@ -8,8 +8,8 @@ export default function EarnPage() {
     <div className="space-y-8">
       <PageHeader
         eyebrow="Earn"
-        title="LP where every flow pays you"
-        subtitle="Regime-aware fees turn toxic, bot, and weekend-drift volume into LP income. Deposit into a managed vault, hold a normal ERC-20 share, and earn fee yield plus esFERA."
+        title="Be the market maker"
+        subtitle="Deposit into a vault that provides and auto-manages the liquidity in these pools, and earn a cut of the trading fees. The fee rises when it's volatile - and you can withdraw anytime."
       />
 
       <FeaturedHero />
@@ -20,7 +20,7 @@ export default function EarnPage() {
         <div className="flex items-baseline justify-between">
           <h2 className="text-heading font-semibold">All pools</h2>
           <span className="text-caption text-mute">
-            Fees are live · APR is fee-yield + emissions, shown separately
+            Meme coins now · tokenized stocks coming soon
           </span>
         </div>
         <PoolList />

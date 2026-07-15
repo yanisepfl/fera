@@ -12,8 +12,8 @@ import { cn } from "@/lib/cn";
 type Filter = "ALL" | Regime;
 const TABS: { key: Filter; label: string }[] = [
   { key: "ALL", label: "All pools" },
-  { key: "RWA", label: "RWA" },
-  { key: "MEME", label: "MEME" },
+  { key: "MEME", label: "Meme coins" },
+  { key: "RWA", label: "Stock tokens" },
 ];
 type Sort = "tvl" | "total" | "fee";
 

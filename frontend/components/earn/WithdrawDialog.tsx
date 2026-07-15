@@ -1,20 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { RegimeBadge } from "@/components/ui/Badge";
 import { TokenPair } from "@/components/ui/TokenPair";
 import { JitPenaltyNotice } from "./JitPenaltyNotice";
-import { jitState } from "@/lib/jit";
+import { holdState, windowCountdown, HOLD_LABEL } from "@/lib/jit";
 import { usd, esFera } from "@/lib/format";
 import type { PoolSummary, Position } from "@/lib/types";
 
 /**
- * Withdraw dialog. Its whole reason to exist beyond a plain "burn shares" flow is to make the
- * early-exit fee-forfeiture penalty (INV-1″ / D-14) impossible to miss BEFORE confirm, the
- * same rigor as the esFERA instant-exit haircut. If the position is inside its JIT window the
- * user sees, live, exactly how much accrued fee they'd forfeit and must tick an ack.
+ * Withdraw dialog. Withdrawals are in-kind and pro-rata — you get your share of the actual
+ * pool tokens, with no pricing — and are never blocked once the one-time 1-hour post-deposit
+ * hold has passed (lib/jit#DEPOSIT_HOLD_SEC). While a fresh position is still inside that hold
+ * the dialog says so and the confirm is held back, with a live countdown.
  */
 export function WithdrawDialog({
   pool,
@@ -26,19 +26,24 @@ export function WithdrawDialog({
   trigger: (open: () => void) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const [ack, setAck] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
-  const s = jitState(pool.regime, position.lastAddTs);
-  // Only force the explicit forfeiture ack while the penalty is actually live.
-  const needsAck = s.active && position.feesEarned > 0;
-  const canConfirm = !needsAck || ack;
+  // Tick while open so the live hold countdown / disabled state stays honest.
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (!open) return;
+    const id = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [open]);
+
+  // A withdrawal is only ever held back by the one-time post-deposit hold — never otherwise.
+  const h = holdState(position.lastAddTs);
+  const canConfirm = !h.held;
 
   function reset() {
     setOpen(false);
     setTimeout(() => {
-      setAck(false);
       setDone(false);
     }, 200);
   }
@@ -88,38 +93,22 @@ export function WithdrawDialog({
                 </div>
               </div>
 
-              {/* the whole point: JIT forfeiture, surfaced before confirm */}
+              {/* one-time post-deposit hold status, surfaced before confirm */}
               <JitPenaltyNotice
-                regime={pool.regime}
                 mode="withdraw"
                 lastAddTs={position.lastAddTs}
-                accruedFeesUsd={position.feesEarned}
               />
 
               <p className="text-caption text-mute">
-                Principal is returned in full and a withdrawal is never blocked. Any
-                pending esFERA keeps vesting. Withdrawing shares doesn&apos;t forfeit it.
+                Withdrawals are in-kind and pro-rata — you get your share of the actual pool
+                tokens, with no pricing — and are never blocked once the {HOLD_LABEL} hold has
+                passed. Any pending esFERA keeps vesting; withdrawing shares doesn&apos;t
+                forfeit it.
               </p>
-
-              {needsAck ? (
-                <label className="flex items-start gap-2 rounded-lg border border-danger-line bg-danger-wash p-3 text-body-sm text-text">
-                  <input
-                    type="checkbox"
-                    checked={ack}
-                    onChange={(e) => setAck(e.target.checked)}
-                    className="mt-0.5 accent-[var(--danger)]"
-                  />
-                  <span>
-                    I understand I&apos;m forfeiting accrued fees by exiting inside the{" "}
-                    early-exit window.
-                  </span>
-                </label>
-              ) : null}
 
               <Button
                 className="w-full"
                 size="lg"
-                variant={needsAck ? "danger" : "primary"}
                 disabled={!canConfirm || submitting}
                 onClick={() => {
                   setSubmitting(true);
@@ -131,8 +120,8 @@ export function WithdrawDialog({
               >
                 {submitting
                   ? "Confirming…"
-                  : needsAck
-                  ? "Withdraw & forfeit fees"
+                  : h.held
+                  ? `Withdraw in ${windowCountdown(h.secondsLeft)}`
                   : "Confirm withdraw"}
               </Button>
             </>

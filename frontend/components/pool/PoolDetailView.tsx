@@ -67,7 +67,7 @@ export function PoolDetailView({ poolId }: { poolId: PoolId }) {
             label="Fee-yield APR"
             value={apr(pool.feeApr)}
             accent="var(--pos)"
-            tip="Trailing LP fee yield, net of the 10% performance fee. Half of that fee flows to stakers."
+            tip="The trading fees this position has been earning, shown after fees."
           />
           <Stat
             label="Emissions APR"

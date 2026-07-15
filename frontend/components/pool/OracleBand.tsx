@@ -27,8 +27,8 @@ export function OracleBand({ pool }: { pool: PoolDetail }) {
   return (
     <Card>
       <CardHeader
-        eyebrow="RWA strategy"
-        title="Oracle-anchored band"
+        eyebrow="Stock strategy"
+        title="Range anchored to a reference price"
         action={
           mh ? (
             <Badge color={mh.color} wash="var(--ink-800)" dot>
@@ -40,7 +40,7 @@ export function OracleBand({ pool }: { pool: PoolDetail }) {
       <div className="px-5 pb-5 space-y-5">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <div>
-            <div className="overline mb-1">Chainlink oracle</div>
+            <div className="overline mb-1">Reference price</div>
             <div className="font-mono tnum text-title font-semibold text-rwa">
               {usd(pool.oraclePrice)}
             </div>
@@ -52,7 +52,7 @@ export function OracleBand({ pool }: { pool: PoolDetail }) {
             </div>
           </div>
           <div>
-            <div className="overline mb-1">Drift vs oracle</div>
+            <div className="overline mb-1">Drift vs reference</div>
             <div
               className={cn(
                 "font-mono tnum text-title font-semibold",
@@ -71,7 +71,7 @@ export function OracleBand({ pool }: { pool: PoolDetail }) {
             <div className="absolute inset-y-2 left-3 right-3">
               <div className="relative h-full rounded-md bg-rwa-wash">
                 {/* oracle marker */}
-                <Marker pct={posPct(pool.oraclePrice)} color="var(--regime-rwa)" label="Oracle" />
+                <Marker pct={posPct(pool.oraclePrice)} color="var(--regime-rwa)" label="Reference" />
                 {/* pool marker */}
                 <Marker pct={posPct(pool.poolPrice)} color="var(--text)" label="Pool" top />
               </div>
@@ -86,8 +86,8 @@ export function OracleBand({ pool }: { pool: PoolDetail }) {
 
         <p className="text-caption text-mute">
           {mh?.open
-            ? "Market open: tight band, recenters only when the oracle moves past hysteresis (TWAP-sanity-checked)."
-            : "Off-hours: band widened and fee scaled with the pool↔oracle gap. Weekend drift arbitrage becomes recurring LP income, not LP loss."}
+            ? "Market open: the range stays tight and only re-centers when the reference price moves enough to matter."
+            : "Off-hours: the range widened and the fee scales with how far the pool price has drifted from the reference. That weekend drift becomes recurring income for you, instead of a loss."}
         </p>
       </div>
     </Card>

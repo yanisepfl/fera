@@ -80,7 +80,7 @@ export function LiveFeeHero({
               <div className="font-mono tnum text-title font-semibold text-pos">
                 {apr(pool.feeApr)}
               </div>
-              <div className="text-caption text-mute">net of 10% perf fee</div>
+              <div className="text-caption text-mute">after fees</div>
             </div>
             <div>
               <div className="overline mb-1">Emissions APR</div>

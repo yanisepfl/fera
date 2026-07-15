@@ -34,14 +34,14 @@ export function YourPosition({
           <div className="flex flex-col items-start gap-3">
             <p className="text-body-sm text-dim">
               Connect a wallet to see your vault shares, fees earned, and pending
-              esFERA for this pool.
+              rewards for this pool.
             </p>
             <DepositDialog pool={pool} defaultRiskClass={riskClass} />
           </div>
         ) : !pos ? (
           <div className="flex flex-col items-start gap-3">
             <p className="text-body-sm text-dim">
-              You don&apos;t LP this pool yet.
+              You&apos;re not providing to this pool yet.
             </p>
             <DepositDialog pool={pool} defaultRiskClass={riskClass} />
           </div>

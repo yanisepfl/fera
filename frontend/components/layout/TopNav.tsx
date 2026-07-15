@@ -9,10 +9,10 @@ import { ConnectButton } from "./ConnectButton";
 /**
  * Flagship pool the "Pool" tab lands on. Pool detail is inherently per-pool
  * (/pool/[poolId]); there is no pools-index route (Earn is the list), so the nav
- * entry deep-links to the featured NVDA/USDG pool. Active for any /pool/* path.
+ * entry deep-links to the featured MEME pool (PEPE/WETH). Active for any /pool/* path.
  */
 const FEATURED_POOL =
-  "0x0000000000000000000000000000000000000000000000000000000000000001";
+  "0x0000000000000000000000000000000000000000000000000000000000000002";
 
 const NAV: { href: string; label: string; match: (p: string) => boolean }[] = [
   { href: "/app", label: "Earn", match: (p) => p === "/app" },

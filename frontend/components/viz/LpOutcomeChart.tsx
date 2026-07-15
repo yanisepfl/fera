@@ -2,7 +2,6 @@
 
 import { useId } from "react";
 import { cn } from "@/lib/cn";
-import { CountUp } from "./CountUp";
 import {
   HollowEndpoint,
   IllustrativeChart,
@@ -17,42 +16,39 @@ import {
  * Chart A - <LpOutcomeChart>: "Same position, same path. The gap is fees."
  * (REDESIGN_PLAN.md §3 · Chart A)
  *
- * Identical LP position over the SAME modeled volatile (pump-dump) price path, so
- * impermanent loss is identical and the entire difference is fee capture. The FERA
- * regime-fee line finishes ABOVE a vanilla pool. MODELED, not a live result, and not
- * the vault versus a self-managed LP - the tag pill + caption say so.
+ * Illustration of the MECHANISM: an identical LP position over the same volatile
+ * (pump-dump) path has identical impermanent loss, so the whole difference is fee
+ * capture - the fee-earning FERA line finishes ABOVE a vanilla pool. The axes are
+ * relative and unlabeled; the shapes below are arbitrary illustrative units, NOT a
+ * prediction and NOT specific returns.
  *
  * Datasets are seeded constants below so the shape is reproducible + identical
  * everywhere the chart is embedded.
  * ========================================================================== */
 
-/** Cumulative LP value (%), FERA regime-fee pool. 40 pts, ends +7.5%. Modeled. */
+/** Cumulative LP value, FERA fee-earning pool. Arbitrary relative units, 40 pts. */
 const OUTCOME_FERA = [
   0.0, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.6, 1.9, 2.4, 3.0, 3.6, 4.1, 4.5, 4.8,
   5.0, 5.1, 5.0, 4.9, 5.1, 5.5, 6.0, 6.4, 6.7, 6.9, 7.0, 6.9, 6.8, 6.9, 7.0,
   7.1, 7.2, 7.25, 7.3, 7.35, 7.4, 7.42, 7.45, 7.48, 7.5,
 ] as const;
 
-/** Cumulative LP value (%), vanilla pool. Same path → same IL, ends +1.8%. Modeled. */
+/** Cumulative LP value, vanilla pool. Same path → same IL, ends lower. Relative units. */
 const OUTCOME_VANILLA = [
   0.0, 0.15, 0.28, 0.4, 0.5, 0.6, 0.68, 0.78, 0.88, 1.0, 1.15, 1.28, 1.38, 1.45,
   1.5, 1.52, 1.5, 1.42, 1.35, 1.38, 1.45, 1.52, 1.58, 1.62, 1.65, 1.66, 1.63,
   1.6, 1.62, 1.65, 1.68, 1.7, 1.72, 1.73, 1.74, 1.76, 1.77, 1.78, 1.79, 1.8,
 ] as const;
 
-/** The shared modeled price path (pump then dump) - faint grey context line. */
+/** The shared price path (pump then dump) - faint grey context line, relative units. */
 const PRICE_PATH = [
   100, 101, 100.5, 102, 101.5, 103, 104, 106, 109, 113, 118, 124, 129, 133, 136,
   138, 137, 133, 128, 130, 134, 131, 126, 120, 115, 112, 114, 111, 109, 110,
   112, 111, 110.5, 111, 110.8, 111.2, 111, 111.3, 111.1, 111.2,
 ] as const;
 
-const FERA_END = OUTCOME_FERA[OUTCOME_FERA.length - 1];
-const VANILLA_END = OUTCOME_VANILLA[OUTCOME_VANILLA.length - 1];
-const DELTA = Math.round((FERA_END - VANILLA_END) * 10) / 10; // +5.7 pts
-
 const Y_MIN = 0;
-const Y_MAX = 8.4; // headroom for the emphasized endpoint + label
+const Y_MAX = 8.4; // headroom for the emphasized endpoint + its label
 
 export function LpOutcomeChart({ className }: { className?: string }) {
   const gid = useId().replace(/:/g, "");
@@ -102,7 +98,7 @@ export function LpOutcomeChart({ className }: { className?: string }) {
           </linearGradient>
         </defs>
 
-        {/* faint modeled price path (context) */}
+        {/* faint price path (context) */}
         <path
           d={priceLine}
           fill="none"
@@ -112,16 +108,6 @@ export function LpOutcomeChart({ className }: { className?: string }) {
           vectorEffect="non-scaling-stroke"
           style={{ transition: "opacity 700ms var(--ease-out)" }}
         />
-        <text
-          x={g.left + 4}
-          y={pricePts[0][1] - 6}
-          className="font-mono"
-          fontSize={10}
-          fill="var(--text-mute)"
-          opacity={0.7}
-        >
-          modeled price path
-        </text>
 
         {/* FERA area fill */}
         <path
@@ -156,7 +142,7 @@ export function LpOutcomeChart({ className }: { className?: string }) {
           style={draw}
         />
 
-        {/* endpoints + value labels */}
+        {/* endpoints + qualitative labels (no invented percentages) */}
         <g
           opacity={g.visible ? 1 : 0}
           style={{ transition: "opacity 500ms var(--ease-out) 850ms" }}
@@ -165,11 +151,11 @@ export function LpOutcomeChart({ className }: { className?: string }) {
           <text
             x={vanEnd[0] + 9}
             y={vanEnd[1] + 4}
-            className="font-mono"
+            className="font-sans"
             fontSize={11}
             fill="var(--series-cove)"
           >
-            +{VANILLA_END.toFixed(1)}%
+            Vanilla
           </text>
 
           <PrimaryEndpoint
@@ -181,12 +167,12 @@ export function LpOutcomeChart({ className }: { className?: string }) {
           <text
             x={feraEnd[0] + 9}
             y={feraEnd[1] + 4}
-            className="font-mono"
+            className="font-sans"
             fontSize={11}
             fontWeight={600}
             fill="var(--series-fera)"
           >
-            +{FERA_END.toFixed(1)}%
+            FERA
           </text>
         </g>
       </>
@@ -205,45 +191,25 @@ export function LpOutcomeChart({ className }: { className?: string }) {
       }
       legend={
         <>
-          <LegendChip
-            color="var(--series-fera)"
-            label="FERA pool"
-            value={`+${FERA_END.toFixed(1)}%`}
-          />
-          <LegendChip
-            color="var(--series-cove)"
-            label="Vanilla pool"
-            value={`+${VANILLA_END.toFixed(1)}%`}
-            dashed
-          />
+          <LegendChip color="var(--series-fera)" label="FERA pool" />
+          <LegendChip color="var(--series-cove)" label="Vanilla pool" dashed />
           <LegendChip color="var(--series-ref)" label="Price path" />
         </>
       }
-      callout={
-        <div>
-          <div className="text-micro uppercase tracking-[0.08em] text-mute">
-            Fee gap
-          </div>
-          <CountUp
-            value={DELTA}
-            suffix=" pts"
-            sign
-            decimals={1}
-            className="text-title font-semibold text-accent"
-          />
-        </div>
-      }
-      ariaLabel={`Modeled chart: an identical LP position over the same volatile price path finishes at plus ${FERA_END} percent in a FERA pool versus plus ${VANILLA_END} percent in a vanilla pool, a gap of ${DELTA} points, entirely from fees.`}
+      caption="Illustration of the mechanism, not a prediction."
+      ariaLabel="Illustrative chart: over the same volatile price path, an identical position in a fee-earning FERA pool finishes above a vanilla pool - the gap between them is fee income. A shape illustration on relative axes, not a prediction or specific return."
       srTable={
         <table>
           <caption>
-            Modeled cumulative LP value (%) over a synthetic pump-dump price path
+            Illustrative relative shape (arbitrary units, not returns): cumulative LP
+            value in a FERA fee-earning pool versus a vanilla pool over the same
+            volatile price path
           </caption>
           <thead>
             <tr>
               <th>Point</th>
-              <th>FERA pool (%)</th>
-              <th>Vanilla pool (%)</th>
+              <th>FERA pool (relative)</th>
+              <th>Vanilla pool (relative)</th>
             </tr>
           </thead>
           <tbody>

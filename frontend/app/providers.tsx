@@ -16,13 +16,13 @@ import { wagmiConfig } from "@/lib/wagmi";
  * modal). MSW is started lazily only when NEXT_PUBLIC_USE_MSW=1 (otherwise lib/api.ts
  * serves fixtures directly with no worker).
  *
- * RainbowKit is themed onto the Fera-Gold dark surface (DESIGN.md tokens) so the modal
+ * RainbowKit is themed onto the Fera-Green dark surface (DESIGN.md tokens) so the modal
  * reads as part of the app, not a bolted-on default. `modalSize="compact"` keeps the
  * calm, data-dense register.
  */
 const feraWalletTheme: Theme = darkTheme({
-  accentColor: "#e7b84b", // --accent (Fera Gold)
-  accentColorForeground: "#17130a", // --on-accent
+  accentColor: "#2ecf88", // --accent (Fera Green)
+  accentColorForeground: "#04140c", // --on-accent
   borderRadius: "medium",
   fontStack: "system",
   overlayBlur: "small",

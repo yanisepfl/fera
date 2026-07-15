@@ -1,35 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Regime } from "@/lib/types";
-import { jitState, feesForfeited, windowLabel, windowCountdown } from "@/lib/jit";
-import { usd } from "@/lib/format";
+import { holdState, windowCountdown, HOLD_LABEL } from "@/lib/jit";
 import { cn } from "@/lib/cn";
 
 /**
- * Early-exit fee-forfeiture disclosure (INV-1″ / D-14). Surfaced BEFORE confirm in both the
- * Deposit and Withdraw dialogs, with the same rigor as the esFERA instant-exit haircut: a
- * user must not be able to miss that removing liquidity inside the penalty window forfeits
- * their *accrued fees* (never principal) to the LPs still in range.
+ * Deposit → withdraw hold notice. Surfaced BEFORE confirm in the vault Deposit and Withdraw
+ * dialogs. After a deposit the vault applies a one-time 1-hour hold before those shares can be
+ * withdrawn — a standard anti-gaming guard, not a fee and not a penalty. Principal is never at
+ * risk; once the hold lapses a withdrawal is always available, in-kind and pro-rata, straight
+ * from the pool.
  *
- *   mode="deposit"  is a forward-looking rule that WILL apply to this fresh position.
- *   mode="withdraw" is LIVE: given the position's last add + accrued fees, show exactly what
- *                     an exit right now would forfeit, ticking down as the window lapses.
+ *   mode="deposit"  forward-looking: the hold that WILL apply to this fresh position.
+ *   mode="withdraw" live: whether this position's hold has lapsed yet, ticking down if not.
  */
 export function JitPenaltyNotice({
-  regime,
   mode,
   lastAddTs,
-  accruedFeesUsd = 0,
   className,
 }: {
-  regime: Regime;
   mode: "deposit" | "withdraw";
   lastAddTs?: number;
-  accruedFeesUsd?: number;
   className?: string;
 }) {
-  // Tick every second so the live withdraw countdown/forfeiture stays honest.
+  // Tick every second so the live withdraw countdown stays honest.
   const [, force] = useState(0);
   useEffect(() => {
     if (mode !== "withdraw" || lastAddTs === undefined) return;
@@ -37,43 +31,35 @@ export function JitPenaltyNotice({
     return () => clearInterval(id);
   }, [mode, lastAddTs]);
 
-  const win = windowLabel(regime);
-
   if (mode === "deposit") {
     return (
       <div
         className={cn(
-          "rounded-lg border border-warn-wash bg-warn-wash p-3 text-body-sm",
+          "rounded-lg border border-line bg-well p-3 text-body-sm",
           className
         )}
       >
         <div className="flex items-center gap-1.5">
-          <span aria-hidden className="text-warn">⏱</span>
+          <span aria-hidden className="text-accent">🔒</span>
           <span className="font-semibold text-text">
-            Early-exit fee forfeiture: {win} window
+            Withdraw anytime, after a one-time {HOLD_LABEL} hold
           </span>
         </div>
         <p className="mt-1 text-caption text-dim">
-          If you withdraw within{" "}
-          <span className="font-semibold text-text">{win}</span> of a deposit, you forfeit the
-          swap fees this position accrued in that window. They go to the LPs still in range.
-          The penalty decays linearly to zero across the window. Your{" "}
-          <span className="font-semibold text-text">principal is never touched and a
-          withdrawal is never blocked</span>.
-        </p>
-        <p className="mt-1.5 text-caption text-pos">
-          LP-positive: when other LPs bail early, their forfeited fees are paid to you while
-          you stay in range.
+          Right after you deposit there&apos;s a short {HOLD_LABEL} hold before you can
+          withdraw — a standard guard that keeps out gamers. Your{" "}
+          <span className="font-semibold text-text">deposit is never at risk</span>. Once the
+          hold passes you can withdraw anytime, straight from the pool, in-kind: you get your
+          share of the actual tokens, with no pricing and nothing to sell.
         </p>
       </div>
     );
   }
 
-  // withdraw, live
-  const s = jitState(regime, lastAddTs);
-  const forfeit = feesForfeited(accruedFeesUsd, s);
+  // withdraw — live
+  const h = holdState(lastAddTs);
 
-  if (!s.active) {
+  if (!h.held) {
     return (
       <div
         className={cn(
@@ -83,51 +69,38 @@ export function JitPenaltyNotice({
       >
         <div className="flex items-center gap-1.5 text-pos">
           <span aria-hidden>✓</span>
-          <span className="font-semibold">No early-exit penalty</span>
+          <span className="font-semibold">Free to withdraw</span>
         </div>
         <p className="mt-1 text-caption text-mute">
-          This position is past its {win} fee-forfeiture window. You keep 100% of accrued
-          fees. (Fees forfeited by LPs who exit early are donated to in-range LPs like you.)
+          The {HOLD_LABEL} hold has passed. You can withdraw anytime, in-kind and pro-rata —
+          your share of the actual pool tokens, straight from the pool. A withdrawal is never
+          blocked.
         </p>
       </div>
     );
   }
 
-  const pct = Math.round(s.forfeitFraction * 100);
   return (
     <div
       className={cn(
-        "rounded-lg border border-danger-line bg-danger-wash p-4 shadow-glow-danger",
+        "rounded-lg border border-warn-wash bg-warn-wash p-3 text-body-sm",
         className
       )}
     >
-      <div className="flex items-center justify-between">
-        <span className="text-micro font-semibold uppercase tracking-[0.1em] text-danger">
-          ⚠ Early-exit forfeiture is active
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 font-semibold text-text">
+          <span aria-hidden className="text-warn">⏳</span>
+          Short {HOLD_LABEL} hold still in effect
         </span>
-        <span className="font-mono tnum text-body-sm text-danger">−{pct}% of fees</span>
-      </div>
-      <div className="mt-1 flex items-baseline gap-2">
-        <span className="font-mono tnum text-display-l font-bold text-danger">
-          {usd(forfeit)}
-        </span>
-        <span className="text-body text-danger/80">in accrued fees forfeited</span>
-      </div>
-      <p className="mt-1 text-caption text-danger/80">
-        You added this position {win === "30 min" ? "under 30 min" : "under 10 min"} ago.
-        Exiting now donates {usd(forfeit)} of your{" "}
-        <span className="font-mono">{usd(accruedFeesUsd)}</span> accrued fees to in-range LPs.
-        Principal is unaffected.
-      </p>
-      <div className="mt-2 flex items-center justify-between rounded-md bg-danger-wash/60 px-2 py-1.5">
-        <span className="text-caption text-danger/80">Penalty hits zero in</span>
-        <span className="font-mono tnum text-body-sm font-semibold text-danger">
-          {windowCountdown(s.secondsLeft)}
+        <span className="font-mono tnum text-body-sm text-text">
+          {windowCountdown(h.secondsLeft)}
         </span>
       </div>
-      <p className="mt-2 text-caption text-mute">
-        Wait it out to keep 100% of your fees. The window decays linearly. Every second you
-        hold, less is at risk.
+      <p className="mt-1 text-caption text-dim">
+        You deposited recently, so this position is still inside its one-time {HOLD_LABEL}
+        hold. You&apos;ll be able to withdraw in{" "}
+        <span className="font-semibold text-text">{windowCountdown(h.secondsLeft)}</span>. Your
+        deposit is never at risk, and after the hold you can withdraw anytime, in-kind.
       </p>
     </div>
   );

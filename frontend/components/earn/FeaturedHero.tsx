@@ -5,9 +5,9 @@ import type { PoolId } from "@/lib/types";
 import { LiveFeeHero } from "./LiveFeeHero";
 import { Skeleton } from "@/components/ui/Skeleton";
 
-/** Flagship pool for the Earn hero (NVDA/USDG, the depth showcase). */
+/** Flagship pool for the Earn hero. MEME-first (PEPE/WETH); tokenized stocks soon. */
 const FEATURED: PoolId =
-  "0x0000000000000000000000000000000000000000000000000000000000000001";
+  "0x0000000000000000000000000000000000000000000000000000000000000002";
 
 export function FeaturedHero() {
   const { data: pools } = usePools();

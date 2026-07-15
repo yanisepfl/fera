@@ -16,18 +16,19 @@ import {
  * (REDESIGN_PLAN.md §3 · Chart B)
  *
  * The LP fee rises with realized volatility (cushioning LP loss in the worst
- * periods) and stays low in calm markets (to pull volume). ILLUSTRATIVE shape - 
- * the exact curve is set on-chain per pool. Cove volatility area is the driver;
- * the gold line is the fee tracking it above a floor.
+ * periods) and stays low in calm markets (to pull volume). ILLUSTRATIVE shape on
+ * relative, unlabeled axes - the exact curve is set on-chain per pool, so nothing
+ * here is a specific rate. Cove volatility area is the driver; the gold line is the
+ * fee tracking it above a floor.
  * ========================================================================== */
 
-/** Realized volatility (modeled, arbitrary scale) across calm → storm → calm. */
+/** Realized volatility across calm → storm → calm. Arbitrary relative scale. */
 const VOL = [
   8, 8, 9, 9, 10, 11, 12, 14, 18, 24, 32, 42, 52, 61, 68, 73, 76, 78, 77, 74,
   69, 62, 54, 45, 37, 30, 24, 19, 16, 14, 12, 11, 10, 10, 9, 9, 9, 10, 10, 10,
 ] as const;
 
-/** LP fee (%), tracks realized volatility above the on-chain floor. */
+/** LP fee tracking realized volatility above a floor. Arbitrary relative units. */
 const FEE = [
   0.34, 0.34, 0.34, 0.35, 0.35, 0.36, 0.38, 0.41, 0.46, 0.54, 0.66, 0.82, 0.99,
   1.15, 1.3, 1.42, 1.5, 1.55, 1.54, 1.49, 1.4, 1.28, 1.15, 1.01, 0.88, 0.76,
@@ -35,8 +36,7 @@ const FEE = [
   0.36,
 ] as const;
 
-const FEE_FLOOR = 0.34; // MEME fee floor, plain
-const FEE_END = FEE[FEE.length - 1];
+const FEE_FLOOR = 0.34; // illustrative floor level (relative), drives the dashed baseline
 
 const VOL_MAX = 90;
 const FEE_MAX = 1.8;
@@ -150,12 +150,12 @@ export function FeeResponseChart({ className }: { className?: string }) {
         <text
           x={g.left + 4}
           y={floorY - 5}
-          className="font-mono"
+          className="font-sans"
           fontSize={10}
           fill="var(--accent-dim)"
           style={fade(300)}
         >
-          fee floor {FEE_FLOOR.toFixed(2)}%
+          fee floor
         </text>
 
         {/* fee line - gold, draws in */}
@@ -180,7 +180,7 @@ export function FeeResponseChart({ className }: { className?: string }) {
             fontSize={11}
             fill="var(--text-dim)"
           >
-            cushions LPs here
+            you earn more here
           </text>
           <text
             x={g.px(0.82)}
@@ -190,11 +190,11 @@ export function FeeResponseChart({ className }: { className?: string }) {
             fontSize={11}
             fill="var(--text-mute)"
           >
-            low fee pulls volume
+            low fee keeps volume
           </text>
         </g>
 
-        {/* fee endpoint - pulsing gold + current value */}
+        {/* fee endpoint - pulsing gold marker (no invented rate) */}
         <g style={fade(900, 500)}>
           <PrimaryEndpoint
             x={feeEnd[0]}
@@ -202,16 +202,6 @@ export function FeeResponseChart({ className }: { className?: string }) {
             color="var(--series-fera)"
             reduced={g.reduced}
           />
-          <text
-            x={feeEnd[0] + 9}
-            y={feeEnd[1] + 4}
-            className="font-mono"
-            fontSize={11}
-            fontWeight={600}
-            fill="var(--series-fera)"
-          >
-            {FEE_END.toFixed(2)}%
-          </text>
         </g>
       </>
     );
@@ -220,7 +210,7 @@ export function FeeResponseChart({ className }: { className?: string }) {
   return (
     <IllustrativeChart
       className={cn(className)}
-      eyebrow="Regime fee"
+      eyebrow="Dynamic fee"
       title={
         <>
           The fee rises when{" "}
@@ -229,22 +219,22 @@ export function FeeResponseChart({ className }: { className?: string }) {
       }
       legend={
         <>
-          <LegendChip color="var(--series-fera)" label="LP fee" />
-          <LegendChip color="var(--series-cove)" label="Realized volatility" />
+          <LegendChip color="var(--series-fera)" label="Your fee" />
+          <LegendChip color="var(--series-cove)" label="Market volatility" />
         </>
       }
-      ariaLabel="Illustrative chart: the LP fee tracks realized volatility, rising from a floor of 0.34 percent through a volatile period and returning toward the floor as the market calms."
+      ariaLabel="Illustrative chart on relative axes: the fee you earn tracks market volatility, rising from a low floor through a volatile period and returning toward the floor as the market calms. A shape illustration, not specific rates."
       srTable={
         <table>
           <caption>
-            Illustrative LP fee versus realized volatility across a calm → storm →
-            calm window
+            Illustrative relative shape (arbitrary units, not specific rates): the fee you
+            earn versus market volatility across a calm → storm → calm window
           </caption>
           <thead>
             <tr>
               <th>Point</th>
-              <th>Realized volatility</th>
-              <th>LP fee (%)</th>
+              <th>Market volatility (relative)</th>
+              <th>Your fee (relative)</th>
             </tr>
           </thead>
           <tbody>

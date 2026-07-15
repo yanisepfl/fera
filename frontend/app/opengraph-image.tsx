@@ -5,7 +5,7 @@ import { ImageResponse } from "next/og";
  * the bundled default font, no external assets, so shared FERA links unfurl with a
  * real preview instead of a blank card. Satori-safe (every container is flex).
  */
-export const alt = "FERA - regime-aware liquidity on Robinhood Chain";
+export const alt = "FERA - earn like a market maker, on Robinhood Chain";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -22,7 +22,7 @@ export default function OpengraphImage() {
           padding: 80,
           backgroundColor: "#0a0a0b",
           backgroundImage:
-            "linear-gradient(150deg, rgba(231,184,75,0.12) 0%, rgba(231,184,75,0) 45%)",
+            "linear-gradient(150deg, rgba(46,207,136,0.14) 0%, rgba(46,207,136,0) 48%)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
@@ -68,7 +68,7 @@ export default function OpengraphImage() {
               maxWidth: 900,
             }}
           >
-            Earn more on memecoins and stocks.
+            Earn like a market maker.
           </div>
           <div
             style={{
@@ -79,8 +79,8 @@ export default function OpengraphImage() {
               maxWidth: 940,
             }}
           >
-            One regime-aware vault. Volatile, bot-driven flow pays LPs instead of
-            draining them.
+            Deposit into a vault that provides and auto-manages the liquidity - and
+            earn the trading fees. On meme coins and stocks.
           </div>
         </div>
 
@@ -93,7 +93,7 @@ export default function OpengraphImage() {
             color: "#6e6e79",
           }}
         >
-          On-chain-verifiable · Immutable · Permissionless
+          Built on Robinhood Chain · Meme coins now · Stocks soon
         </div>
       </div>
     ),

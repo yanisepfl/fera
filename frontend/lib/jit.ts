@@ -69,3 +69,35 @@ export function windowCountdown(secondsLeft: number): string {
   const s = Math.floor(secondsLeft % 60);
   return `${m}m ${String(s).padStart(2, "0")}s`;
 }
+
+/**
+ * Deposit → withdraw hold (vault anti-gaming guard) — this is what the vault Deposit and
+ * Withdraw dialogs surface, NOT the JIT fee-forfeiture above.
+ *
+ * After a deposit the vault applies a one-time 1-hour hold before those shares can be
+ * withdrawn. It is not a fee and not a penalty: principal is never at risk, and once the
+ * hold lapses a withdrawal is always available — in-kind, pro-rata, straight from the pool.
+ * Because the hold (1 h) always outlasts the JIT fee window (≤30 min), a vault depositor can
+ * never actually land inside the fee-forfeiture window, so the dialogs show the hold instead.
+ */
+export const DEPOSIT_HOLD_SEC = 3600; // 1 hour
+
+export interface HoldState {
+  /** true while the position is still inside its one-time post-deposit hold. */
+  held: boolean;
+  /** seconds until the hold lapses (0 once past it). */
+  secondsLeft: number;
+}
+
+export function holdState(
+  lastAddTs: number | undefined,
+  nowSec = Math.floor(Date.now() / 1000)
+): HoldState {
+  if (lastAddTs === undefined) return { held: false, secondsLeft: 0 };
+  const elapsed = Math.max(0, nowSec - lastAddTs);
+  const secondsLeft = Math.max(0, DEPOSIT_HOLD_SEC - elapsed);
+  return { held: secondsLeft > 0, secondsLeft };
+}
+
+/** "1-hour" style label for the deposit hold, derived from DEPOSIT_HOLD_SEC. */
+export const HOLD_LABEL = `${Math.round(DEPOSIT_HOLD_SEC / 3600)}-hour`;

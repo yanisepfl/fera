@@ -7,11 +7,12 @@ import { cn } from "@/lib/cn";
  * IllustrativeChart - the shared frame for FERA's two SVG illustrative charts
  * (REDESIGN_PLAN.md §3). Build once, both charts use it.
  *
- * Self-contained: pure SVG, NO chart library. Renders the Cove-glow card, the
- * mandatory Illustrative / Modeled tag pill (so these can never be mistaken for
- * live data), a horizontal-only grid + stronger baseline, an inline legend, an
- * honest caption, and an accessible role="img" label. The plot itself is drawn by
- * each chart via the `renderPlot` render prop, which receives pixel geometry.
+ * Self-contained: pure SVG, NO chart library. Renders the Cove-glow card, a
+ * horizontal-only grid + stronger baseline, an inline legend, an optional caption,
+ * and an accessible role="img" label. The charts show the SHAPE of a mechanism on
+ * relative, unlabeled axes - never live on-chain data and never specific returns.
+ * The plot itself is drawn by each chart via the `renderPlot` render prop, which
+ * receives pixel geometry.
  * ========================================================================== */
 
 /* ----------------------------------------------------------------- geometry -- */
@@ -118,19 +119,6 @@ function useMeasuredWidth<T extends HTMLElement>() {
 
 /* --------------------------------------------------------- shared subparts --- */
 
-/** The mandatory honesty tag - always visible, top-right of every illustrative chart. */
-export function TagPill({ kind }: { kind: "Illustrative" | "Modeled" }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-micro uppercase tracking-[0.08em] text-mute">
-      <span
-        className="h-1.5 w-1.5 rounded-full"
-        style={{ background: "var(--accent2)" }}
-      />
-      {kind}
-    </span>
-  );
-}
-
 /** Inline legend chip: colored dot + label + optional mono value. */
 export function LegendChip({
   color,
@@ -224,7 +212,6 @@ export function HollowEndpoint({
 export function IllustrativeChart({
   eyebrow,
   title,
-  tag,
   legend,
   callout,
   caption,
@@ -235,8 +222,6 @@ export function IllustrativeChart({
 }: {
   eyebrow: string;
   title: React.ReactNode;
-  /** Optional honesty tag pill. Omit to render no pill (titles are self-explanatory). */
-  tag?: "Illustrative" | "Modeled";
   legend?: React.ReactNode;
   /** Optional prominent figure (e.g. the +5.7 pts delta callout). */
   callout?: React.ReactNode;
@@ -328,10 +313,9 @@ export function IllustrativeChart({
             {title}
           </h3>
         </div>
-        {tag || callout ? (
+        {callout ? (
           <div className="flex shrink-0 flex-col items-end gap-2">
-            {tag ? <TagPill kind={tag} /> : null}
-            {callout ? <div className="text-right">{callout}</div> : null}
+            <div className="text-right">{callout}</div>
           </div>
         ) : null}
       </div>

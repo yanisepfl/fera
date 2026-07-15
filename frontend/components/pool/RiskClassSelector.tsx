@@ -46,7 +46,7 @@ export function RiskClassSelector({
       <div>
         <div className="mb-1 flex items-center gap-1">
           <span className="overline">{RISK_CLASS_GROUP_LABEL}</span>
-          <InfoTip text="Two managed risk profiles over the same pool. Active concentrates near price for more fee capture and more impermanent loss; Steady sits wide for less of both. (Internally these are the vault's share classes.)" />
+          <InfoTip text="Two managed risk levels over the same pool. Active concentrates near the price for more fees and bigger swings; Steady spreads wide for less of both." />
         </div>
         {only ? (
           <SingleClassNote rc={ordered[0]} regime={pool.regime} />
@@ -103,9 +103,9 @@ export function RiskClassSelector({
     <Card>
       <CardHeader
         eyebrow={RISK_CLASS_GROUP_LABEL}
-        title="Choose how your liquidity is shaped"
+        title="Pick your risk level"
         action={
-          <InfoTip text="Each profile is a separate managed share class (its own ERC-20, NAV and fees). Pick one when you deposit; you can hold both." />
+          <InfoTip text="Each level is managed separately, with its own fees. Pick one when you deposit - you can hold both." />
         }
       />
       <div className="px-5 pb-5 space-y-3">
@@ -145,8 +145,8 @@ export function RiskClassSelector({
                 <p className="mt-1 text-body-sm text-dim">{m.tagline}</p>
 
                 <dl className="mt-3 space-y-2 text-caption">
-                  <TradeoffRow label="Fee capture" color="var(--pos)" text={m.feeCapture} />
-                  <TradeoffRow label="Impermanent loss" color="var(--neg)" text={m.il} />
+                  <TradeoffRow label="Fees earned" color="var(--pos)" text={m.feeCapture} />
+                  <TradeoffRow label="Position swings" color="var(--neg)" text={m.il} />
                 </dl>
 
                 <p className="mt-3 border-t border-line pt-2 text-caption text-mute">
@@ -201,15 +201,15 @@ function SingleClassNote({
     <div className="rounded-lg border border-line bg-well p-3 text-caption text-mute">
       {regime === "MEME" ? (
         <>
-          This memecoin pool offers the{" "}
+          This meme-coin pool offers the{" "}
           <span className="font-semibold" style={{ color: m.color }}>
             {m.label}
           </span>{" "}
-          profile only. A wide/steady profile on a memecoin is barely distinguishable from
-          not LPing it. The steadier profile ships on stock-token (RWA) pools where it fits.
+          level only. On a meme coin, a wide Steady range barely differs from just holding
+          the tokens. Steady arrives with tokenized stocks, where it fits.
         </>
       ) : (
-        <>Only the {m.label} profile is available for this pool.</>
+        <>Only the {m.label} level is available for this pool.</>
       )}
       {full ? <div className="mt-1">{m.persona}</div> : null}
     </div>

@@ -9,13 +9,13 @@ export const REGIME_META: Record<
     label: "MEME",
     color: "var(--regime-meme)",
     wash: "var(--regime-meme-wash)",
-    blurb: "Shaped band ladder. Principal isn't churned; fee income drips to follow price. Volatility-scaled fee turns toxic flow into LP income.",
+    blurb: "Your position is spread across a shaped range and left in place; the fees it earns are redeployed to follow the price. The fee rises with volatility, turning busy, bot-driven trading into income for you.",
   },
   RWA: {
-    label: "RWA",
+    label: "Stock",
     color: "var(--regime-rwa)",
     wash: "var(--regime-rwa-wash)",
-    blurb: "Oracle-anchored band. Low fee in market hours, widened off-hours; weekend drift becomes LP yield.",
+    blurb: "Tokenized stock. The range stays tight while the market is open and widens off-hours, so weekend price drift becomes income for you.",
   },
 };
 
@@ -23,21 +23,21 @@ export const STRATEGY_KIND_META: Record<
   StrategyKind,
   { label: string; note: string; principal: boolean }
 > = {
-  0: { label: "Initial mint", note: "Band ladder opened (Core / Mid / Tail)", principal: true },
+  0: { label: "Position opened", note: "Your position opened across a shaped range (Core / Mid / Tail).", principal: true },
   1: {
-    label: "Guarded recenter",
-    note: "Rare principal move that fires only after at-spot depth stayed below the full-range-equivalent floor for 24h, at least 7 days since the last, and pool TWAP within 5%",
+    label: "Safety-checked reset",
+    note: "Rare reset of your position - allowed only after your range stayed too shallow for 24h, at least 7 days since the last reset, and the pool price within 5% of a recent average.",
     principal: true,
   },
-  2: { label: "Off-hours widen", note: "Underlying market closed; band widened, fee up", principal: true },
-  3: { label: "Partial withdraw", note: "Off-hours de-risk", principal: true },
-  4: { label: "Compound in place", note: "Fees reinvested into an existing band; no reposition", principal: false },
+  2: { label: "Off-hours widen", note: "Underlying market closed; the range widened and the fee went up.", principal: true },
+  3: { label: "Partial withdraw", note: "Off-hours de-risk.", principal: true },
+  4: { label: "Fees reinvested", note: "Fees reinvested into your existing range; nothing repositioned.", principal: false },
   5: {
-    label: "Fee drip",
-    note: "Collected fee income deployed as a new no-swap band at spot; principal untouched",
+    label: "Fees redeployed",
+    note: "Collected fees added as fresh liquidity at the current price; your original deposit untouched.",
     principal: false,
   },
-  6: { label: "Band consolidate", note: "Nearby fee-bands merged to stay under the band cap", principal: false },
+  6: { label: "Ranges merged", note: "Nearby fee ranges merged to keep the position tidy.", principal: false },
 };
 
 export const MARKET_HOURS_META: Record<

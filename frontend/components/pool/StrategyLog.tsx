@@ -21,9 +21,12 @@ export function StrategyLog({ pool }: { pool: PoolDetail }) {
       <div className="px-5 pb-5">
         {pool.regime === "MEME" ? (
           <p className="mb-4 text-caption text-mute">
-            <span className="text-pos">Fee drip</span> moves income only;{" "}
-            <span className="text-accent">principal</span> actions are rare and guarded.{" "}
-            {hasDrip ? "Income follows price without churning your principal." : ""}
+            <span className="text-pos">Fee redeployments</span> just move your earnings
+            to follow the price; <span className="text-accent">deposit</span> changes are
+            rare and safety-checked.{" "}
+            {hasDrip
+              ? "The fees follow the price without disturbing your original deposit."
+              : ""}
           </p>
         ) : null}
         <ol className="relative space-y-4 border-l border-line pl-5">
@@ -48,7 +51,7 @@ export function StrategyLog({ pool }: { pool: PoolDetail }) {
                           : "var(--pos-wash)",
                       }}
                     >
-                      {meta.principal ? "principal" : "fee income"}
+                      {meta.principal ? "deposit" : "fees"}
                     </span>
                   </span>
                   <span className="text-caption text-mute">{ago(e.t)}</span>

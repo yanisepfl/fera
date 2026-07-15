@@ -6,14 +6,14 @@ import { cn } from "@/lib/cn";
  *
  * Path geometry is copied verbatim from public/brand/mark.svg (5 flat shapes,
  * skewX(-8) group) so it stays crisp at any size. The group fill is
- * `currentColor`, and `color` defaults to `--accent` (Fera Gold), so the mark
- * themes correctly wherever it's dropped in; pass `color` to override (e.g.
- * `var(--on-accent)` on a solid accent background).
+ * `currentColor`, and `color` defaults to `--accent2` (Fera Gold), the retained
+ * heritage brand mark - the UI accent is green, but the MARK stays gold
+ * (public/brand). Pass `color` to override (e.g. on a solid accent background).
  */
 export function Logo({
   className,
   size = 24,
-  color = "var(--accent)",
+  color = "var(--accent2)",
 }: {
   className?: string;
   size?: number | string;

@@ -10,10 +10,10 @@ const ROLE_META: Record<
   LadderBand["role"],
   { label: string; color: string; wash: string }
 > = {
-  core: { label: "Core", color: "var(--accent)", wash: "rgba(231,184,75,0.22)" },
-  mid: { label: "Mid", color: "var(--regime-rwa)", wash: "rgba(90,169,230,0.20)" },
+  core: { label: "Core", color: "var(--accent)", wash: "rgba(46,207,136,0.22)" },
+  mid: { label: "Mid", color: "var(--regime-rwa)", wash: "rgba(134,167,155,0.20)" },
   tail: { label: "Tail", color: "var(--text-mute)", wash: "rgba(110,110,121,0.22)" },
-  fee: { label: "Fee drip", color: "var(--pos)", wash: "rgba(70,192,138,0.20)" },
+  fee: { label: "Fees", color: "var(--pos)", wash: "rgba(70,192,138,0.20)" },
 };
 
 /** Relative band edges from a geometric factor k (band = [P/k, P·k]). */
@@ -48,10 +48,10 @@ export function BandLadder({ pool }: { pool: PoolDetail }) {
   return (
     <Card>
       <CardHeader
-        eyebrow="MEME strategy · shaped liquidity"
-        title="The band ladder"
+        eyebrow="Shaped liquidity"
+        title="How your money is placed"
         action={
-          <InfoTip text="Principal is minted once as a ladder of discrete bands: concentrated near price (wins routing), fat tails for crash coverage. Weights 30/40/30 (Core/Mid/Tail). Fee income drips into new bands at spot to follow price; principal bands are never closed or swapped." />
+          <InfoTip text="Your deposit is placed once as a set of ranges: concentrated near the current price to earn the most, with wide layers for crash coverage (weighted 30/40/30 across Core/Mid/Tail). The fees it earns are redeployed near the price to follow the market; your original ranges are never closed or swapped." />
         }
       />
       <div className="px-5 pb-5 space-y-4">
@@ -64,7 +64,7 @@ export function BandLadder({ pool }: { pool: PoolDetail }) {
               style={{ left: `${spotPos}%` }}
             >
               <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold text-text">
-                spot
+                price
               </span>
             </div>
             {rows.map((b, i) => {
@@ -136,18 +136,18 @@ export function BandLadder({ pool }: { pool: PoolDetail }) {
             );
           })}
           <div className="grid grid-cols-[auto_1fr_auto_auto] gap-3 border-t border-line pt-1.5 text-micro uppercase tracking-wide text-mute">
-            <span className="w-[74px]">band</span>
-            <span>range vs spot</span>
+            <span className="w-[74px]">layer</span>
+            <span>range vs price</span>
             <span>weight</span>
             <span className="w-14 text-right">depth</span>
           </div>
         </div>
 
         <p className="text-caption text-mute">
-          Weighted at-spot depth is ≈4.1× a single full-range position per dollar, before a
-          single extra deposit. <span className="text-pos">Solid</span> bands are principal
-          (never churned); <span className="text-pos">dashed</span> are fee-drip bands the
-          vault mints at spot from collected fees.
+          Placed this way, your money sits about 4.1× deeper near the price than a single
+          flat range would - before you add a cent. <span className="text-pos">Solid</span>{" "}
+          layers are your deposit (never sold off); <span className="text-pos">dashed</span>{" "}
+          are the fees the vault redeploys near the price.
         </p>
       </div>
     </Card>

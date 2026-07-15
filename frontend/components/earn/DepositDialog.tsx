@@ -114,8 +114,8 @@ export function DepositDialog({
                 .
               </p>
               <p className="text-caption text-mute">
-                You now hold vault shares (ERC-20). Fees + esFERA emissions accrue to them
-                automatically. Emissions are the vault&apos;s exclusive reward.
+                You now hold vault shares. Your trading fees and FERA rewards build up in
+                them automatically.
               </p>
               <Button className="w-full" onClick={reset}>
                 Done
@@ -174,12 +174,12 @@ export function DepositDialog({
 
               <p className="text-caption text-mute">
                 Live fee {feePipsToPct(pool.currentFeePips)} · TVL{" "}
-                {usdCompact(pool.tvlUsd)} · 10% performance fee applies only to fees
-                you earn, never to principal. Half of it flows back to stakers.
+                {usdCompact(pool.tvlUsd)} · a performance fee applies only to the fees you
+                earn, never to your deposit.
               </p>
 
-              {/* early-exit fee-forfeiture window, impossible to miss before confirm */}
-              <JitPenaltyNotice regime={pool.regime} mode="deposit" />
+              {/* one-time post-deposit hold, surfaced before confirm */}
+              <JitPenaltyNotice mode="deposit" />
 
               {geo.needsAck ? (
                 <label className="flex items-start gap-2 rounded-lg border border-warn-wash bg-warn-wash p-3 text-body-sm text-dim">
@@ -190,8 +190,8 @@ export function DepositDialog({
                     className="mt-0.5 accent-[var(--accent)]"
                   />
                   <span>
-                    {geo.reason} I understand RWA (Stock Token) LP risk and confirm
-                    eligibility.
+                    {geo.reason} I understand the risk of providing to a stock-token pool
+                    and confirm eligibility.
                   </span>
                 </label>
               ) : null}

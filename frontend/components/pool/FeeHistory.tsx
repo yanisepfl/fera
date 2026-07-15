@@ -29,8 +29,8 @@ export function FeeHistory({ pool }: { pool: PoolDetail }) {
               type: "area",
               data,
               color: "var(--accent)",
-              topColor: "rgba(231,184,75,0.20)",
-              bottomColor: "rgba(231,184,75,0.00)",
+              topColor: "rgba(46,207,136,0.20)",
+              bottomColor: "rgba(46,207,136,0.00)",
               title: "fee %",
             },
           ]}

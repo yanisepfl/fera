@@ -13,8 +13,8 @@ export default function RewardsPage() {
     <div className="space-y-8">
       <PageHeader
         eyebrow="Rewards"
-        title="Your epoch, your esFERA"
-        subtitle="Emissions follow real activity: 85% to LPs, 5% to traders, 10% to treasury, capped by protocol revenue. Claim your esFERA, vest it to FERA, or stake for a real revenue share."
+        title="Your rewards"
+        subtitle="Track what you've earned this week, claim your FERA rewards and let them vest, or stake to earn a share of real protocol revenue."
       />
 
       {/* current epoch: countdown, your fees paid and earned, projected esFERA */}
