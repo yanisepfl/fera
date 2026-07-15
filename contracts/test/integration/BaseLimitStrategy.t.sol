@@ -798,46 +798,55 @@ contract BaseLimitStrategyTest is Deployers {
     }
 
     // ═════════════════════════════════════════════════════════════════════════════════════
-    // v3 §6 — PERMISSIONLESS CALLING: any address (not just the former keeper) can successfully
-    // trigger rebalanceLimit/rebalanceBase/selfSwap/rebalanceViaVenue; bounds still apply identically
+    // KEEPER-ONLY SWAPS (sandwich-surface reduction): swap-FREE rebalances stay PERMISSIONLESS
+    // (anyone keeps the vault healthy — re-ticking / limit-fill realises no IL), but any rebalance
+    // that SWAPS (selfSwap / rebalanceViaVenue / rebalanceBase useSelfSwap=true) is KEEPER-ONLY. The
+    // TWAP-slippage bound is the second line of defence, not the first, so a random caller cannot even
+    // attempt a sandwich by driving a swap. All the swap-free bounds (RebalanceTooSoon, dwell, TWAP
+    // confirm) still apply identically to whoever calls.
     // ═════════════════════════════════════════════════════════════════════════════════════
 
-    function test_permissionless_anyCallerCanTriggerRebalanceActions() public {
+    function test_swapFreeRebalancePermissionless_butSwapsAreKeeperOnly() public {
         address rando = makeAddr("totally-random-adversary");
         _seedMeme();
         vault.skimIdle(memeId, 0);
 
-        // rebalanceLimit — succeeds for a random caller within bounds.
+        // rebalanceLimit (SWAP-FREE) — succeeds for a random caller within bounds.
         vm.prank(rando);
         vault.rebalanceLimit(memeId, 0);
         assertGt(vault.bandCount(memeId, 0), 1, "limit band was not deployed by the random caller");
 
-        // Immediately again ⇒ the SAME bound (RebalanceTooSoon) still applies to the random caller
-        // — no special treatment, no bypass.
+        // Immediately again ⇒ the SAME bound (RebalanceTooSoon) still applies to the random caller.
         vm.prank(rando);
         vm.expectRevert(IFeraVault.RebalanceTooSoon.selector);
         vault.rebalanceLimit(memeId, 0);
 
-        // selfSwap — succeeds for a random caller within bounds.
+        // selfSwap (SWAPS) — a random caller is now REJECTED (keeper-only); the keeper may, within the
+        // SAME TWAP-slippage bound. The rando call reverts before any clock/state change, so the
+        // keeper's call proceeds in the same interval window.
         vm.warp(block.timestamp + FeraConstants.MEME_MIN_REBALANCE_INTERVAL_SEC + 1);
         _refreshTwap(memeKey);
         (uint256 r0,) = vault.idleReserves(memeId, 0);
         vm.prank(rando);
-        uint256 out = vault.selfSwap(memeId, 0, true, r0 / 50);
-        assertGt(out, 0, "random caller's self-swap produced nothing");
+        vm.expectRevert(IFeraVault.OnlyKeeper.selector);
+        vault.selfSwap(memeId, 0, true, r0 / 50);
+        uint256 out = vault.selfSwap(memeId, 0, true, r0 / 50); // keeper == this test contract
+        assertGt(out, 0, "keeper self-swap produced nothing");
 
-        // rebalanceViaVenue — governance still gates the ALLOWLIST (trust decision), but ANY
-        // caller may trigger a swap through an already-whitelisted venue.
+        // rebalanceViaVenue (SWAPS) — allowlist is the trust boundary AND the caller must be the keeper.
         vault.setVenueAllowed(address(venue), true);
         vm.warp(block.timestamp + FeraConstants.MEME_MIN_REBALANCE_INTERVAL_SEC + 1);
         _refreshTwap(memeKey);
         (uint256 r0b,) = vault.idleReserves(memeId, 0);
         vm.prank(rando);
-        uint256 out2 = vault.rebalanceViaVenue(memeId, 0, address(venue), true, r0b / 10);
-        assertGt(out2, 0, "random caller's venue rebalance produced nothing");
+        vm.expectRevert(IFeraVault.OnlyKeeper.selector);
+        vault.rebalanceViaVenue(memeId, 0, address(venue), true, r0b / 10);
+        uint256 out2 = vault.rebalanceViaVenue(memeId, 0, address(venue), true, r0b / 10); // keeper
+        assertGt(out2, 0, "keeper venue rebalance produced nothing");
 
-        // rebalanceBase — push tranche 1 (Active) OOR, satisfy dwell + TWAP-confirm, then a random
-        // caller (not the deployer/former-keeper) triggers the guarded recenter.
+        // rebalanceBase (SWAP-FREE, useSelfSwap=false) — STAYS permissionless: push tranche 1 (Active)
+        // OOR, satisfy dwell + TWAP-confirm, then a random caller re-anchors the base (re-ticking
+        // realises no IL, so there is no sandwich surface to protect).
         _pushToTick(memeKey, 2_200); // Active OOR, Steady stays put (v3 vol-adaptive calm-floor sizing)
         vm.prank(rando);
         assertTrue(vault.pokeOutOfRange(memeId, 1), "expected Active base OOR");
@@ -845,7 +854,7 @@ contract BaseLimitStrategyTest is Deployers {
         swap(memeKey, false, -1e15, "");
         vm.prank(rando);
         vault.rebalanceBase(memeId, 1, false);
-        assertFalse(vault.pokeOutOfRange(memeId, 1), "base did not re-anchor after the random caller's recenter");
+        assertFalse(vault.pokeOutOfRange(memeId, 1), "base did not re-anchor after the random caller's swap-free recenter");
     }
 
     // ═════════════════════════════════════════════════════════════════════════════════════

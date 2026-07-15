@@ -601,7 +601,9 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     }
 
     /// @inheritdoc IFeraVault
-    /// @dev v3: PERMISSIONLESS. Gate 1-4 are unchanged from v2; Gate 5 (execution slippage) is a
+    /// @dev PERMISSIONLESS when swap-free (useSelfSwap=false — re-ticking realises no IL); KEEPER-ONLY
+    ///      when useSelfSwap=true (the swap path, gated below). Gate 1-4 are unchanged from v2; Gate 5
+    ///      (execution slippage) is a
     ///      DIFFERENT bound from the NEW IL-budget cap (item 4 / FeraConstants.MAX_IL_BPS_PER_RECENTER):
     ///      Gate 5 bounds price-impact RATIO vs TWAP; the IL cap bounds the ABSOLUTE NAV-fraction any
     ///      one call's self-swap may put at risk. When the ideal rebalancing swap exceeds the IL
@@ -612,6 +614,11 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///      `rebalanceLimit`).
     function rebalanceBase(PoolId id, uint8 t, bool useSelfSwap) external nonReentrant notPaused(id) knownTranche(id, t) {
         _requireBaseLimit(id, t);
+        // Keeper-only when this recenter also SWAPS. Sandwich surface reduction: a swap-requiring
+        // rebalance can only be triggered by the trusted keeper (the TWAP-slippage bound is the second
+        // line of defence, not the first). The swap-FREE recenter (useSelfSwap=false) stays
+        // permissionless — re-ticking realises no IL, so anyone may keep the band anchored.
+        if (useSelfSwap && msg.sender != keeper) revert OnlyKeeper();
         // EIP-170 size-split: gate + recenter body in VaultActions (delegatecalled). Every gate,
         // the IL-budget cap, Gate-5 slippage bound, both clocks + StrategyAction are byte-identical.
         VaultActions.rebalanceBase(
@@ -629,13 +636,15 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
 
     /// @notice Standalone bounded self-swap against the OWN v4 pool (ratio balancing). Executed output
     ///         re-verified ≥ (1 − MAX_REBALANCE_SLIPPAGE_BPS) × pool-TWAP-implied, else reverts. Spends
-    ///         only the tranche's OWN reserve (no cross-tranche transfer). v3: PERMISSIONLESS, and
-    ///         additionally bounded by the SAME per-call IL-budget notional cap `rebalanceBase` uses
+    ///         only the tranche's OWN reserve (no cross-tranche transfer). KEEPER-ONLY (swap path —
+    ///         sandwich-surface reduction: no random caller can drive a swap), and additionally
+    ///         bounded by the SAME per-call IL-budget notional cap `rebalanceBase` uses
     ///         (closes the loophole where a standalone call could otherwise finish, in one shot, what
     ///         a partial guarded recenter deliberately left capped) — a user-supplied `amountIn` over
     ///         budget REVERTS (`IlBudgetExceeded`) rather than being silently truncated.
     function selfSwap(PoolId id, uint8 t, bool zeroForOne, uint256 amountIn)
         external
+        onlyKeeper
         nonReentrant
         notPaused(id)
         knownTranche(id, t)
@@ -648,11 +657,12 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     }
 
     /// @inheritdoc IFeraVault
-    /// @dev v3: PERMISSIONLESS. The venue allowlist (governance/trust decision) is the safety
-    ///      boundary here, not the caller — anyone may TRIGGER a swap through an ALREADY-WHITELISTED
-    ///      venue, bounded by the same on-chain TWAP-slippage check as the self-swap path.
+    /// @dev KEEPER-ONLY (swap path). TWO safety boundaries: the venue allowlist (governance/trust
+    ///      decision) AND the keeper gate — only the keeper may TRIGGER a swap through an
+    ///      ALREADY-WHITELISTED venue, bounded by the same on-chain TWAP-slippage check as self-swap.
     function rebalanceViaVenue(PoolId id, uint8 t, address venue, bool zeroForOne, uint256 amountIn)
         external
+        onlyKeeper
         nonReentrant
         notPaused(id)
         knownTranche(id, t)
