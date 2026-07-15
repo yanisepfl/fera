@@ -83,16 +83,18 @@ library VaultActions {
         emit IFeraVault.StrategyAction(PoolId.unwrap(c.id), uint8(kind), tick, tick, ilBudget, bytes32(0));
     }
 
-    /// @notice Standalone bounded self-swap against the OWN v4 pool (ratio balancing). Permissionless.
+    /// @notice Standalone bounded self-swap against the OWN v4 pool (ratio balancing). KEEPER-ONLY
+    ///         (gated on the vault). `minInterval` is passed by the vault (the governance-set
+    ///         `keeperSwapInterval`, default 0 = no rate-limit for the trusted keeper).
     function selfSwap(
         TrancheState storage tr,
-        PoolInfo storage p,
         VaultOps.Ctx memory c,
         bool zeroForOne,
         uint256 amountIn,
+        uint32 minInterval,
         mapping(uint256 => uint64) storage lastRebalanceTs
     ) public returns (uint256 amountOut) {
-        _requireIntervalSince(lastRebalanceTs[c.t], _minRebalanceInterval(p));
+        _requireIntervalSince(lastRebalanceTs[c.t], minInterval);
         uint256 have = zeroForOne ? tr.reserve0 : tr.reserve1;
         if (amountIn == 0 || amountIn > have) revert IFeraVault.Slippage();
 
@@ -117,9 +119,10 @@ library VaultActions {
         address venue,
         bool zeroForOne,
         uint256 amountIn,
+        uint32 minInterval,
         mapping(uint256 => uint64) storage lastRebalanceTs
     ) public returns (uint256 amountOut) {
-        _requireIntervalSince(lastRebalanceTs[c.t], _minRebalanceInterval(p));
+        _requireIntervalSince(lastRebalanceTs[c.t], minInterval);
         uint256 have = zeroForOne ? tr.reserve0 : tr.reserve1;
         if (amountIn == 0 || amountIn > have) revert IFeraVault.Slippage(); // spend only OWN reserve
 
@@ -202,12 +205,6 @@ library VaultActions {
         uint256 r1 = amt1 < tr.reserve1 ? amt1 : tr.reserve1;
         tr.reserve1 -= r1;
         if (amt1 - r1 != 0) tr.pending1 -= (amt1 - r1);
-    }
-
-    function _minRebalanceInterval(PoolInfo storage p) internal view returns (uint32) {
-        return p.regime == FeraTypes.Regime.MEME
-            ? FeraConstants.MEME_MIN_REBALANCE_INTERVAL_SEC
-            : FeraConstants.RWA_MIN_REBALANCE_INTERVAL_SEC;
     }
 
     function _oorDwell(PoolInfo storage p) internal view returns (uint32) {

@@ -429,10 +429,13 @@ contract BaseLimitReauditPoC is Deployers {
     // A6 — keeper griefing is interval-bounded (R-15) and per-action slippage-bounded
     // ═════════════════════════════════════════════════════════════════════════════════════════
 
-    /// A6.a Back-to-back keeper self-swaps are rejected until the regime min-interval elapses; the
-    ///      per-action loss is additionally capped at 1% vs TWAP → bounded value bleed. VERDICT: BOUNDED.
+    /// A6.a Keeper self-swaps CAN be throttled: setKeeperSwapInterval is OPTIONAL (default 0/off, since
+    ///      swaps are keeper-only) but when governance enables it, back-to-back swaps are rejected until
+    ///      it elapses — a defense-in-depth cap on how fast a COMPROMISED keeper key could bleed value
+    ///      (each swap is also ≤1% vs TWAP). VERDICT: BOUNDED (when enabled).
     function test_A6_selfSwap_intervalBounded() public {
         _seedWithIdle();
+        vault.setKeeperSwapInterval(FeraConstants.MEME_MIN_REBALANCE_INTERVAL_SEC); // enable the optional throttle
         (uint256 r0,) = vault.idleReserves(memeId, 0);
         vault.selfSwap(memeId, 0, true, r0 / 100);
         // immediate repeat is interval-gated

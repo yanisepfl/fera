@@ -99,6 +99,14 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     uint256 public volWidthMultMinBps = FeraConstants.VOL_WIDTH_MULT_MIN_BPS_DEFAULT;
     uint256 public volWidthMultMaxBps = FeraConstants.VOL_WIDTH_MULT_MAX_BPS_DEFAULT;
 
+    /// @notice Rate-limit (seconds) between keeper-only standalone swaps (selfSwap / rebalanceViaVenue).
+    ///         DEFAULT 0 = NO throttle (the keeper is trusted, and every call is still bounded by the
+    ///         per-call IL-budget + the ≤1% TWAP-slippage check). Governance can dial a throttle back in
+    ///         via setKeeperSwapInterval — defense-in-depth against keeper-KEY compromise — without a
+    ///         redeploy. The permissionless swap-FREE cadence (rebalanceLimit) keeps its own interval.
+    uint32 public keeperSwapInterval; // default 0 (off)
+    event KeeperSwapIntervalSet(uint32 intervalSeconds);
+
     // Storage structs (Band / TierConfig / TrancheState / PoolInfo) live in
     // `libraries/VaultTypes.sol` so the size-split libraries (VaultOps) can receive `storage`
     // references to the vault's own state via public-library delegatecall. The storage LAYOUT is
@@ -550,6 +558,14 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         emit TierConfigured(PoolId.unwrap(id), t, tier, idleBps);
     }
 
+    /// @notice Governance throttle on keeper-only swaps (seconds; 0 = off, the default). A pure
+    ///         defense-in-depth rate-limit against keeper-KEY compromise — bounds how fast a stolen key
+    ///         could churn IL-realizing swaps. Every swap is independently bounded regardless.
+    function setKeeperSwapInterval(uint32 intervalSeconds) external onlyOwner {
+        keeperSwapInterval = intervalSeconds;
+        emit KeeperSwapIntervalSet(intervalSeconds);
+    }
+
     /// @inheritdoc IFeraVault
     function setVolWidthMultBounds(uint256 minBps, uint256 maxBps) external onlyOwner {
         if (minBps == 0 || minBps > maxBps) revert WidthMultOutOfBounds();
@@ -653,7 +669,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         _requireBaseLimit(id, t);
         // EIP-170 size-split: interval gate, reserve/IL-budget bounds, swap + clock + StrategyAction
         // live in VaultActions (delegatecalled) — byte-identical.
-        return VaultActions.selfSwap(tranches[id][t], pools[id], _vaultCtx(id, t), zeroForOne, amountIn, lastRebalanceTs[id]);
+        return VaultActions.selfSwap(tranches[id][t], _vaultCtx(id, t), zeroForOne, amountIn, keeperSwapInterval, lastRebalanceTs[id]);
     }
 
     /// @inheritdoc IFeraVault
@@ -673,7 +689,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         // EIP-170 size-split: interval gate, TWAP bound, bounded untrusted-venue call + balance-delta
         // reserve accounting + clock + StrategyAction live in VaultActions (delegatecalled).
         return VaultActions.rebalanceViaVenue(
-            tranches[id][t], pools[id], _vaultCtx(id, t), venue, zeroForOne, amountIn, lastRebalanceTs[id]
+            tranches[id][t], pools[id], _vaultCtx(id, t), venue, zeroForOne, amountIn, keeperSwapInterval, lastRebalanceTs[id]
         );
     }
 
