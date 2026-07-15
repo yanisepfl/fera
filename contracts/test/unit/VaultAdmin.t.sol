@@ -293,4 +293,30 @@ contract VaultAdminTest is Deployers {
         vault.withdraw(memeId, 0, sh, 0, 0);
         assertEq(FeraShare(vault.shareToken(memeId, 0)).balanceOf(address(this)), 0, "shares not burned on withdraw");
     }
+
+    /// @notice ERC-4626-style quote pricing (for DefiLlama / Rabby): the vault exposes a TWAP-priced,
+    ///         quote-denominated NAV, and each share reports asset()/totalAssets()/convertToAssets()/
+    ///         pricePerShare() consistently off it.
+    function test_quoteNav_and_erc4626PricingSurface() public {
+        vault.deposit(memeId, 0, 100e18, 100e18, 0);
+        vm.warp(block.timestamp + 601); // past DEPOSIT_TWAP_WINDOW_SEC (600); pre-window falls back to spot
+
+        uint256 nav = vault.quoteNav(memeId, 0);
+        assertGt(nav, 0, "quoteNav should be positive after a deposit");
+
+        FeraShare share = FeraShare(vault.shareToken(memeId, 0));
+        address quote = vault.quoteAsset(memeId);
+        assertTrue(
+            quote == Currency.unwrap(currency0) || quote == Currency.unwrap(currency1), "quoteAsset not a pool token"
+        );
+        assertEq(share.asset(), quote, "share.asset() != vault.quoteAsset");
+        assertEq(share.totalAssets(), nav, "share.totalAssets() != quoteNav");
+
+        uint256 supply = share.totalSupply();
+        uint256 myShares = share.balanceOf(address(this));
+        assertGt(myShares, 0, "no shares");
+        assertApproxEqAbs(share.convertToAssets(supply), nav, 2, "convertToAssets(totalSupply) != NAV");
+        assertEq(share.pricePerShare(), share.convertToAssets(1e18), "pricePerShare != convertToAssets(1e18)");
+        assertApproxEqAbs(share.convertToAssets(myShares), nav * myShares / supply, 2, "share value not pro-rata");
+    }
 }

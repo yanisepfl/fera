@@ -2,6 +2,14 @@
 pragma solidity ^0.8.26;
 
 import {IFeraShare} from "../interfaces/IFeraShare.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
+/// @dev Minimal read-only view into the owning Vault for ERC-4626-style share pricing. PoolId is a
+///      `type PoolId is bytes32`, so these bytes32 selectors match the vault's PoolId-typed views.
+interface IVaultShareOracle {
+    function quoteNav(bytes32 id, uint8 tranche) external view returns (uint256);
+    function quoteAsset(bytes32 id) external view returns (address);
+}
 
 /// @title FeraShare
 /// @notice Per-pool ERC-20 vault share (D-1 / MASTER_SPEC §4). Deployed ONCE as an implementation
@@ -25,6 +33,7 @@ contract FeraShare is IFeraShare {
     // ── FERA share state ──────────────────────────────────────────────────────────────────
     address public vault;
     bytes32 public poolId;
+    uint8 public tranche; // which risk tranche of the pool this share represents (for NAV lookups)
 
     /// @dev V2-2 (SEC-3 #4): per-account outgoing-transfer lock. The Vault sets this to
     ///      block.timestamp + DEPOSIT_COOLDOWN_SEC on every deposit, so freshly-minted shares can
@@ -45,15 +54,53 @@ contract FeraShare is IFeraShare {
     }
 
     /// @inheritdoc IFeraShare
-    function initialize(address vault_, bytes32 poolId_, string calldata name_, string calldata symbol_)
-        external
-    {
+    function initialize(
+        address vault_,
+        bytes32 poolId_,
+        uint8 tranche_,
+        string calldata name_,
+        string calldata symbol_
+    ) external {
         if (vault != address(0)) revert AlreadyInitialized();
         if (vault_ == address(0)) revert ZeroAddress();
         vault = vault_;
         poolId = poolId_;
+        tranche = tranche_;
         name = name_;
         symbol = symbol_;
+    }
+
+    // ── ERC-4626-style pricing (READ-ONLY; for DefiLlama / Rabby) ────────────────────────────────
+    // Quote-denominated pricing surface, not a full single-asset ERC-4626 vault: the underlying
+    // position holds TWO tokens, so deposits/withdrawals live on the Vault (two-token, slippage-
+    // guarded). asset()/convertToAssets()/pricePerShare() give integrators a clean, manipulation-
+    // resistant (TWAP) value-per-share in the pool's quote token.
+
+    /// @inheritdoc IFeraShare
+    function asset() external view returns (address) {
+        return IVaultShareOracle(vault).quoteAsset(poolId);
+    }
+
+    /// @inheritdoc IFeraShare
+    function totalAssets() public view returns (uint256) {
+        return IVaultShareOracle(vault).quoteNav(poolId, tranche);
+    }
+
+    /// @inheritdoc IFeraShare
+    function convertToAssets(uint256 shares) public view returns (uint256) {
+        uint256 ts = totalSupply;
+        return ts == 0 ? shares : Math.mulDiv(shares, totalAssets(), ts);
+    }
+
+    /// @inheritdoc IFeraShare
+    function convertToShares(uint256 assets) external view returns (uint256) {
+        uint256 ta = totalAssets();
+        return ta == 0 ? assets : Math.mulDiv(assets, totalSupply, ta);
+    }
+
+    /// @inheritdoc IFeraShare
+    function pricePerShare() external view returns (uint256) {
+        return convertToAssets(1e18);
     }
 
     /// @inheritdoc IFeraShare

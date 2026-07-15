@@ -858,6 +858,23 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         return VaultMath.baseOutOfRange(tranches[id][t], _vaultCtx(id, t));
     }
 
+    // ── EXTERNAL PRICING (ERC-4626-style read surface, for DefiLlama / Rabby) ────────────────────
+    /// @notice Manipulation-resistant NAV of a tranche in its QUOTE token, TWAP-priced. This is the
+    ///         clean EXTERNAL number the share token's convertToAssets/pricePerShare read; it is NOT
+    ///         the internal mint/redeem basis (that stays spot + 1h-cooldown-guarded). Covers base +
+    ///         limit bands + pending + idle reserve, valued at the DEPOSIT_TWAP_WINDOW_SEC average.
+    function quoteNav(PoolId id, uint8 t) public view knownTranche(id, t) returns (uint256) {
+        return VaultMath.trancheValueAtTwapQuote(
+            tranches[id][t], _vaultCtx(id, t), pools[id].quoteIsToken0, FeraConstants.DEPOSIT_TWAP_WINDOW_SEC
+        );
+    }
+
+    /// @notice The pool's liquid QUOTE token — the unit quoteNav (and share pricing) is denominated in.
+    function quoteAsset(PoolId id) public view returns (address) {
+        PoolInfo storage p = pools[id];
+        return p.quoteIsToken0 ? Currency.unwrap(p.key.currency0) : Currency.unwrap(p.key.currency1);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // v3 §2 — VOL-ADAPTIVE POSITION SIZING. Read the MEME EWMA the dynamic fee already reads (via
     // the hook's view); NEVER re-estimate it here.
@@ -1021,6 +1038,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         IFeraShare(share).initialize(
             address(this),
             PoolId.unwrap(id),
+            t,
             t == 0 ? string.concat(name_, " Core") : string.concat(name_, " Anchor"),
             t == 0 ? string.concat(symbol_, "-C") : string.concat(symbol_, "-A")
         );

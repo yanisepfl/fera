@@ -20,7 +20,7 @@ contract FeraShareTest is Test {
     function setUp() public {
         share = new FeraShare();
         // This test contract is the "vault" — it may mint/burn/setTransferLock.
-        share.initialize(address(this), bytes32("pool"), "Fera Share", "fSHARE");
+        share.initialize(address(this), bytes32("pool"), 0, "Fera Share", "fSHARE");
     }
 
     function test_metadata_afterInitialize() public view {
@@ -33,7 +33,7 @@ contract FeraShareTest is Test {
 
     function test_initialize_alreadyInitialized_reverts() public {
         vm.expectRevert(IFeraShare.AlreadyInitialized.selector);
-        share.initialize(address(this), bytes32("x"), "n", "s");
+        share.initialize(address(this), bytes32("x"), 0, "n", "s");
     }
 
     // ── onlyVault gating ────────────────────────────────────────────────────────────────────
@@ -149,6 +149,6 @@ contract FeraShareTest is Test {
     function test_initialize_zeroVaultRejected() public {
         FeraShare fresh = new FeraShare();
         vm.expectRevert(FeraShare.ZeroAddress.selector);
-        fresh.initialize(address(0), bytes32("p"), "n", "s");
+        fresh.initialize(address(0), bytes32("p"), 0, "n", "s");
     }
 }

@@ -50,6 +50,37 @@ library VaultMath {
         v = _valueInToken1(sqrtPriceX96, x, y);
     }
 
+    /// @notice Tranche NAV valued at the manipulation-resistant TWAP price, denominated in the pool's
+    ///         QUOTE token (base + limit bands + pending + reserves; same basis as internal share
+    ///         accounting — excludes not-yet-checkpointed pool fees). This is the clean EXTERNAL pricing
+    ///         number (DefiLlama / Rabby read it via the share's convertToAssets); the internal
+    ///         mint/redeem basis stays spot + cooldown-guarded. Falls back to spot before the TWAP
+    ///         window is available (a freshly created pool).
+    function trancheValueAtTwapQuote(TrancheState storage tr, VaultOps.Ctx memory c, bool quoteIsToken0, uint32 window)
+        public
+        view
+        returns (uint256 quoteValue)
+    {
+        (int24 twapTick, bool ready) = _consultTwap(c, window);
+        uint160 sqrtP;
+        if (ready) {
+            sqrtP = TickMath.getSqrtPriceAtTick(twapTick);
+        } else {
+            (sqrtP,,,) = c.pm.getSlot0(c.id); // pre-window fallback: spot (TWAP not yet observable)
+        }
+        uint256 x = tr.pending0 + tr.reserve0;
+        uint256 y = tr.pending1 + tr.reserve1;
+        uint256 n = tr.bands.length;
+        for (uint256 i; i < n; ++i) {
+            Band storage b = tr.bands[i];
+            if (b.liquidity == 0) continue;
+            (uint256 a0, uint256 a1) = _amountsForLiquidity(sqrtP, b.tickLower, b.tickUpper, b.liquidity);
+            x += a0;
+            y += a1;
+        }
+        quoteValue = quoteIsToken0 ? _valueInToken0(sqrtP, x, y) : _valueInToken1(sqrtP, x, y);
+    }
+
     function valueInToken1(uint160 sqrtPriceX96, uint256 amount0, uint256 amount1) public pure returns (uint256) {
         return _valueInToken1(sqrtPriceX96, amount0, amount1);
     }
@@ -57,6 +88,13 @@ library VaultMath {
     function _valueInToken1(uint160 sqrtPriceX96, uint256 amount0, uint256 amount1) internal pure returns (uint256) {
         uint256 priceX96 = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1 << 96);
         return FullMath.mulDiv(amount0, priceX96, 1 << 96) + amount1;
+    }
+
+    /// @dev Value in token0 terms: amount0 + amount1 / price (price = token1-per-token0, X96 basis).
+    ///      Used when token0 is the pool's quote asset. Reverts on a degenerate zero price (extreme).
+    function _valueInToken0(uint160 sqrtPriceX96, uint256 amount0, uint256 amount1) internal pure returns (uint256) {
+        uint256 priceX96 = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1 << 96);
+        return amount0 + FullMath.mulDiv(amount1, 1 << 96, priceX96);
     }
 
     /// @dev Token amounts a position of `liquidity` on [lower,upper] holds at `sqrtPriceX96`.
