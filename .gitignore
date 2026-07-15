@@ -13,7 +13,6 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # ── Foundry (contracts) ────────────────────────────────────────────────
-/contracts/lib/
 /contracts/out/
 /contracts/cache/
 /contracts/broadcast/
