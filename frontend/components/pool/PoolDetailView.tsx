@@ -11,6 +11,7 @@ import { LiveDot } from "@/components/ui/LiveDot";
 import { Stat } from "@/components/ui/Stat";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Card } from "@/components/ui/Card";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { MemeExplainer } from "./MemeExplainer";
 import { BandLadder } from "./BandLadder";
 import { OracleBand } from "./OracleBand";
@@ -22,14 +23,23 @@ import { OpenLiquidityNote } from "./OpenLiquidityNote";
 import { apr, usdCompact, multiple } from "@/lib/format";
 
 export function PoolDetailView({ poolId }: { poolId: PoolId }) {
-  const { data: pool, isLoading, error } = usePool(poolId);
+  const { data: pool, isLoading, error, refetch } = usePool(poolId);
   const [riskClass, setRiskClass] = useState<RiskClass>("CORE");
 
   if (isLoading) return <Skeleton className="h-96 w-full rounded-lg" />;
   if (error || !pool)
     return (
-      <Card className="p-8 text-center text-body-sm text-neg">
-        Pool not found. <Link href="/app" className="text-accent underline">Back to Earn</Link>
+      <Card className="mx-auto max-w-md">
+        <ErrorState
+          title="We couldn't load this pool"
+          message="It may not exist, or the data was briefly unreachable."
+          onRetry={() => refetch()}
+        />
+        <div className="border-t border-line px-6 py-4 text-center">
+          <Link href="/app" className="text-body-sm font-medium text-accent hover:text-accent-strong">
+            &larr; Back to Earn
+          </Link>
+        </div>
       </Card>
     );
 

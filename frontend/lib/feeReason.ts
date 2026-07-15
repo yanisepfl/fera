@@ -45,7 +45,7 @@ export function feeReason(
     return {
       headline: `Fee ${feePipsToPct(pips)}: volatility elevated`,
       detail:
-        "Realized volatility is above baseline. Principal bands aren't churned - IL is compensated by the fee, not chased with active repositioning.",
+        "Realized volatility is above baseline. Principal bands aren't churned; impermanent loss is compensated by the fee rather than chased with constant repositioning.",
       tone: "warn",
     };
   }

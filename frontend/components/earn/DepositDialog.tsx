@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAccount } from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { RegimeBadge } from "@/components/ui/Badge";
@@ -36,6 +37,7 @@ export function DepositDialog({
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const { isConnected } = useAccount();
+  const { openConnectModal } = useConnectModal();
   const geo = useGeoFence(pool.regime);
 
   // Per-class APR when the pool carries risk-class data; else the whole-pool blend.
@@ -195,19 +197,23 @@ export function DepositDialog({
               ) : null}
 
               {!isConnected ? (
-                <p className="text-caption text-warn">
-                  Connect a wallet to deposit. (Preview shown from mocked data.)
-                </p>
-              ) : null}
-
-              <Button
-                className="w-full"
-                size="lg"
-                disabled={!canConfirm || submitting}
-                onClick={confirm}
-              >
-                {submitting ? "Confirming…" : "Confirm deposit"}
-              </Button>
+                <Button
+                  className="w-full"
+                  size="lg"
+                  onClick={() => openConnectModal?.()}
+                >
+                  Connect wallet to deposit
+                </Button>
+              ) : (
+                <Button
+                  className="w-full"
+                  size="lg"
+                  disabled={!canConfirm || submitting}
+                  onClick={confirm}
+                >
+                  {submitting ? "Confirming…" : "Confirm deposit"}
+                </Button>
+              )}
             </>
           )}
         </div>

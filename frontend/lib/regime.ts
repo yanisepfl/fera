@@ -26,7 +26,7 @@ export const STRATEGY_KIND_META: Record<
   0: { label: "Initial mint", note: "Band ladder opened (Core / Mid / Tail)", principal: true },
   1: {
     label: "Guarded recenter",
-    note: "Rare principal move that fires only after at-spot depth stayed below the v1 floor ≥24h, ≥7d since the last, TWAP within ±5%",
+    note: "Rare principal move that fires only after at-spot depth stayed below the full-range-equivalent floor for 24h, at least 7 days since the last, and pool TWAP within 5%",
     principal: true,
   },
   2: { label: "Off-hours widen", note: "Underlying market closed; band widened, fee up", principal: true },

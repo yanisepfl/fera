@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import { cn } from "@/lib/cn";
 
 export function Modal({
@@ -16,6 +16,8 @@ export function Modal({
   children: React.ReactNode;
   className?: string;
 }) {
+  const titleId = useId();
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -38,6 +40,7 @@ export function Modal({
       <div
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
         className={cn(
           "relative z-10 w-full sm:max-w-md rounded-t-lg sm:rounded-lg border border-line-strong bg-raised shadow-pop animate-fade-up",
           className
@@ -45,7 +48,7 @@ export function Modal({
       >
         {title ? (
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
-            <h3 className="text-heading font-semibold">{title}</h3>
+            <h3 id={titleId} className="text-heading font-semibold">{title}</h3>
             <button
               onClick={onClose}
               aria-label="Close"

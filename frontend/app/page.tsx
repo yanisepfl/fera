@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/ui/Logo";
 import { LpOutcomeChart, FeeResponseChart } from "@/components/viz";
+import { MarketingMobileNav } from "@/components/layout/MarketingMobileNav";
 
 /**
  * Marketing landing (front door, "/"). Dark-first, typography-led, one warm gold
@@ -40,6 +41,7 @@ export default function LandingPage() {
         <HowItWorks />
         <Narratives />
         <HonestFraming />
+        <TrustStrip />
         <Transparency />
         <CtaBand />
       </main>
@@ -89,6 +91,7 @@ function MarketingHeader() {
           >
             Launch App
           </Link>
+          <MarketingMobileNav sections={SECTIONS} docsUrl={DOCS_URL} />
         </div>
       </div>
     </header>
@@ -152,7 +155,7 @@ function Hero() {
                 className="text-micro uppercase tracking-[0.08em]"
                 style={{ color: "#8fd9b6" }}
               >
-                Live on Robinhood Chain
+                Launching on Robinhood Chain
               </span>
             </div>
 
@@ -367,6 +370,54 @@ function HonestFraming() {
   );
 }
 
+/* ---------------------------------------------------------------- trust ------ */
+
+// Honest security posture. HARD RULE: this is an internal review, NOT an external
+// audit, and there is no bug bounty yet - the copy must never imply either.
+const TRUST = [
+  {
+    t: "Non-upgradeable money paths",
+    d: "Deposits, withdrawals, and fee accrual run on immutable contracts. The logic that holds your funds can't be swapped out from under you.",
+  },
+  {
+    t: "Reviewed, not rubber-stamped",
+    d: "Three internal security review passes. That is not an external audit, and we won't pretend it is. A third-party audit is the bar we hold ourselves to before mainnet.",
+  },
+  {
+    t: "You stay in control",
+    d: "Withdrawals are never blocked and your shares are normal ERC-20s. Governance changes pass through a timelock, in the open.",
+  },
+];
+
+function TrustStrip() {
+  return (
+    <section id="security" className="scroll-mt-20 border-b border-line">
+      <div className="mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
+        <div className="overline overline-gold mb-3">Built to be checked</div>
+        <h2 className="max-w-2xl text-display-l font-semibold tracking-tight text-text">
+          Trust the mechanism, not our word for it.
+        </h2>
+        <p className="mt-3 max-w-2xl text-body text-dim">
+          The strongest thing we can offer isn&apos;t a promise. It&apos;s that the
+          rules are fixed, in the open, and can&apos;t quietly change.
+        </p>
+
+        <div className="mt-10 grid gap-4 md:grid-cols-3">
+          {TRUST.map((x) => (
+            <div
+              key={x.t}
+              className="card-glow rounded-lg border border-line bg-card p-6 shadow-card"
+            >
+              <div className="text-body font-semibold text-text">{x.t}</div>
+              <p className="mt-2 text-body-sm text-dim">{x.d}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ------------------------------------------------------------- transparency ---- */
 
 function Transparency() {
@@ -472,6 +523,7 @@ function MarketingFooter() {
                 { href: "#how", label: "How it works" },
                 { href: "#mechanism", label: "The mechanism" },
                 { href: "#claims", label: "Our claim" },
+                { href: "#security", label: "Security" },
                 { href: "#transparency", label: "Verifiable" },
                 { href: DOCS_URL, label: "Docs", external: true },
               ]}
@@ -497,27 +549,31 @@ function MarketingFooter() {
   );
 }
 
-/** Follow us / contact. NOTE: X + Telegram handles are being created by the
- *  principal; swap the href="#" placeholders below for the real URLs. */
+/** Follow us / contact. The X + Telegram handles are being created by the principal.
+ *  Until they exist we render them as clearly not-yet-live rather than as dead links
+ *  to "#" (a dead social link is a classic unfinished/scam tell). Swap each span for
+ *  a real anchor the moment the handle is live. */
 function FollowUs() {
-  const social =
-    "inline-flex items-center gap-2 text-body-sm text-dim transition-colors hover:text-text";
   return (
     <div>
       <div className="overline mb-3">Follow us</div>
       <ul className="space-y-2">
         <li>
-          {/* TODO: replace with real X (Twitter) URL */}
-          <a href="#" className={social}>
+          <span className="inline-flex items-center gap-2 text-body-sm text-mute">
             <XIcon />X (Twitter)
-          </a>
+            <span className="rounded-full bg-well px-1.5 py-0.5 text-micro uppercase tracking-[0.08em] text-mute">
+              soon
+            </span>
+          </span>
         </li>
         <li>
-          {/* TODO: replace with real Telegram URL */}
-          <a href="#" className={social}>
+          <span className="inline-flex items-center gap-2 text-body-sm text-mute">
             <TelegramIcon />
             Telegram
-          </a>
+            <span className="rounded-full bg-well px-1.5 py-0.5 text-micro uppercase tracking-[0.08em] text-mute">
+              soon
+            </span>
+          </span>
         </li>
       </ul>
     </div>

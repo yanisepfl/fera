@@ -5,6 +5,8 @@ import { usePools } from "@/lib/hooks/useApi";
 import type { Regime } from "@/lib/types";
 import { PoolRow } from "./PoolRow";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 
 type Filter = "ALL" | Regime;
@@ -16,7 +18,7 @@ const TABS: { key: Filter; label: string }[] = [
 type Sort = "tvl" | "total" | "fee";
 
 export function PoolList() {
-  const { data: pools, isLoading, error } = usePools();
+  const { data: pools, isLoading, error, refetch } = usePools();
   const [filter, setFilter] = useState<Filter>("ALL");
   const [sort, setSort] = useState<Sort>("tvl");
 
@@ -89,8 +91,19 @@ export function PoolList() {
           ))}
         </div>
       ) : error ? (
-        <div className="px-4 py-10 text-center text-body-sm text-neg">
-          Failed to load pools. {(error as Error).message}
+        <ErrorState
+          title="Couldn't load pools"
+          message="We couldn't reach the pool data just now. Give it another try."
+          onRetry={() => refetch()}
+        />
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+          <p className="text-body-sm text-dim">No pools in this view yet.</p>
+          {filter !== "ALL" ? (
+            <Button variant="secondary" size="sm" onClick={() => setFilter("ALL")}>
+              Show all pools
+            </Button>
+          ) : null}
         </div>
       ) : (
         <div>

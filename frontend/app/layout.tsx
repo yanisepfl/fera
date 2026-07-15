@@ -4,13 +4,30 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { Providers } from "./providers";
 
+const SITE_TITLE = "FERA - Earn more on memecoins and stocks";
+const SITE_DESCRIPTION =
+  "One regime-aware vault on Robinhood Chain. It charges volatile, bot-driven flow more, so the swings that usually drain LPs earn for you instead.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL("https://fera.fi"),
   title: {
     default: "FERA - the liquidity layer that prices what others bleed",
     template: "%s · FERA",
   },
   description:
     "A Uniswap v4 hook on Robinhood Chain that charges toxic, mechanical, and weekend-arbitrage flow the fee it's actually worth - so the volatility that drains ordinary LPs pays FERA's LPs instead.",
+  openGraph: {
+    type: "website",
+    siteName: "FERA",
+    url: "/",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export const viewport: Viewport = {
