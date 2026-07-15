@@ -130,7 +130,7 @@ contract EsFeraTest is Test {
         IERC20(address(fera)).transfer(staker, stakeAmt);
         vm.startPrank(staker);
         IERC20(address(fera)).approve(address(staking), type(uint256).max);
-        staking.stake(stakeAmt, 0);
+        staking.stake(stakeAmt);
         vm.stopPrank();
 
         uint256 amount = 300e18;
@@ -158,7 +158,9 @@ contract EsFeraTest is Test {
         uint256 claimed = staking.claimRevenueShare(address(fera));
         assertEq(claimed, toStakers + revThirdStaker, "staker claim != forfeit third + revenue third");
 
-        // Only the staked principal remains in the contract; the staker can unstake it cleanly.
+        // Only the staked principal remains in the contract; the staker can unstake it cleanly
+        // (warp past the v3.4 7-day unstake cooldown re-armed by their stake).
+        vm.warp(block.timestamp + FeraConstants.UNSTAKE_COOLDOWN_SEC + 1);
         assertEq(fera.balanceOf(address(staking)), stakeAmt, "staking should hold exactly staked principal");
         vm.prank(staker);
         staking.unstake(stakeAmt);
@@ -187,7 +189,7 @@ contract EsFeraTest is Test {
         IERC20(address(fera)).transfer(staker, stakeAmt);
         vm.startPrank(staker);
         IERC20(address(fera)).approve(address(staking), type(uint256).max);
-        staking.stake(stakeAmt, 0);
+        staking.stake(stakeAmt);
         uint256 claimed = staking.claimRevenueShare(address(fera));
         vm.stopPrank();
         assertEq(staking.pendingForfeitFera(), 0, "held forfeit not folded after first stake+claim");

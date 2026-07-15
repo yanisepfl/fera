@@ -58,13 +58,13 @@ contract StakingMultiRewardHandler is Test {
 
     // ── Actions ─────────────────────────────────────────────────────────────────────────────
 
-    function stakeFor(uint256 actorSeed, uint256 amtSeed, uint256 lockSeed) external {
+    function stakeFor(uint256 actorSeed, uint256 amtSeed) external {
         address a = actors[actorSeed % 3];
         uint256 bal = fera.balanceOf(a);
         if (bal == 0) return;
         uint256 amt = bound(amtSeed, 1, bal);
         vm.prank(a);
-        staking.stake(amt, bound(lockSeed, 0, 2));
+        staking.stake(amt); // v3.4: re-arms the actor's 7d unstake cooldown
     }
 
     function unstakeFor(uint256 actorSeed, uint256 amtSeed) external {
@@ -73,7 +73,7 @@ contract StakingMultiRewardHandler is Test {
         if (st == 0) return;
         uint256 amt = bound(amtSeed, 1, st);
         vm.prank(a);
-        staking.unstake(amt); // reverts (skipped) if still locked — fail_on_revert = false
+        staking.unstake(amt); // reverts (skipped) while the 7d cooldown is active — fail_on_revert = false; the warp handler advances time
     }
 
     function notify(uint256 tokenSeed, uint256 amtSeed) external {

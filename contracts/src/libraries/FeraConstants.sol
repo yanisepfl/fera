@@ -107,8 +107,13 @@ library FeraConstants {
     /// @notice Instant-exit haircut 50%. Timelocked (§7).
     uint256 internal constant INSTANT_EXIT_HAIRCUT_BPS = 5_000; // 50%
 
-    /// @notice Max boost ~2x on a staker's own LP emissions ONLY (Decision B / INV-13). Timelocked.
-    uint256 internal constant MAX_BOOST_WAD = 2e18;
+    /// @notice sFERA unstake cooldown since the account's LAST stake (v3.4 simple-staking model).
+    ///         The single anti reward-JIT guard: revenue streams continuously (accumulator), so a
+    ///         moment-staker earns ~nothing, and this makes stake-before-lump/exit-after impossible
+    ///         too. Every stake (incl. top-ups) re-arms it on the whole balance. Timelocked (§7).
+    ///         NOTE: the former MAX_BOOST_WAD (~2x lock boost) was REMOVED with the boost concept —
+    ///         power is flat pro-rata staked FERA; INV-13/PT-2 closed by design (see AnchorStaking).
+    uint32 internal constant UNSTAKE_COOLDOWN_SEC = 7 days;
 
     /// @notice Epoch length 1 week. Timelocked (§7).
     uint256 internal constant EPOCH_LENGTH = 7 days;

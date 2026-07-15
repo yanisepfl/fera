@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {AnchorStaking} from "../../src/AnchorStaking.sol";
 import {RevenueDistributor} from "../../src/RevenueDistributor.sol";
 import {FeraToken} from "../../src/FeraToken.sol";
+import {FeraConstants} from "../../src/libraries/FeraConstants.sol";
 import {IAnchorStaking} from "../../src/interfaces/IAnchorStaking.sol";
 import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -71,7 +72,7 @@ contract StakingRewardDebtPoCTest is Test {
     // ─────────────────────────────────────────────────────────────────────────────────────
     function test_R21_lateStaker_cannotClaimPriorRevenue() public {
         vm.prank(alice);
-        staking.stake(100e18, 0);
+        staking.stake(100e18);
 
         // Tranche 1: 50 USD to stakers. Alice harvests+claims it (registers USD, accPerShare = 0.5).
         _sendStakerRevenue(50e18);
@@ -84,7 +85,7 @@ contract StakingRewardDebtPoCTest is Test {
         // Bob stakes AFTER accPerShare > 0. His stake harvests tranche-2 to Alice (old totalStaked)
         // and re-bases his rewardDebt, so he is entitled to ZERO of the pre-stake revenue.
         vm.prank(bob);
-        staking.stake(100e18, 0);
+        staking.stake(100e18);
 
         // EXPLOIT ASSERTION: pre-fix Bob drained ~75 here; post-fix he gets exactly 0.
         vm.prank(bob);
@@ -104,9 +105,9 @@ contract StakingRewardDebtPoCTest is Test {
     // ─────────────────────────────────────────────────────────────────────────────────────
     function test_R21_postJoinRevenue_prorata() public {
         vm.prank(alice);
-        staking.stake(100e18, 0);
+        staking.stake(100e18);
         vm.prank(bob);
-        staking.stake(300e18, 0); // Alice:Bob = 1:3 from here on
+        staking.stake(300e18); // Alice:Bob = 1:3 from here on
 
         _sendStakerRevenue(100e18); // 100 USD to stakers, both staked the whole time
         vm.prank(alice);
@@ -124,7 +125,7 @@ contract StakingRewardDebtPoCTest is Test {
     // ─────────────────────────────────────────────────────────────────────────────────────
     function test_R21_unstakeSettles_noUnderflowRevert() public {
         vm.prank(alice);
-        staking.stake(100e18, 0);
+        staking.stake(100e18);
         _sendStakerRevenue(40e18); // 40 USD to stakers
 
         // Register + accrue by claiming once (accPerShare = 0.4).
@@ -133,8 +134,9 @@ contract StakingRewardDebtPoCTest is Test {
 
         _sendStakerRevenue(40e18); // another 40, unharvested
 
-        // Alice unstakes fully. Pre-fix this left rewardDebt stale; a later claim would underflow.
-        // Post-fix the unstake harvests+settles her the pending 40 into _claimable.
+        // Alice unstakes fully (past the v3.4 7-day cooldown). Pre-fix this left rewardDebt stale;
+        // a later claim would underflow. Post-fix the unstake harvests+settles the pending 40.
+        vm.warp(block.timestamp + FeraConstants.UNSTAKE_COOLDOWN_SEC + 1);
         vm.prank(alice);
         staking.unstake(100e18); // must NOT revert
 
@@ -154,14 +156,14 @@ contract StakingRewardDebtPoCTest is Test {
         rev2 = bound(rev2, 1e18, 400e18);
 
         vm.prank(alice);
-        staking.stake(aStake, 0);
+        staking.stake(aStake);
 
         _sendStakerRevenue(rev1); // accrues to Alice only
         vm.prank(alice);
         staking.claimRevenueShare(address(usd)); // registers USD, harvests rev1 to Alice
 
         vm.prank(bob);
-        staking.stake(bStake, 0); // Bob joins; his stake harvests nothing new (rev1 already taken)
+        staking.stake(bStake); // Bob joins; his stake harvests nothing new (rev1 already taken)
 
         _sendStakerRevenue(rev2); // accrues to Alice:Bob pro-rata
 
@@ -186,7 +188,7 @@ contract StakingRewardDebtPoCTest is Test {
     // ─────────────────────────────────────────────────────────────────────────────────────
     function test_REC6_allowlistedToken_notDilutedByLaterStake() public {
         vm.prank(alice);
-        staking.stake(100e18, 0);
+        staking.stake(100e18);
 
         // Revenue for USD credited to stakers, but NOBODY harvests/claims it.
         _sendStakerRevenue(50e18);
@@ -195,7 +197,7 @@ contract StakingRewardDebtPoCTest is Test {
         // Bob stakes BEFORE USD's first harvest. Because USD is allowlisted, his stake harvests the
         // pending 50 to Alice (the OLD totalStaked) and re-bases his debt ⇒ he is owed 0 of it.
         vm.prank(bob);
-        staking.stake(100e18, 0);
+        staking.stake(100e18);
 
         vm.prank(bob);
         assertEq(staking.claimRevenueShare(address(usd)), 0, "REC-6: late staker diluted unharvested token");
@@ -234,9 +236,10 @@ contract StakingRewardDebtPoCTest is Test {
         vm.expectRevert(IAnchorStaking.TooManyRewardTokens.selector);
         staking.addRewardToken(over);
 
-        // Stake/unstake still work over the full (capped) loop.
+        // Stake/unstake still work over the full (capped) loop (past the v3.4 7d cooldown).
         vm.prank(alice);
-        staking.stake(100e18, 0);
+        staking.stake(100e18);
+        vm.warp(block.timestamp + FeraConstants.UNSTAKE_COOLDOWN_SEC + 1);
         vm.prank(alice);
         staking.unstake(100e18);
     }
@@ -266,7 +269,7 @@ contract StakingRewardDebtPoCTest is Test {
         staking.addRewardToken(address(bad)); // admin allowlists it (or a good stable that later goes bad)
 
         vm.prank(alice);
-        staking.stake(100e18, 0); // principal at risk
+        staking.stake(100e18); // principal at risk
 
         // Create staker pending in the bad token so _harvestAll will attempt (and fail) its pull.
         bad.mint(address(rev), 4);
@@ -274,6 +277,7 @@ contract StakingRewardDebtPoCTest is Test {
         assertEq(rev.pending(address(staking), address(bad)), 2, "bad pending not set");
 
         // Unstake must survive the poisoned token: the bad pull is caught and skipped, principal returns.
+        vm.warp(block.timestamp + FeraConstants.UNSTAKE_COOLDOWN_SEC + 1); // past the v3.4 cooldown
         uint256 balBefore = fera.balanceOf(alice);
         vm.prank(alice);
         staking.unstake(100e18); // MUST NOT revert (pre-isolation: reverts, principal locked forever)
@@ -282,9 +286,9 @@ contract StakingRewardDebtPoCTest is Test {
         // A fresh stake also survives, and the good token (USD) still settles normally around the bad one.
         _sendStakerRevenue(30e18);
         vm.prank(bob);
-        staking.stake(50e18, 0); // MUST NOT revert
+        staking.stake(50e18); // MUST NOT revert
         vm.prank(bob);
-        staking.stake(50e18, 0);
+        staking.stake(50e18);
         // USD keeps working; the poisoned token's pending simply waits (never lost, never bricking).
         assertEq(rev.pending(address(staking), address(bad)), 2, "bad pending should still be waiting");
     }

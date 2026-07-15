@@ -28,13 +28,12 @@ contract PendingInvariantsTest is Test {
         vm.skip(true);
     }
 
-    /// INV-13 / PT-2 — boost must NOT increase emissions on self-generated flow; cap applied AFTER
-    /// boost (PT-5, asserted on the total in EmissionsController.t.sol). The v2 Mechanism freeze
-    /// (D-M8 pipeline ordering + funding-cluster exclusion) is OFF-CHAIN (§9 pipeline, Backend);
-    /// on-chain the vulnerable path stays disabled (`AnchorStaking.boostOf == 1e18`). BLOCKED ON:
-    /// D-M9 Security co-sign + Backend pipeline implementation. Once live, assert a self-dealing
-    /// whale's boosted LP leaf never exceeds its within-(pool,side) no-boost entitlement.
-    function test_INV13_boostWashFarm_TODO() public {
-        vm.skip(true);
+    /// INV-13 / PT-2 — CLOSED BY DESIGN (v3.4 staking simplification): the boost concept was
+    /// REMOVED (power = flat pro-rata staked FERA; `boostOf` deleted), so the wash-farming vector
+    /// (which required a >1x self-boost) no longer exists — "wash-farming net-negative by
+    /// arithmetic" (SHARED_CONTEXT) now holds unconditionally. If a fixed loyalty boost is ever
+    /// reintroduced, INV-13 (a+b) must be re-satisfied first — see AnchorStaking's closure note.
+    function test_INV13_boostWashFarm_CLOSED_byNoBoostDesign() public {
+        vm.skip(true); // nothing left to assert on-chain: no boost path exists
     }
 }

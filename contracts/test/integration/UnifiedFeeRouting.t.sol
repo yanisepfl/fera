@@ -152,7 +152,7 @@ contract UnifiedFeeRoutingTest is Deployers {
     function _stakeSome() internal {
         vm.startPrank(alice);
         stakeToken.approve(address(staking), 100e18);
-        staking.stake(100e18, 0);
+        staking.stake(100e18);
         vm.stopPrank();
     }
 

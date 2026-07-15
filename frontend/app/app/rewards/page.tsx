@@ -27,7 +27,7 @@ export default function RewardsPage() {
           <VestingDashboard />
         </div>
 
-        {/* right: stake FERA for a revenue share and a boost; exit calculator */}
+        {/* right: stake FERA for a continuous revenue share (7d unstake cooldown); exit calculator */}
         <div className="space-y-6">
           <StakingPanel />
           <HaircutCalculator />

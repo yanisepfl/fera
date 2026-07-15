@@ -10,10 +10,11 @@ import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol"
 import {FeraConstants} from "../../src/libraries/FeraConstants.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-/// @notice Deterministic unit coverage for AnchorStaking (sFERA): stake/unstake accounting (R-21),
-///         zero-amount + lock guards, the pull→accumulator→pro-rata revenue path, the reward-token
-///         allowlist (REC-6/REC-7: admin-only, dedup, cap), the forfeit-notifier wiring (REC-8), and
-///         the scaffold `boostOf` stub. Complements the multi-reward stateful invariant.
+/// @notice Deterministic unit coverage for AnchorStaking (sFERA, v3.4 SIMPLE model): stake/unstake
+///         accounting (R-21), zero-amount + 7-day unstake-cooldown guards (the single anti reward-JIT
+///         time element — power is flat, no boost/locks), the pull→accumulator→pro-rata revenue path,
+///         the reward-token allowlist (REC-6/REC-7), and the forfeit-notifier wiring (REC-8).
+///         Complements the multi-reward stateful invariant.
 contract AnchorStakingTest is Test {
     FeraToken internal fera;
     RevenueDistributor internal rev;
@@ -41,10 +42,10 @@ contract AnchorStakingTest is Test {
         IERC20(address(fera)).transfer(bob, 1_000e18);
     }
 
-    function _stake(address who, uint256 amt, uint256 lockWeeks) internal {
+    function _stake(address who, uint256 amt) internal {
         vm.startPrank(who);
         IERC20(address(fera)).approve(address(staking), amt);
-        staking.stake(amt, lockWeeks);
+        staking.stake(amt);
         vm.stopPrank();
     }
 
@@ -56,7 +57,7 @@ contract AnchorStakingTest is Test {
 
     // ── stake / unstake ────────────────────────────────────────────────────────────────────
     function test_stake_updatesBalances() public {
-        _stake(alice, 100e18, 0);
+        _stake(alice, 100e18);
         assertEq(staking.stakedOf(alice), 100e18, "staked balance");
         assertEq(staking.totalStaked(), 100e18, "total staked");
     }
@@ -64,18 +65,19 @@ contract AnchorStakingTest is Test {
     function test_stake_zeroReverts() public {
         vm.prank(alice);
         vm.expectRevert(IAnchorStaking.ZeroAmount.selector);
-        staking.stake(0, 0);
+        staking.stake(0);
     }
 
     function test_unstake_zeroReverts() public {
-        _stake(alice, 100e18, 0);
+        _stake(alice, 100e18);
         vm.prank(alice);
         vm.expectRevert(IAnchorStaking.ZeroAmount.selector);
         staking.unstake(0);
     }
 
     function test_unstake_returnsPrincipal() public {
-        _stake(alice, 100e18, 0);
+        _stake(alice, 100e18);
+        vm.warp(block.timestamp + FeraConstants.UNSTAKE_COOLDOWN_SEC + 1); // past the 7d cooldown
         vm.prank(alice);
         staking.unstake(40e18);
         assertEq(staking.stakedOf(alice), 60e18, "remaining stake");
@@ -83,22 +85,33 @@ contract AnchorStakingTest is Test {
         assertEq(IERC20(address(fera)).balanceOf(alice), 1_000e18 - 60e18, "principal not returned");
     }
 
-    function test_stake_lock_blocksEarlyUnstake() public {
-        _stake(alice, 100e18, 2); // 2-week lock
+    function test_unstakeCooldown_blocksEarlyUnstake_andTopUpsReArm() public {
+        _stake(alice, 100e18);
+        // Immediate unstake is blocked by the 7-day cooldown (anti reward-JIT).
+        vm.prank(alice);
+        vm.expectRevert(IAnchorStaking.StillLocked.selector);
+        staking.unstake(10e18);
+        assertEq(staking.unstakeAvailableAt(alice), block.timestamp + FeraConstants.UNSTAKE_COOLDOWN_SEC, "cooldown view off");
+
+        // A top-up 6 days in re-arms the clock on the WHOLE balance (conservative by design)...
+        vm.warp(block.timestamp + 6 days);
+        _stake(alice, 1e18);
+        vm.warp(block.timestamp + 2 days); // 8d past the first stake, but only 2d past the top-up
         vm.prank(alice);
         vm.expectRevert(IAnchorStaking.StillLocked.selector);
         staking.unstake(10e18);
 
-        vm.warp(block.timestamp + 2 weeks + 1);
+        // ...and once 7d pass since the LAST stake, unstaking works.
+        vm.warp(block.timestamp + 5 days + 1);
         vm.prank(alice);
-        staking.unstake(10e18); // now allowed
-        assertEq(staking.stakedOf(alice), 90e18, "unstake after lock failed");
+        staking.unstake(10e18);
+        assertEq(staking.stakedOf(alice), 91e18, "unstake after cooldown failed");
     }
 
     // ── revenue distribution (R-21 pro-rata) ─────────────────────────────────────────────────
     function test_revenueShare_proRata() public {
-        _stake(alice, 100e18, 0);
-        _stake(bob, 300e18, 0); // alice 25%, bob 75%
+        _stake(alice, 100e18);
+        _stake(bob, 300e18); // alice 25%, bob 75%
 
         _routeRevenue(400e18); // stakers arm = 50% = 200e18
         staking.harvestReward(address(fera)); // fold the pending stakers-arm into accPerShare
@@ -117,7 +130,7 @@ contract AnchorStakingTest is Test {
     }
 
     function test_claimRevenueShare_nonAllowlistedTokenNoOp() public {
-        _stake(alice, 100e18, 0);
+        _stake(alice, 100e18);
         // A token that is NOT on the allowlist accrues nothing and returns 0 (no revert).
         vm.prank(alice);
         uint256 claimed = staking.claimRevenueShare(makeAddr("randomToken"));
@@ -125,7 +138,7 @@ contract AnchorStakingTest is Test {
     }
 
     function test_harvestReward_permissionlessPoke() public {
-        _stake(alice, 100e18, 0);
+        _stake(alice, 100e18);
         _routeRevenue(100e18);
         // Anyone can poke a harvest; it just folds owed revenue into the accumulator (value-neutral).
         staking.harvestReward(address(fera));
@@ -173,7 +186,7 @@ contract AnchorStakingTest is Test {
 
     function test_notifyForfeitShare_onlyNotifier() public {
         staking.setForfeitNotifier(address(this));
-        _stake(alice, 100e18, 0);
+        _stake(alice, 100e18);
         // Non-notifier caller reverts.
         vm.prank(alice);
         vm.expectRevert(IAnchorStaking.NotForfeitNotifier.selector);
@@ -192,15 +205,10 @@ contract AnchorStakingTest is Test {
         assertEq(staking.pendingForfeitFera(), 30e18, "forfeit not held pending stakers");
 
         // First staker triggers the pending fold-in on the next harvest.
-        _stake(alice, 100e18, 0);
+        _stake(alice, 100e18);
         staking.harvestReward(address(fera));
         assertEq(staking.pendingForfeitFera(), 0, "pending forfeit not folded in after first stake");
         assertGt(staking.claimableRevenue(alice, address(fera)), 0, "folded forfeit not claimable");
-    }
-
-    // ── scaffold stub ────────────────────────────────────────────────────────────────────────
-    function test_boostOf_scaffoldReturnsUnity() public view {
-        assertEq(staking.boostOf(alice), 1e18, "boost placeholder must be 1.00x in v1");
     }
 
     function test_constructor_zeroRewardAdminRejected() public {

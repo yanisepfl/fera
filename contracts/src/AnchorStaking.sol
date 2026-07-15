@@ -10,12 +10,17 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /// @title AnchorStaking (sFERA)
-/// @notice Stake FERA → sFERA. Receives 50% of protocol revenue (via RevenueDistributor) plus the
-///         stakers-third of esFERA instant-exit forfeits, distributed pro-rata to staked balance.
-///         Grants up to ~2x boost on a staker's own trader/LP emissions (read off-chain, §9) and
-///         optional time-locked multiplier points with linear decay. No voting, no gauges.
-/// @dev    SCAFFOLD: stake/unstake and the pull→accumulator→pro-rata revenue path are real.
-///         Boost curve and multiplier-point decay are documented stubs (Mechanism-frozen).
+/// @notice The SIMPLE staking model (founder decision, v3.4): stake FERA → earn a pro-rata share of
+///         the stakers' 50% revenue leg (via RevenueDistributor) plus the stakers-third of esFERA
+///         instant-exit forfeits, CONTINUOUSLY (MasterChef accumulator — no epochs, no lumps to
+///         snipe). Power = staked amount, FLAT: no boost, no lock-weeks, no decaying multiplier
+///         points, no end date. The ONLY time element is a 7-day unstake cooldown re-armed by every
+///         stake — so reward-JIT (stake just before revenue, exit right after) can never work.
+///         No voting, no gauges. "Stake FERA, earn revenue every second, unstake with 7 days' notice."
+/// @dev    v3.4 removed the variable lock-weeks boost entirely. That also CLOSES INV-13 / PT-2 by
+///         design: the wash-farming vector required a >1x self-boost; at flat pro-rata power it is
+///         net-negative by arithmetic (SHARED_CONTEXT). esFERA (the 6-month emission escrow) is a
+///         separate, orthogonal system — it never was and is not staking power.
 contract AnchorStaking is IAnchorStaking, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using Math for uint256;
@@ -35,7 +40,10 @@ contract AnchorStaking is IAnchorStaking, ReentrancyGuard {
 
     uint256 public totalStaked;
     mapping(address => uint256) public stakedOf;
-    mapping(address => uint256) public lockUntil; // time-lock end (multiplier points, decaying)
+    /// @dev Timestamp of the account's LAST stake. Unstaking requires `now >= lastStakeTs + 7d`
+    ///      (FeraConstants.UNSTAKE_COOLDOWN_SEC) — the single anti reward-JIT guard. A top-up
+    ///      re-arms the clock on the WHOLE balance (conservative by design, documented in the UI).
+    mapping(address => uint256) public lastStakeTs;
 
     /// @dev Reward accumulator per token, scaled by ACC_PRECISION. accPerShare grows as revenue is
     ///      harvested; a staker's entitlement is `shares·accPerShare/PREC − rewardDebt`.
@@ -87,7 +95,7 @@ contract AnchorStaking is IAnchorStaking, ReentrancyGuard {
     /// @inheritdoc IAnchorStaking
     /// @dev nonReentrant: the isolated `harvestReward` self-calls and per-token `pull`s make external
     ///      transfers before the share change — the guard neutralizes any callback-token re-entry.
-    function stake(uint256 amount, uint256 lockWeeks) external nonReentrant {
+    function stake(uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
         // R-21: settle first, THEN change the share. Order matters — harvest into accPerShare on the
         // OLD totalStaked (so pre-stake revenue is not diluted to the new staker), credit the caller's
@@ -100,17 +108,16 @@ contract AnchorStaking is IAnchorStaking, ReentrancyGuard {
         totalStaked += amount;
 
         _syncDebtAll(msg.sender, stakedOf[msg.sender]);
-        if (lockWeeks != 0) {
-            uint256 until_ = block.timestamp + lockWeeks * 1 weeks;
-            if (until_ > lockUntil[msg.sender]) lockUntil[msg.sender] = until_;
-        }
-        emit Staked(msg.sender, amount, lockWeeks);
+        // Anti reward-JIT: every stake (incl. top-ups) re-arms the 7-day unstake cooldown on the
+        // caller's WHOLE balance. Conservative by design; documented in the UI.
+        lastStakeTs[msg.sender] = block.timestamp;
+        emit Staked(msg.sender, amount);
     }
 
     /// @inheritdoc IAnchorStaking
     function unstake(uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
-        if (block.timestamp < lockUntil[msg.sender]) revert StillLocked();
+        if (block.timestamp < lastStakeTs[msg.sender] + FeraConstants.UNSTAKE_COOLDOWN_SEC) revert StillLocked();
         // R-21: settle accrued rewards on current shares BEFORE shrinking the stake, then re-base
         // rewardDebt to the reduced shares. An unstaker keeps exactly what accrued while staked and
         // can never underflow prior stakers' balances.
@@ -287,30 +294,19 @@ contract AnchorStaking is IAnchorStaking, ReentrancyGuard {
     }
 
     /// @inheritdoc IAnchorStaking
-    /// @dev SCAFFOLD stub. TODO(spec-freeze): PARAMS.md#max_boost / boost curve. Returns 1x here;
-    ///      the real curve caps at MAX_BOOST_WAD (~2x) on a staker's OWN emissions only.
-    function boostOf(address) external pure returns (uint256 boostWad) {
-        return 1e18; // 1.00x placeholder; ceiling is FeraConstants.MAX_BOOST_WAD
+    function unstakeAvailableAt(address account) external view returns (uint256) {
+        return lastStakeTs[account] + FeraConstants.UNSTAKE_COOLDOWN_SEC;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    // INV-13 / PT-2 HOOK — DESIGN-DECISION-PENDING (MASTER_SPEC §2 INV-13 candidate; §13 PT-2)
-    // ───────────────────────────────────────────────────────────────────────────────────────
-    // PT-2 (BLOCKING param freeze): the ≤2x self-boost lets a self-dealing whale over-collect
-    // honest users' emission share (reward/cost ≈ 1.2–1.44x; cheapest attack cost/profit ≈ 0.5x vs
-    // a 10x bar). SHARED_CONTEXT "wash-farming net-negative by arithmetic" holds ONLY at flat FERA
-    // + NO boost. INV-13 (candidate) therefore requires BOTH:
-    //   (a) boost MUST NOT increase emissions a staker collects on flow they SELF-generated or
-    //       SELF-LP'd (wash/self-match exclusion), and
-    //   (b) the INV-7 emission cap is applied AFTER boost weighting (PT-5) — boost REDISTRIBUTES a
-    //       fixed capped pool, it NEVER boosts-then-mints (enforced in EmissionsController).
-    // The EXACT fix is TBD pending Mechanism + Security + USER decision, among:
-    //   rebate ≤ feesPaid·k  |  self-matched exclusion via cluster map  |  self-take cap at no-boost.
-    // HOOK ONLY: boostOf() returns 1e18 (no boost) in v1, so the vulnerable path is INERT. When the
-    // fix lands, the self-matched-flow exclusion is computed here (or fed in from the §9 pipeline).
-    // See OPEN_DECISIONS.md#INV-13 and THREAT_MODEL.md (R-14 wash-farm).
-    // TODO(design): PT-2/INV-13 self-matched-flow exclusion + boost curve (PARAMS.md#BOOST_MAX).
-    function _inv13SelfMatchExcluded(address /*account*/ ) internal pure returns (bool excluded) {
-        return false; // INERT placeholder; real impl excludes self-generated/self-LP'd flow from boost.
-    }
+    // INV-13 / PT-2 — CLOSED BY DESIGN (v3.4 staking simplification, founder decision).
+    // The wash-farming vector (PT-2: a self-dealing whale over-collecting honest users' emission
+    // share) existed ONLY under a >1x self-boost. The boost concept was REMOVED entirely — power is
+    // flat pro-rata staked FERA — so SHARED_CONTEXT's "wash-farming net-negative by arithmetic" now
+    // holds unconditionally and there is no vulnerable path left to gate. The former `boostOf()`
+    // stub and `_inv13SelfMatchExcluded` hook were deleted with it. If a loyalty boost is ever
+    // reintroduced (one fixed 6-month lock at a constant multiplier is the only shape considered),
+    // INV-13 (a+b) must be re-satisfied FIRST: (a) no boost on self-generated/self-LP'd flow;
+    // (b) the INV-7 emission cap applies AFTER boost weighting (redistribute, never boost-then-mint).
+    // ═══════════════════════════════════════════════════════════════════════════════════════
 }
