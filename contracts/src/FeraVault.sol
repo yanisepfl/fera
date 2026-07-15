@@ -562,7 +562,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     }
 
     /// @inheritdoc IFeraVault
-    function skimIdle(PoolId id, uint8 t) external onlyKeeper nonReentrant knownTranche(id, t) {
+    function skimIdle(PoolId id, uint8 t) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) {
         TierConfig storage cfg = _requireBaseLimit(id, t);
         _checkpoint(id, t); // D-18: realize fees before touching the base
         poolManager.unlock(abi.encode(CB_SKIM_IDLE, id, t, abi.encode(uint256(cfg.idleBps))));
@@ -587,7 +587,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     /// @inheritdoc IFeraVault
     /// @dev v3: PERMISSIONLESS. Every bound (min-interval, TWAP sanity) is re-verified on-chain
     ///      regardless of caller; no function of `msg.sender` appears anywhere in this call.
-    function rebalanceLimit(PoolId id, uint8 t) external nonReentrant knownTranche(id, t) {
+    function rebalanceLimit(PoolId id, uint8 t) external nonReentrant notPaused(id) knownTranche(id, t) {
         _requireBaseLimit(id, t);
         _requireRebalanceInterval(id, t); // R-15: bounded frequency (MEME shorter than RWA, both > 0)
         // Anti-whipsaw: never (re)deploy a limit onto a spot spike the TWAP disagrees with.
@@ -610,7 +610,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///      impact does); the leftover imbalance is completed by a LATER call once the min-interval
     ///      has re-elapsed (via another `rebalanceBase`, a standalone `selfSwap`, or the swap-free
     ///      `rebalanceLimit`).
-    function rebalanceBase(PoolId id, uint8 t, bool useSelfSwap) external nonReentrant knownTranche(id, t) {
+    function rebalanceBase(PoolId id, uint8 t, bool useSelfSwap) external nonReentrant notPaused(id) knownTranche(id, t) {
         _requireBaseLimit(id, t);
         // EIP-170 size-split: gate + recenter body in VaultActions (delegatecalled). Every gate,
         // the IL-budget cap, Gate-5 slippage bound, both clocks + StrategyAction are byte-identical.
@@ -637,6 +637,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     function selfSwap(PoolId id, uint8 t, bool zeroForOne, uint256 amountIn)
         external
         nonReentrant
+        notPaused(id)
         knownTranche(id, t)
         returns (uint256 amountOut)
     {
@@ -653,6 +654,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     function rebalanceViaVenue(PoolId id, uint8 t, address venue, bool zeroForOne, uint256 amountIn)
         external
         nonReentrant
+        notPaused(id)
         knownTranche(id, t)
         returns (uint256 amountOut)
     {
@@ -681,7 +683,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///         price is correct (the OPPOSITE of MEME, where chasing the price loses money). Swap-free
     ///         (close base -> reserve -> re-mint around the oracle tick), so it realises ZERO IL and
     ///         value is conserved (Gate-5-style guard). PERMISSIONLESS; every bound is on-chain.
-    function rebalanceRwaOracle(PoolId id, uint8 t) external nonReentrant knownTranche(id, t) {
+    function rebalanceRwaOracle(PoolId id, uint8 t) external nonReentrant notPaused(id) knownTranche(id, t) {
         // EIP-170 size-split: body in VaultRwa (separate bytecode, delegatecalled). Gates, swap-free
         // value-conservation bound, dedicated base-recenter clock + StrategyAction are byte-identical.
         VaultRwa.rebalanceRwaOracle(
@@ -703,7 +705,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///         stale-priced band, and a fraction sits instantly-withdrawable in reserve. Swap-free
     ///         (band<->reserve only), value-conserving. RE-WIRES the previously-vestigial `eventWindow`
     ///         (OD-4). PERMISSIONLESS; RWA-only; gated by the dedicated slow base-recenter clock.
-    function defendRwaOffHours(PoolId id, uint8 t) external nonReentrant knownTranche(id, t) {
+    function defendRwaOffHours(PoolId id, uint8 t) external nonReentrant notPaused(id) knownTranche(id, t) {
         // EIP-170 size-split: body in VaultRwa (separate bytecode, delegatecalled). Gates, swap-free
         // value-conservation bound, dedicated base-recenter clock + StrategyAction are byte-identical.
         VaultRwa.defendRwaOffHours(

@@ -264,4 +264,33 @@ contract VaultAdminTest is Deployers {
         vault.unpauseDeposits(memeId);
         assertFalse(vault.depositsPaused(memeId), "unpause did not take");
     }
+
+    /// @notice Pause posture (pause hardening): a pool pause freezes DEPOSITS *and every*
+    ///         position-moving strategy action (rebalance / skim / self-swap), but NEVER withdrawal —
+    ///         funds are never trapped. Deposit-only pause was too weak: a mid-incident rebalance or
+    ///         swap path could still fire. Withdrawal stays unblockable so users can always exit.
+    function test_pauseFreezesStrategy_butNeverWithdrawals() public {
+        vault.deposit(memeId, 0, 100e18, 100e18, 0);
+        uint256 sh = FeraShare(vault.shareToken(memeId, 0)).balanceOf(address(this));
+        assertGt(sh, 0, "no shares minted");
+
+        vault.pauseDeposits(memeId);
+
+        // Every position-moving strategy action is frozen while paused (notPaused gate).
+        vm.expectRevert(IFeraVault.DepositsPaused.selector);
+        vault.rebalanceLimit(memeId, 0);
+        vm.expectRevert(IFeraVault.DepositsPaused.selector);
+        vault.rebalanceBase(memeId, 0, false);
+        vm.expectRevert(IFeraVault.DepositsPaused.selector);
+        vault.skimIdle(memeId, 0);
+        vm.expectRevert(IFeraVault.DepositsPaused.selector);
+        vault.selfSwap(memeId, 0, true, 1e18);
+
+        // ...but withdrawal ALWAYS works — a pause can never trap funds. (Warp past the 1h
+        // DEPOSIT_COOLDOWN_SEC Veda share-lock, which is an anti-JIT guard unrelated to pause — its
+        // presence here, rather than DepositsPaused, is itself proof withdraw is NOT pause-gated.)
+        vm.warp(block.timestamp + 3_601);
+        vault.withdraw(memeId, 0, sh, 0, 0);
+        assertEq(FeraShare(vault.shareToken(memeId, 0)).balanceOf(address(this)), 0, "shares not burned on withdraw");
+    }
 }
