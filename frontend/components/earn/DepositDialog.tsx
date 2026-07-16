@@ -187,7 +187,7 @@ export function DepositDialog({
                     type="checkbox"
                     checked={acked}
                     onChange={(e) => setAcked(e.target.checked)}
-                    className="mt-0.5 accent-[var(--accent)]"
+                    className="mt-0.5 accent-[var(--accent2)]"
                   />
                   <span>
                     {geo.reason} I understand the risk of providing to a stock-token pool

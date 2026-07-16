@@ -5,7 +5,6 @@ import { useState } from "react";
 import type { PoolId, RiskClass } from "@/lib/types";
 import { usePool } from "@/lib/hooks/useApi";
 import { RegimeBadge } from "@/components/ui/Badge";
-import { TokenPair } from "@/components/ui/TokenPair";
 import { LiveFee } from "@/components/earn/LiveFee";
 import { LiveDot } from "@/components/ui/LiveDot";
 import { Stat } from "@/components/ui/Stat";
@@ -45,16 +44,27 @@ export function PoolDetailView({ poolId }: { poolId: PoolId }) {
 
   return (
     <div className="space-y-6">
-      {/* header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/app" className="text-mute hover:text-dim text-body-sm">
+      {/* header - marketing-style heading treatment (gold eyebrow + display title) */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0 max-w-2xl">
+          <Link href="/app" className="text-body-sm text-mute hover:text-dim">
             ← Earn
           </Link>
-          <TokenPair token0={pool.token0} token1={pool.token1} className="text-title" />
-          <RegimeBadge regime={pool.regime} />
+          <div className="overline overline-gold mb-2 mt-3">Pool</div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-display-l font-semibold tracking-tight text-text">
+              {pool.token0.symbol}
+              <span className="text-mute"> / </span>
+              {pool.token1.symbol}
+            </h1>
+            <RegimeBadge regime={pool.regime} />
+          </div>
+          <p className="mt-2 text-body text-dim">
+            The vault runs this market around the clock. Every swap pays the
+            people in it.
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <LiveDot label="LIVE FEE" />
           <LiveFee seedPips={pool.currentFeePips} regime={pool.regime} />
         </div>

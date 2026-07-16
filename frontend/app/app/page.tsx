@@ -8,8 +8,17 @@ export default function EarnPage() {
     <div className="space-y-8">
       <PageHeader
         eyebrow="Earn"
-        title="Be the market maker"
-        subtitle="Deposit into a vault that provides and auto-manages the liquidity in these pools, and earn a cut of the trading fees. The fee rises when it's volatile - and you can withdraw anytime."
+        title={
+          <>
+            Be the <span className="text-accent">market maker</span>
+          </>
+        }
+        subtitle={
+          <>
+            Deposit. The vault makes the market. You earn the fees.{" "}
+            <span className="text-mute">Withdraw anytime.</span>
+          </>
+        }
       />
 
       <FeaturedHero />

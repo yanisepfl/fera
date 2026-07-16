@@ -5,6 +5,7 @@
  */
 export { LpOutcomeChart } from "./LpOutcomeChart";
 export { FeeResponseChart } from "./FeeResponseChart";
+export { MechanismFlow } from "./MechanismFlow";
 export { CountUp } from "./CountUp";
 export {
   IllustrativeChart,

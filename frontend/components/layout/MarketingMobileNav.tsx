@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * Mobile disclosure menu for the marketing header. The desktop nav is `hidden
- * md:flex`, so without this the Docs link and every section anchor are unreachable
- * on phones. Closes on link click, Escape, and outside click; fully keyboard-
- * operable with aria-expanded/aria-controls.
+ * Mobile/tablet disclosure menu for the marketing header. The desktop nav is
+ * `hidden lg:flex` (five links + Docs overflow an md viewport), so this burger
+ * covers everything below lg. Closes on link click, Escape, and outside click;
+ * fully keyboard-operable with aria-expanded/aria-controls.
  */
 export function MarketingMobileNav({
   sections,
@@ -36,7 +36,7 @@ export function MarketingMobileNav({
     "block rounded-md px-3 py-2 text-body-sm font-medium text-dim transition-colors hover:bg-elevated hover:text-text";
 
   return (
-    <div ref={ref} className="relative md:hidden">
+    <div ref={ref} className="relative lg:hidden">
       <button
         type="button"
         aria-label={open ? "Close menu" : "Open menu"}

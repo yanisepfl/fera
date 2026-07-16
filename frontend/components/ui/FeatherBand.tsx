@@ -7,8 +7,8 @@ import { cn } from "@/lib/cn";
  * ends, wider through the volatile middle. Used lightly: a hero accent and section
  * dividers. Purely decorative + static (reduced-motion safe), always aria-hidden.
  *
- * Rendered in the brand green (var(--accent)); low opacity so it stays an accent,
- * never a focal point. No blue, ever.
+ * Rendered in the gold brand accent (var(--accent)); low opacity so it stays an
+ * accent, never a focal point. No blue, ever.
  */
 export function FeatherBand({
   className,
@@ -94,7 +94,7 @@ export function FeatherBand({
 
 /**
  * BandDivider - a slim section divider echoing the same motif: a hairline that swells
- * into a soft green liquidity-band lens at its center. Full-width, decorative.
+ * into a soft gold liquidity-band lens at its center. Full-width, decorative.
  */
 export function BandDivider({ className }: { className?: string }) {
   return (

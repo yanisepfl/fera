@@ -1,14 +1,21 @@
 import Link from "next/link";
-import { Logo } from "@/components/ui/Logo";
 import { FeatherBand, BandDivider } from "@/components/ui/FeatherBand";
-import { LpOutcomeChart, FeeResponseChart } from "@/components/viz";
+import { LpOutcomeChart, FeeResponseChart, MechanismFlow } from "@/components/viz";
 import { MarketingMobileNav } from "@/components/layout/MarketingMobileNav";
+import {
+  SiteHeader,
+  BrandLockup,
+  navLinkClass,
+} from "@/components/layout/SiteHeader";
 
 /**
  * Marketing landing (front door, "/"). Concept: FERA democratizes market-making.
  * Robinhood democratized trading; FERA opens the market-maker seat - the side that
- * earns the fees - to everyone. Dark-first, one confident green accent + neutrals,
- * the gold FERA mark retained as the heritage brand mark. Mobile-first fintech energy.
+ * earns the fees - to everyone.
+ *
+ * COLOR SYSTEM: gold (--accent) is the brand accent - titles + title highlights,
+ * eyebrows, card glows, the mark/motif. Green (--accent2) is reserved for ACTIONS
+ * (CTAs) and live/positive signals; positive numbers use --pos. No blue, anywhere.
  *
  * HONESTY (load-bearing): the vault is sold as managed + simple, NEVER as higher-yield
  * than a skilled self-managed LP. No "guaranteed" / "risk-free" / fixed yield. Risk
@@ -23,9 +30,10 @@ const DOCS_URL = "https://fera-3.gitbook.io/fera/";
 const GITHUB_URL = "https://github.com/yanisepfl/fera";
 
 // Anchor-styled links that reuse the Button visual language without a client handler.
+// Actions are green (accent2); gold is never a button.
 const btnBase =
   "inline-flex items-center justify-center font-medium whitespace-nowrap select-none transition-[background,color,border,box-shadow] duration-fast ease-out rounded-lg h-12 px-6 text-body gap-2";
-const btnPrimary = `${btnBase} bg-accent text-accent-fg hover:bg-accent-strong active:bg-accent-dim shadow-glow-accent`;
+const btnPrimary = `${btnBase} bg-accent2 text-accent2-fg hover:bg-accent2-strong active:bg-accent2-dim shadow-glow-accent2`;
 const btnSecondary = `${btnBase} bg-surface text-text border border-line hover:border-line-strong hover:bg-raised`;
 
 // Section anchors, shared by the header nav + footer so nothing is orphaned.
@@ -33,6 +41,7 @@ const SECTIONS = [
   { href: "#how", label: "How it works" },
   { href: "#why", label: "Why it earns" },
   { href: "#levels", label: "Risk levels" },
+  { href: "#open", label: "Open to anyone" },
   { href: "#chain", label: "Robinhood Chain" },
 ];
 
@@ -47,6 +56,8 @@ export default function LandingPage() {
         <WhyItEarns />
         <RiskLevels />
         <HonestFraming />
+        <TrustMechanism />
+        <OpenToAnyone />
         <RobinhoodChain />
         <Verifiable />
         <BandDivider className="py-6" />
@@ -60,23 +71,19 @@ export default function LandingPage() {
 
 /* ------------------------------------------------------------------ header ---- */
 
-// Animated green underline that wipes in on hover (reduced-motion: appears instantly).
-const navLink =
-  "relative px-1 py-1 text-body-sm font-medium text-mute transition-colors hover:text-text " +
-  "after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-0.5 after:h-px " +
-  "after:origin-left after:scale-x-0 after:bg-accent after:transition-transform after:duration-fast " +
-  "after:ease-out hover:after:scale-x-100 focus-visible:after:scale-x-100";
-
+/**
+ * Marketing header on the shared SiteHeader shell (same chrome as the app's
+ * TopNav). Full nav only from lg: five links plus Docs don't fit an md viewport
+ * without overflowing, so md tablets get the burger too.
+ */
 function MarketingHeader() {
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-well/80 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-app items-center gap-6 px-4 md:px-6">
-        <BrandLockup />
-
-        {/* Centered nav balances the header on wide viewports. */}
-        <nav className="hidden flex-1 items-center justify-center gap-6 md:flex">
+    <SiteHeader
+      brandHref="/"
+      nav={
+        <nav className="hidden min-w-0 flex-1 items-center justify-center gap-6 lg:flex">
           {SECTIONS.map((n) => (
-            <a key={n.href} href={n.href} className={navLink}>
+            <a key={n.href} href={n.href} className={navLinkClass}>
               {n.label}
             </a>
           ))}
@@ -84,56 +91,24 @@ function MarketingHeader() {
             href={DOCS_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className={navLink}
+            className={navLinkClass}
           >
             Docs
           </a>
         </nav>
-
-        <div className="ml-auto flex items-center gap-3">
+      }
+      right={
+        <>
           <Link
             href="/app"
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-accent px-4 text-body-sm font-medium text-accent-fg shadow-glow-accent transition-colors duration-fast hover:bg-accent-strong active:bg-accent-dim"
+            className="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-accent2 px-3 text-body-sm font-medium text-accent2-fg shadow-glow-accent2 transition-colors duration-fast hover:bg-accent2-strong active:bg-accent2-dim sm:px-4"
           >
             Launch App
           </Link>
           <MarketingMobileNav sections={SECTIONS} docsUrl={DOCS_URL} />
-        </div>
-      </div>
-    </header>
-  );
-}
-
-/** Logo + FERA wordmark. The mark sits in a soft gold-wash tile and the wordmark
- *  carries the warm gold gradient: the retained heritage brand mark, against the
- *  green UI accent. */
-function BrandLockup() {
-  return (
-    <Link href="/" className="group flex shrink-0 items-center gap-2.5">
-      <span className="grid h-8 w-8 place-items-center rounded-lg border border-accent2-line bg-accent2-wash transition-colors duration-fast group-hover:border-accent2">
-        <Logo className="h-5 w-5" />
-      </span>
-      <Wordmark />
-    </Link>
-  );
-}
-
-/** FERA wordmark with the warm gold gradient (brand signature). */
-function Wordmark() {
-  return (
-    <span
-      className="text-heading font-semibold tracking-tight"
-      style={{
-        backgroundImage:
-          "linear-gradient(180deg, #f3d488 0%, #e7b84b 55%, #cd9f33 100%)",
-        WebkitBackgroundClip: "text",
-        backgroundClip: "text",
-        WebkitTextFillColor: "transparent",
-        color: "transparent",
-      }}
-    >
-      FERA
-    </span>
+        </>
+      }
+    />
   );
 }
 
@@ -142,40 +117,39 @@ function Wordmark() {
 function Hero() {
   return (
     <section className="relative overflow-hidden border-b border-line">
-      {/* soft top-crown glow (green) - the lifted premium-dark trait, reduced-motion-safe */}
+      {/* soft top-crown glow (gold) - the lifted premium-dark trait, reduced-motion-safe */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
         style={{
           background:
-            "radial-gradient(60% 100% at 50% -10%, rgba(46,207,136,0.10) 0%, rgba(46,207,136,0) 60%)",
+            "radial-gradient(60% 100% at 50% -10%, rgba(231,184,75,0.10) 0%, rgba(231,184,75,0) 60%)",
         }}
       />
-      {/* feather -> upward liquidity-band motif, subtle hero accent */}
+      {/* feather -> upward liquidity-band motif, subtle hero accent. xl-only: below
+          that there's no free corner for it, so it hides instead of colliding. */}
       <FeatherBand
-        className="pointer-events-none absolute -right-16 -top-4 hidden h-[440px] w-[560px] opacity-70 lg:block"
+        className="pointer-events-none absolute -right-16 -top-4 hidden h-[440px] w-[560px] opacity-70 xl:block"
       />
 
-      <div className="relative mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
-        <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)]">
-          <div>
-            <div
-              className="mb-5 inline-flex items-center gap-2 rounded-full border px-3 py-1"
-              style={{
-                borderColor: "rgba(46,207,136,0.28)",
-                background: "rgba(46,207,136,0.08)",
-              }}
-            >
+      <div className="relative mx-auto max-w-app px-4 py-14 md:px-6 md:py-24">
+        {/* Stacks below lg (text, then chart); the chart column narrows at lg and
+            relaxes at xl so the headline never gets crushed at in-between widths. */}
+        <div className="grid items-center gap-10 md:gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] xl:grid-cols-[minmax(0,1fr)_minmax(0,30rem)]">
+          <div className="min-w-0">
+            <div className="mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-accent2-line bg-accent2-wash px-3 py-1">
               <span
-                className="h-1.5 w-1.5 rounded-full bg-accent"
+                className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent2"
                 style={{ boxShadow: "0 0 8px rgba(46,207,136,0.75)" }}
               />
-              <span className="text-micro uppercase tracking-[0.08em] text-accent">
+              <span className="min-w-0 text-micro uppercase tracking-[0.08em] text-accent2">
                 Launching on Robinhood Chain
               </span>
             </div>
 
-            <h1 className="text-[2.5rem] font-semibold leading-[1.05] tracking-[-0.02em] text-text md:text-[3.5rem]">
+            {/* Fluid headline: 34px floor on phones -> 56px cap, no fixed md jump,
+                so narrow and in-between windows never overflow or crush. */}
+            <h1 className="text-[clamp(2.125rem,1.1rem+3.4vw,3.5rem)] font-semibold leading-[1.05] tracking-[-0.02em] text-text">
               Earn like a{" "}
               <span className="text-accent">market maker</span>. On meme coins and
               stocks.
@@ -188,7 +162,7 @@ function Hero() {
               you instead.
             </p>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Link href="/app" className={btnPrimary}>
                 Launch App
                 <span aria-hidden>&rarr;</span>
@@ -205,7 +179,7 @@ function Hero() {
           </div>
 
           {/* Immediate visual: the illustrative fee-capture chart. */}
-          <div className="lg:pl-2">
+          <div className="min-w-0 lg:pl-2">
             <LpOutcomeChart />
           </div>
         </div>
@@ -417,7 +391,7 @@ function HonestFraming() {
         className="pointer-events-none absolute inset-x-0 top-0 h-[340px]"
         style={{
           background:
-            "radial-gradient(55% 100% at 50% -10%, rgba(46,207,136,0.06) 0%, rgba(46,207,136,0) 62%)",
+            "radial-gradient(55% 100% at 50% -10%, rgba(231,184,75,0.06) 0%, rgba(231,184,75,0) 62%)",
         }}
       />
       <div className="relative mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
@@ -446,6 +420,85 @@ function HonestFraming() {
   );
 }
 
+/* ---------------------------------------------------------- the mechanism ---- */
+
+function TrustMechanism() {
+  return (
+    <section id="mechanism" className="scroll-mt-20 border-b border-line bg-well">
+      <div className="mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
+        <div className="grid items-center gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
+          <div className="min-w-0">
+            <div className="overline overline-gold mb-3">The mechanism</div>
+            <h2 className="max-w-2xl text-display-l font-semibold tracking-tight text-text">
+              Trust the mechanism, not our word for it.
+            </h2>
+            <p className="mt-3 max-w-2xl text-body text-dim">
+              The strongest thing we can offer isn&apos;t a promise. It&apos;s a
+              loop you can check: your deposit provides the liquidity, the vault
+              keeps it where the trading happens, and every swap that crosses it
+              pays a fee back to you. The rules are fixed, in the open, and
+              can&apos;t quietly change.
+            </p>
+          </div>
+
+          {/* the loop, drawn: deposit -> vault runs the range -> fees flow back */}
+          <div className="min-w-0">
+            <MechanismFlow className="h-auto w-full max-w-md md:ml-auto" />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------ open to anyone -- */
+
+// The permissionless story. HONESTY: pool creation + direct LP are genuinely
+// ungated; the managed vault runs only on curated pools - say both plainly.
+const OPEN_POINTS = [
+  {
+    t: "Anyone can open a pool",
+    d: "Pool creation is permissionless. Any token, any pair - launch it straight through the protocol. No listing desk, no approval queue, no one to ask.",
+  },
+  {
+    t: "LP with or without us",
+    d: "Every pool is open liquidity. Provide directly and run your own range if you want - the vault holds no monopoly and gets no special treatment.",
+  },
+  {
+    t: "Curated where it counts",
+    d: "The managed vault only runs on pools we curate, so one-tap depositors aren't dropped into just anything. Open underneath, a safer default on top.",
+  },
+];
+
+function OpenToAnyone() {
+  return (
+    <section id="open" className="scroll-mt-20 border-b border-line">
+      <div className="mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
+        <div className="overline overline-gold mb-3">Open to anyone</div>
+        <h2 className="max-w-2xl text-display-l font-semibold tracking-tight text-text">
+          No gatekeepers. Anyone can make a market.
+        </h2>
+        <p className="mt-3 max-w-2xl text-body text-dim">
+          FERA is a protocol, not a walled garden. The doors - creating pools,
+          providing liquidity - are open to everyone, not just our vault.
+        </p>
+
+        <div className="mt-10 grid gap-4 md:grid-cols-3">
+          {OPEN_POINTS.map((x) => (
+            <div
+              key={x.t}
+              className="card-glow rounded-lg border border-line bg-card p-6 shadow-card"
+            >
+              <div className="text-body font-semibold text-text">{x.t}</div>
+              <p className="mt-2 text-body-sm text-dim">{x.d}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ------------------------------------------------------- built on robinhood ---- */
 
 const CHAIN_POINTS = [
@@ -456,10 +509,6 @@ const CHAIN_POINTS = [
   {
     t: "Your money stays yours",
     d: "Deposits, withdrawals, and fee accrual run on immutable contracts. The logic that holds your funds can't be swapped out from under you, and withdrawals are never blocked.",
-  },
-  {
-    t: "Reviewed, not rubber-stamped",
-    d: "Several internal security review passes. That's not an external audit, and we won't pretend it is - a third-party audit is the bar we hold ourselves to before mainnet.",
   },
 ];
 
@@ -480,7 +529,7 @@ function RobinhoodChain() {
           </div>
         </div>
 
-        <div className="mt-10 grid gap-4 md:grid-cols-3">
+        <div className="mt-10 grid gap-4 sm:grid-cols-2">
           {CHAIN_POINTS.map((x) => (
             <div
               key={x.t}
@@ -505,7 +554,8 @@ function Verifiable() {
       className="relative overflow-hidden border-b border-line"
     >
       <div className="relative mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
-        <div className="card-glow rounded-lg border border-accent-line bg-card p-8 shadow-glow-accent md:p-10">
+        {/* Same treatment as every other card: quiet at rest, glow on hover only. */}
+        <div className="card-glow rounded-lg border border-line bg-card p-8 shadow-card md:p-10">
           <div className="overline overline-gold mb-3">Verifiable by construction</div>
           <h2 className="max-w-2xl text-title font-semibold tracking-tight text-text md:text-display-l">
             Don&apos;t trust the numbers - check them.
@@ -564,12 +614,7 @@ function MarketingFooter() {
       <div className="mx-auto max-w-app px-4 py-14 md:px-6">
         <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
           <div className="max-w-sm">
-            <div className="flex items-center gap-2.5">
-              <span className="grid h-8 w-8 place-items-center rounded-lg border border-accent2-line bg-accent2-wash">
-                <Logo className="h-5 w-5" />
-              </span>
-              <Wordmark />
-            </div>
+            <BrandLockup />
             <p className="mt-3 text-body-sm text-dim">
               Democratizing market-making. Built on Robinhood Chain.
             </p>
@@ -582,6 +627,8 @@ function MarketingFooter() {
                 { href: "#how", label: "How it works" },
                 { href: "#why", label: "Why it earns" },
                 { href: "#levels", label: "Risk levels" },
+                { href: "#mechanism", label: "The mechanism" },
+                { href: "#open", label: "Open to anyone" },
                 { href: "#chain", label: "Robinhood Chain" },
                 { href: "#verifiable", label: "Verifiable" },
                 { href: DOCS_URL, label: "Docs", external: true },

@@ -30,28 +30,26 @@
   --text-dim: #a9a9b4; /* secondary */
   --text-mute: #6e6e79; /* tertiary / captions / disabled */
 
-  /* ===== Accent - "Fera Green" (the single confident brand accent) =====
-   * FERA democratizes market-making: green is the one confident action color across
-   * the whole UI (Robinhood / Cash-App energy), applied to CTAs, live states, badges,
-   * the primary chart series. Gold is retained ONLY as the heritage brand mark
-   * (see --accent2 + the FERA wordmark). No blue, anywhere. */
-  --accent: #2ecf88;
-  --accent-strong: #57e0a4; /* hover / bright */
-  --accent-dim: #1f9b64; /* pressed / muted */
-  --accent-wash: rgba(46, 207, 136, 0.1); /* tint fills, badges, selection */
-  --accent-line: rgba(46, 207, 136, 0.28); /* tinted borders / focus rings */
-  --on-accent: #04140c; /* text on solid accent (near-black green) */
+  /* ===== Accent - "Fera Gold" (the single restrained BRAND accent) =====
+   * Gold carries the brand: titles and title highlights, eyebrows, card glows,
+   * the mark/wordmark, the primary chart series. Actions live on --accent2. */
+  --accent: #e7b84b;
+  --accent-strong: #f0c766; /* hover / bright */
+  --accent-dim: #b98f2e; /* pressed / muted */
+  --accent-wash: rgba(231, 184, 75, 0.1); /* tint fills, badges, selection */
+  --accent-line: rgba(231, 184, 75, 0.28); /* tinted borders / focus rings */
+  --on-accent: #17130a; /* text on solid accent (near-black warm) */
 
-  /* ===== Secondary accent - "Fera Gold" (heritage brand mark + comparison series) =====
-   * Gold is the FERA wordmark / mark color (public/brand) - kept, not replaced. In the
-   * data system it carries the SECONDARY / comparison chart series, a warm counterpoint
-   * to the green primary so the two illustrative charts stay one system, no blue. */
-  --accent2: #e7b84b; /* mark + secondary/comparison chart series */
-  --accent2-strong: #f0c766; /* hover / bright / chart endpoint */
-  --accent2-dim: #b98f2e; /* pressed / muted reference line */
-  --accent2-wash: rgba(231, 184, 75, 0.1); /* tint fills, badges, selection */
-  --accent2-line: rgba(231, 184, 75, 0.28); /* tinted borders / focus rings / glow ring */
-  --on-accent2: #17130a; /* text on solid gold (rare) */
+  /* ===== Secondary accent - "Signal" green (actions + data) =====
+   * Green is the ACTION color (primary buttons / CTAs) and the cool secondary
+   * chart series. It stays in the family of the positive-green (--pos) so the
+   * palette reads gold + black + white + green. No blue, anywhere. */
+  --accent2: #2ecf88; /* CTAs, live signals, secondary/data chart series */
+  --accent2-strong: #57e0a4; /* hover / bright / chart endpoint */
+  --accent2-dim: #1f9b64; /* pressed / muted reference line */
+  --accent2-wash: rgba(46, 207, 136, 0.1); /* tint fills, badges, selection */
+  --accent2-line: rgba(46, 207, 136, 0.28); /* tinted borders / focus rings / glow ring */
+  --on-accent2: #04140c; /* text on solid green (buttons) */
 
   /* ===== Named chart series (so both illustrative charts read as one system) ===== */
   --series-fera: var(--accent); /* the FERA / primary line - always gold */
@@ -59,8 +57,8 @@
   --series-cove: var(--accent2); /* the cool secondary line */
 
   /* ===== Card-hover glow presets (used by .card-glow; mirror boxShadow tokens) ===== */
-  --card-hover: 0 0 0 1px var(--accent-line), 0 12px 40px rgba(46, 207, 136, 0.12);
-  --card-hover-cove: 0 0 0 1px var(--accent2-line), 0 12px 40px rgba(231, 184, 75, 0.1);
+  --card-hover: 0 0 0 1px var(--accent-line), 0 12px 40px rgba(231, 184, 75, 0.1);
+  --card-hover-cove: 0 0 0 1px var(--accent2-line), 0 12px 40px rgba(46, 207, 136, 0.1);
 
   /* ===== Semantic ===== */
   --pos: #46c08a; /* gain / up / market-open */
@@ -75,6 +73,7 @@
 
   /* ===== Regimes (MASTER_SPEC §5: MEME, RWA; EVENT reserved v2) ===== */
   --regime-meme: #e8834a; /* ember - the live, MEME-first regime */
+  --regime-meme-wash: rgba(232, 131, 74, 0.12);
   --regime-rwa: #86a79b; /* sage/steel - calm, non-blue (stock tokens: coming soon) */
   --regime-rwa-wash: rgba(134, 167, 155, 0.14);
   --regime-event: #a98be0; /* violet, reserved - never rendered in v1 */
@@ -82,7 +81,7 @@
   /* ===== Charts (greyscale-forward; accent reserved for the live/primary series) ===== */
   --chart-grid: #1e1e24;
   --chart-axis: #56565f;
-  --chart-1: #2ecf88; /* accent - primary/live series (green) */
+  --chart-1: #e7b84b; /* accent - primary/live series (gold) */
   --chart-2: #c9c9d1;
   --chart-3: #9a9aa4;
   --chart-4: #74747e;
@@ -122,8 +121,8 @@
      * alphix.fi / Shui reference family. Static (reduced-motion-safe), additive. */
     background-image: radial-gradient(
       120% 80% at 50% -10%,
-      rgba(46, 207, 136, 0.04) 0%,
-      rgba(46, 207, 136, 0) 42%
+      rgba(231, 184, 75, 0.035) 0%,
+      rgba(231, 184, 75, 0) 42%
     );
     background-repeat: no-repeat;
     background-attachment: fixed;

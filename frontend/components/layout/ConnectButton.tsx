@@ -34,16 +34,18 @@ export function ConnectButton() {
             aria-hidden={!ready}
             className={ready ? undefined : "pointer-events-none opacity-0"}
           >
+            {/* h-9 matches the marketing header's Launch App pill exactly, so the
+                two headers read as the same bar (SiteHeader unification). */}
             {!connected || !account || !chain ? (
-              <Button size="sm" onClick={openConnectModal}>
+              <Button size="sm" className="h-9 px-4" onClick={openConnectModal}>
                 Connect
               </Button>
             ) : chain.unsupported ? (
-              <Button variant="danger" size="sm" onClick={openChainModal}>
+              <Button variant="danger" size="sm" className="h-9 px-4" onClick={openChainModal}>
                 Wrong network
               </Button>
             ) : (
-              <Button variant="secondary" size="sm" onClick={openAccountModal}>
+              <Button variant="secondary" size="sm" className="h-9 px-4" onClick={openAccountModal}>
                 <span className="h-1.5 w-1.5 rounded-full bg-pos" />
                 <span className="font-mono">{shortHex(account.address)}</span>
               </Button>

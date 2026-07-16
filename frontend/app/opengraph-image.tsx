@@ -22,7 +22,7 @@ export default function OpengraphImage() {
           padding: 80,
           backgroundColor: "#0a0a0b",
           backgroundImage:
-            "linear-gradient(150deg, rgba(46,207,136,0.14) 0%, rgba(46,207,136,0) 48%)",
+            "linear-gradient(150deg, rgba(231,184,75,0.12) 0%, rgba(231,184,75,0) 48%)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>

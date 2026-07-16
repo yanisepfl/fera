@@ -3,10 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { Logo } from "@/components/ui/Logo";
+import {
+  SiteHeader,
+  navLinkClass,
+  navLinkActiveClass,
+} from "@/components/layout/SiteHeader";
 import { ConnectButton } from "./ConnectButton";
 
 /**
+ * App top nav, built on the shared SiteHeader shell so it wears the exact same
+ * chrome as the marketing header: h-16 bar, gold BrandLockup, centered links with
+ * the gold underline treatment (pinned on for the active route), actions right.
+ *
  * Flagship pool the "Pool" tab lands on. Pool detail is inherently per-pool
  * (/pool/[poolId]); there is no pools-index route (Earn is the list), so the nav
  * entry deep-links to the featured MEME pool (PEPE/WETH). Active for any /pool/* path.
@@ -23,52 +31,40 @@ const NAV: { href: string; label: string; match: (p: string) => boolean }[] = [
 export function TopNav() {
   const pathname = usePathname();
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-well/80 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-app items-center gap-6 px-4 md:px-6">
-        <Link href="/app" className="flex items-center gap-2 shrink-0">
-          <Logo className="h-6 w-6" />
-          <span className="text-heading font-semibold tracking-tight">FERA</span>
-        </Link>
-
-        <nav className="hidden md:flex items-center gap-1">
+    <SiteHeader
+      brandHref="/app"
+      nav={
+        <nav className="hidden min-w-0 flex-1 items-center justify-center gap-6 md:flex">
+          {NAV.map((n) => (
+            <Link
+              key={n.href}
+              href={n.href}
+              className={cn(navLinkClass, n.match(pathname) && navLinkActiveClass)}
+            >
+              {n.label}
+            </Link>
+          ))}
+        </nav>
+      }
+      right={<ConnectButton />}
+      below={
+        <nav className="flex items-center gap-1 overflow-x-auto border-t border-line px-2 py-1.5 md:hidden">
           {NAV.map((n) => (
             <Link
               key={n.href}
               href={n.href}
               className={cn(
-                "rounded-md px-3 py-1.5 text-body-sm font-medium transition-colors",
+                "shrink-0 rounded-md px-3 py-1.5 text-body-sm font-medium transition-colors",
                 n.match(pathname)
                   ? "bg-hover text-text"
-                  : "text-mute hover:text-dim hover:bg-elevated"
+                  : "text-mute hover:text-dim"
               )}
             >
               {n.label}
             </Link>
           ))}
         </nav>
-
-        <div className="ml-auto flex items-center gap-2">
-          <ConnectButton />
-        </div>
-      </div>
-
-      {/* mobile nav */}
-      <nav className="md:hidden flex items-center gap-1 overflow-x-auto border-t border-line px-2 py-1.5">
-        {NAV.map((n) => (
-          <Link
-            key={n.href}
-            href={n.href}
-            className={cn(
-              "shrink-0 rounded-md px-3 py-1.5 text-body-sm font-medium transition-colors",
-              n.match(pathname)
-                ? "bg-hover text-text"
-                : "text-mute hover:text-dim"
-            )}
-          >
-            {n.label}
-          </Link>
-        ))}
-      </nav>
-    </header>
+      }
+    />
   );
 }

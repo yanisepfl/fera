@@ -13,8 +13,17 @@ export default function RewardsPage() {
     <div className="space-y-8">
       <PageHeader
         eyebrow="Rewards"
-        title="Your rewards"
-        subtitle="Track what you've earned this week, claim your FERA rewards and let them vest, or stake to earn a share of real protocol revenue."
+        title={
+          <>
+            Your <span className="text-accent">cut</span>
+          </>
+        }
+        subtitle={
+          <>
+            Claim what you&apos;ve earned. Stake it for a share of real protocol
+            revenue. <span className="text-mute">Paid from fees, not promises.</span>
+          </>
+        }
       />
 
       {/* current epoch: countdown, your fees paid and earned, projected esFERA */}
