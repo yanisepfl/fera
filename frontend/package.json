@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "mocks:init": "msw init public/ --save"
+    "mocks:init": "msw init public/ --save",
+    "legal:pdf": "node scripts/generate-legal-pdfs.mjs"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.0",
@@ -22,7 +23,7 @@
     "clsx": "^2.1.1",
     "geist": "^1.3.1",
     "lightweight-charts": "4.2.3",
-    "next": "14.2.15",
+    "next": "14.2.35",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "tailwind-merge": "^2.5.4",
@@ -36,7 +37,7 @@
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
-    "eslint-config-next": "14.2.15",
+    "eslint-config-next": "14.2.35",
     "msw": "^2.4.9",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",

@@ -10,6 +10,7 @@ import {
 } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
 import { wagmiConfig } from "@/lib/wagmi";
+import { TosGateProvider } from "@/lib/hooks/useTosGate";
 
 /**
  * App-wide client providers: wagmi (wallets) + React Query + RainbowKit (the wallet
@@ -59,7 +60,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider theme={feraWalletTheme} modalSize="compact">
-          {children}
+          {/* First-connect Terms gate: blocks actions until the user signs (or disconnects). */}
+          <TosGateProvider>{children}</TosGateProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

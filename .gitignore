@@ -31,6 +31,8 @@ coverage/
 # ── Ponder (backend) ───────────────────────────────────────────────────
 /backend/.ponder/
 /backend/generated/
+# Terms-of-Service acceptance ledger (runtime records: addresses/signatures — not source).
+/backend/.data/
 
 # ── Internal working tree: local-only, kept OFF the public GitHub repo ──
 # Internal engineering process artifacts (OPEN_DECISIONS, memos, GTM playbooks,

@@ -19,7 +19,22 @@
 // Docs: https://api.geckoterminal.com/docs (v2, no API key required).
 
 const GT_BASE = process.env.FERA_GT_BASE ?? "https://api.geckoterminal.com/api/v2";
-const NETWORK = process.env.FERA_MARKET_NETWORK ?? "robinhood";
+// Network id is an operator-set constant (never user input). Validate its charset anyway
+// so a misconfigured env can't inject path/query segments into the upstream URL.
+const NETWORK = (() => {
+  const n = process.env.FERA_MARKET_NETWORK ?? "robinhood";
+  if (!/^[a-z0-9_-]{1,40}$/.test(n)) throw new Error(`invalid FERA_MARKET_NETWORK: ${n}`);
+  return n;
+})();
+
+// SSRF/param-injection guard for the one piece of user-controlled data that reaches the
+// upstream URL: the pool address/id. Callers (api/devServer.ts) already reject bad ids with
+// 400; this is defense-in-depth so marketData is safe even if called from elsewhere.
+const POOL_ID_RE = /^[a-zA-Z0-9_-]{1,100}$/;
+const encPoolId = (address: string): string => {
+  if (!POOL_ID_RE.test(address)) throw new Error(`invalid pool id: ${address}`);
+  return encodeURIComponent(address);
+};
 const TOP_N = Math.min(20, Number(process.env.FERA_MARKET_TOP_N ?? 10));
 const POOLS_TTL_MS = Number(process.env.FERA_MARKET_TTL_MS ?? 60_000);
 const OHLCV_TTL_MS = Number(process.env.FERA_MARKET_OHLCV_TTL_MS ?? 120_000);
@@ -272,7 +287,7 @@ export async function poolByAddress(address: string): Promise<LivePoolSummary | 
     return await cached(`pool:${NETWORK}:${address.toLowerCase()}`, POOLS_TTL_MS, async () => {
       const fetchedAt = Math.floor(Date.now() / 1000);
       const res = await gtGet<{ data: GtPool; included?: GtToken[] }>(
-        `/networks/${NETWORK}/pools/${address}?include=base_token%2Cquote_token`,
+        `/networks/${NETWORK}/pools/${encPoolId(address)}?include=base_token%2Cquote_token`,
       );
       return mapPool(res.data, toTokenMap(res.included), fetchedAt);
     });
@@ -308,7 +323,7 @@ export async function ohlcv(
   const key = `ohlcv:${NETWORK}:${address.toLowerCase()}:${timeframe}:${agg}:${lim}`;
   return cached(key, OHLCV_TTL_MS, async () => {
     const res = await gtGet<GtOhlcvResponse>(
-      `/networks/${NETWORK}/pools/${address}/ohlcv/${timeframe}?aggregate=${agg}&limit=${lim}`,
+      `/networks/${NETWORK}/pools/${encPoolId(address)}/ohlcv/${timeframe}?aggregate=${agg}&limit=${lim}`,
     );
     return res.data.attributes.ohlcv_list
       .map(([t, o, h, l, c, v]) => ({ t, o, h, l, c, volUsd: v }))

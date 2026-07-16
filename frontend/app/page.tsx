@@ -647,10 +647,23 @@ function MarketingFooter() {
 
         <div className="hr my-8" />
 
-        <p className="text-caption text-mute">
-          &copy; 2026 FERA. Not affiliated with Robinhood. Nothing here is an offer or
-          investment advice.
-        </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-caption text-mute">
+            &copy; 2026 FERA. Not affiliated with Robinhood. Nothing here is an offer or
+            investment advice.
+          </p>
+          <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption">
+            <Link href="/legal/terms" className="text-mute transition-colors hover:text-text">
+              Terms
+            </Link>
+            <Link href="/legal/privacy" className="text-mute transition-colors hover:text-text">
+              Privacy
+            </Link>
+            <Link href="/legal/risk" className="text-mute transition-colors hover:text-text">
+              Risk Disclosure
+            </Link>
+          </nav>
+        </div>
       </div>
     </footer>
   );
