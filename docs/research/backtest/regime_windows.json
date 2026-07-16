@@ -1,0 +1,338 @@
+{
+ "DOGE": {
+  "files": {
+   "h1": "/private/tmp/claude-501/-Users-yanisberkani-my-projects-fera/0a293387-2114-4833-816f-2e1ef58645c6/scratchpad/backtest/data/DOGE_1h.json",
+   "m5": "/private/tmp/claude-501/-Users-yanisberkani-my-projects-fera/0a293387-2114-4833-816f-2e1ef58645c6/scratchpad/backtest/data/DOGE_5m.json"
+  },
+  "regimes": [
+   {
+    "startTs": 1752616800,
+    "endTs": 1753138800,
+    "label": "pump",
+    "note": "Data opens mid-rally: +47.4% window run-up (0.195 -> 0.2875 high), closes +38.5%; ann. vol ~118%. Below the +80% canonical pump threshold but strongest sustained rally alongside Sep."
+   },
+   {
+    "startTs": 1753142400,
+    "endTs": 1756767600,
+    "label": "chop",
+    "note": "High-vol range 0.188-0.275 for ~6 weeks; +35.7% run-up / -31.5% max drawdown, net -22.4%; ann. vol ~91%."
+   },
+   {
+    "startTs": 1756771200,
+    "endTs": 1757890800,
+    "label": "pump",
+    "note": "+48.5% trough-to-peak (0.2066 -> 0.3068, the 365d high); net +31.9%; ann. vol ~75%. Below +80% threshold; strongest clean uptrend of the year."
+   },
+   {
+    "startTs": 1759795200,
+    "endTs": 1760396400,
+    "label": "dump",
+    "note": "Oct 10 2025 liquidation cascade: -64.6% peak-to-trough (0.268 -> 0.095 wick) with +133% rebound off the low within the same week; ann. vol ~173%. Key stress window for LP backtests."
+   },
+   {
+    "startTs": 1760400000,
+    "endTs": 1770591600,
+    "label": "dump",
+    "note": "Slow 4-month bleed Oct 14 2025 -> Feb 8 2026: net -54.8% (0.214 -> 0.097), max drawdown -62.9%, includes a brief ~+35% New-Year bounce (0.116 -> 0.157); ann. vol ~78%."
+   },
+   {
+    "startTs": 1770595200,
+    "endTs": 1774911600,
+    "label": "chop",
+    "note": "Range-bound 0.0867-0.1176 with sharp swings (+33.8% run-up / -26.3% drawdown, net only -6.0%); ann. vol ~70%."
+   },
+   {
+    "startTs": 1774915200,
+    "endTs": 1777330800,
+    "label": "calm",
+    "note": "Low-vol drift 0.089-0.102, net +8.9%, max drawdown -9.4%; ann. vol ~47% (lowest of the year)."
+   },
+   {
+    "startTs": 1778544000,
+    "endTs": 1782601200,
+    "label": "dump",
+    "note": "Sustained downtrend 0.1186 -> 0.0715 (365d low 0.06952 hit Jun 27): peak-to-trough -39.8% (marginally under the -40% rule), net -33.1%; ann. vol ~66%."
+   }
+  ]
+ },
+ "WIF": {
+  "files": {
+   "h1": "/private/tmp/claude-501/-Users-yanisberkani-my-projects-fera/0a293387-2114-4833-816f-2e1ef58645c6/scratchpad/backtest/data/WIF_1h.json",
+   "m5": "/private/tmp/claude-501/-Users-yanisberkani-my-projects-fera/0a293387-2114-4833-816f-2e1ef58645c6/scratchpad/backtest/data/WIF_5m.json"
+  },
+  "regimes": [
+   {
+    "startTs": 1752616800,
+    "endTs": 1757980800,
+    "label": "chop",
+    "note": "Wide two-way range $0.73-$1.325: +27% rally to 1.325 (Jul 21), -45% slide to 0.73 (Aug 29), +30% recovery to ~0.88 by mid-Sep; hourly vol 1.15%"
+   },
+   {
+    "startTs": 1757980800,
+    "endTs": 1760054400,
+    "label": "calm",
+    "note": "Low-vol downward drift 0.88 -> 0.71 (-20% net), hourly vol 0.89% (below series average), no violent moves"
+   },
+   {
+    "startTs": 1760054400,
+    "endTs": 1760313600,
+    "label": "dump",
+    "note": "Oct 10 2025 liquidation-cascade flash crash: wick 0.855 -> 0.062 (-93% intraday), day closed -34.5% at 0.463, partial rebound to 0.553 by Oct 12; hourly vol 4.89%"
+   },
+   {
+    "startTs": 1760313600,
+    "endTs": 1767052800,
+    "label": "dump",
+    "note": "Post-crash sustained bleed 0.55 -> 0.29 (-48% net, -54% peak-to-trough from 0.619 to 0.287) over 11 weeks"
+   },
+   {
+    "startTs": 1767052800,
+    "endTs": 1767744000,
+    "label": "pump",
+    "note": "New-year rally: trough 0.261 (Dec 31) -> peak 0.505 (Jan 6), +93% in 6 days; window closed +45% at 0.42"
+   },
+   {
+    "startTs": 1767744000,
+    "endTs": 1770595200,
+    "label": "dump",
+    "note": "Give-back leg: 0.42 -> 0.227 (-46% net), peak-to-trough -59% (0.436 -> 0.180 on Feb 6), incl -16.5% day Feb 5"
+   },
+   {
+    "startTs": 1770595200,
+    "endTs": 1782777600,
+    "label": "chop",
+    "note": "4.7-month range 0.137-0.28 with \u00b150% two-way swings (May 6 spike to 0.28, early-Jun flush to 0.1397); net -22%, hourly vol 1.08%"
+   },
+   {
+    "startTs": 1782777600,
+    "endTs": 1784152800,
+    "label": "calm",
+    "note": "Quiet tape: range 0.147-0.184, gentle -13% drift to 0.1535, hourly vol 0.79% falling to 0.60% in final week"
+   }
+  ]
+ },
+ "PEPE": {
+  "files": {
+   "h1": "/private/tmp/claude-501/-Users-yanisberkani-my-projects-fera/0a293387-2114-4833-816f-2e1ef58645c6/scratchpad/backtest/data/PEPE_1h.json",
+   "m5": "/private/tmp/claude-501/-Users-yanisberkani-my-projects-fera/0a293387-2114-4833-816f-2e1ef58645c6/scratchpad/backtest/data/PEPE_5m.json"
+  },
+  "regimes": [
+   {
+    "startTs": 1752616800,
+    "endTs": 1760054400,
+    "label": "chop",
+    "note": "Range-bound with downward drift: 1.265e-05 -> 9.25e-06 (-27% net); yearly high 1.475e-05 hit 2025-07-22; intra-window swings +39%/-40%; ann vol ~86%"
+   },
+   {
+    "startTs": 1760054400,
+    "endTs": 1760313600,
+    "label": "dump",
+    "note": "Oct 10 2025 liquidation-cascade flash crash: -70% wick from 9.39e-06 to 2.79e-06 within ~18h, +195% snapback off the wick low, closes -19% over 3 days; ann vol ~259%"
+   },
+   {
+    "startTs": 1760313600,
+    "endTs": 1766361600,
+    "label": "dump",
+    "note": "Grinding 10-week downtrend post-crash: 7.49e-06 -> 4.02e-06 (-46% net, -55% max drawdown); ann vol ~96%"
+   },
+   {
+    "startTs": 1766361600,
+    "endTs": 1767571200,
+    "label": "pump",
+    "note": "New-year rally: trough 3.84e-06 (Dec 24) -> peak 7.26e-06 (Jan 4-5), +89% trough-to-peak (+78% net over 2 weeks); ann vol ~102%"
+   },
+   {
+    "startTs": 1767571200,
+    "endTs": 1770681600,
+    "label": "dump",
+    "note": "Full retrace of the pump: 7.17e-06 -> 3.81e-06 (-47% net, -57% peak-to-trough, low 3.10e-06 on Feb 6); ann vol ~106%"
+   },
+   {
+    "startTs": 1770681600,
+    "endTs": 1773792000,
+    "label": "chop",
+    "note": "Violent range 3.12e-06 to 5.09e-06: +47% run-up then -39% drawdown, net only -4%; ann vol ~92%"
+   },
+   {
+    "startTs": 1773792000,
+    "endTs": 1778630400,
+    "label": "calm",
+    "note": "Quietest stretch of the year: gentle +13% upward drift in 3.17e-06 to 4.59e-06 band; ann vol ~72% (lowest of all windows)"
+   },
+   {
+    "startTs": 1778630400,
+    "endTs": 1782864000,
+    "label": "dump",
+    "note": "Slow 7-week bleed: 4.15e-06 -> 2.33e-06 (-44% net, -47% max drawdown), sets yearly-low zone ~2.27e-06; ann vol ~81%"
+   }
+  ]
+ },
+ "BONK": {
+  "files": {
+   "h1": "/private/tmp/claude-501/-Users-yanisberkani-my-projects-fera/0a293387-2114-4833-816f-2e1ef58645c6/scratchpad/backtest/data/BONK_1h.json",
+   "m5": "/private/tmp/claude-501/-Users-yanisberkani-my-projects-fera/0a293387-2114-4833-816f-2e1ef58645c6/scratchpad/backtest/data/BONK_5m.json"
+  },
+  "regimes": [
+   {
+    "startTs": 1752616800,
+    "endTs": 1760054400,
+    "label": "dump",
+    "note": "Opens with +40% spike to cycle high 0.00004075 (2025-07-17 06:00 UTC) then persistent bleed to ~0.0000190; peak-to-end -53%. High vol early (hourly logret sd ~1.7-1.8%), decaying volume."
+   },
+   {
+    "startTs": 1760054400,
+    "endTs": 1760227200,
+    "label": "dump",
+    "note": "Oct 10 2025 liquidation cascade: the 21:00 UTC hourly candle wicked 0.0000162 -> 0.00000401 (-75% intra-hour; ~-79% window peak-to-trough), closed 0.0000130. Close-to-close -30% with partial V-recovery. Stress-test window for LP strategies."
+   },
+   {
+    "startTs": 1760227200,
+    "endTs": 1767052800,
+    "label": "dump",
+    "note": "Post-crash grind: 0.0000133 -> 0.0000077, -42% over ~2.5 months, moderate vol (hourly sd ~0.8-1.4%), shrinking volume."
+   },
+   {
+    "startTs": 1767052800,
+    "endTs": 1767744000,
+    "label": "pump",
+    "note": "New-year pump: trough 0.00000742 (2026-01-01 04:00) -> peak 0.0000134 (2026-01-06 03:00), +80.6% trough-to-peak; weekly quote volume ~4x the prior weeks."
+   },
+   {
+    "startTs": 1767744000,
+    "endTs": 1770681600,
+    "label": "dump",
+    "note": "Full retrace and worse: 0.0000122 -> 0.0000062 close-to-close (-49%); -62% from the Jan 6 peak to the Feb 6 low 0.00000514."
+   },
+   {
+    "startTs": 1770681600,
+    "endTs": 1774310400,
+    "label": "chop",
+    "note": "Range-bound 0.0000051-0.0000074 with repeated +/-10-13% weekly swings and no net trend; hourly logret sd ~0.9-1.2%."
+   },
+   {
+    "startTs": 1774310400,
+    "endTs": 1778544000,
+    "label": "calm",
+    "note": "Lowest-vol stretch of the year (hourly sd ~0.6-0.8%, weekly ranges 9-15%); gentle drift up 0.0000059 -> 0.0000075."
+   },
+   {
+    "startTs": 1778544000,
+    "endTs": 1784152800,
+    "label": "dump",
+    "note": "Slow low-volume bleed 0.0000075 -> 0.0000037 (-50%), new period low 0.00000364 on 2026-07-13; vol mostly low with brief spikes early June and early July."
+   }
+  ]
+ },
+ "SHIB": {
+  "files": {
+   "h1": "/private/tmp/claude-501/-Users-yanisberkani-my-projects-fera/0a293387-2114-4833-816f-2e1ef58645c6/scratchpad/backtest/data/SHIB_1h.json",
+   "m5": "/private/tmp/claude-501/-Users-yanisberkani-my-projects-fera/0a293387-2114-4833-816f-2e1ef58645c6/scratchpad/backtest/data/SHIB_5m.json"
+  },
+  "regimes": [
+   {
+    "startTs": 1752616800,
+    "endTs": 1759795200,
+    "label": "chop",
+    "note": "Jul-early Oct 2025: range-bound 1.15e-05 to 1.60e-05, max run-up +28% / maxDD -28%, net -5%, ann vol 0.66"
+   },
+   {
+    "startTs": 1759795200,
+    "endTs": 1761004800,
+    "label": "dump",
+    "note": "Oct 2025 flash crash: -47.5% peak-to-trough (1.29e-05 to 6.78e-06 low at 2025-10-10 21:00 UTC), +66% partial V-recovery, highest vol of year (ann 1.15)"
+   },
+   {
+    "startTs": 1761004800,
+    "endTs": 1767052800,
+    "label": "calm",
+    "note": "Post-crash bleed Oct 21-Dec 30 2025: steady drift -29% (maxDD -35%), no rallies >26%, ann vol 0.70"
+   },
+   {
+    "startTs": 1767052800,
+    "endTs": 1768262400,
+    "label": "pump",
+    "note": "New Year 2026 rally: +48% peak run-up (6.82e-06 to 1.009e-05 peak 2026-01-05), ann vol 0.90. BELOW the strict +80% pump rule; labeled pump by judgment as the only sustained directional rally in the dataset"
+   },
+   {
+    "startTs": 1768262400,
+    "endTs": 1770681600,
+    "label": "dump",
+    "note": "Jan 13-Feb 10 2026: -44.4% peak-to-trough (9.12e-06 to 5.07e-06), meets <= -40% rule, ann vol 0.80"
+   },
+   {
+    "startTs": 1770681600,
+    "endTs": 1777939200,
+    "label": "chop",
+    "note": "Feb 10-May 5 2026: range-bound 5.23e-06 to 7.25e-06, net +2%, +/-26-28% swings, ann vol 0.62"
+   },
+   {
+    "startTs": 1777939200,
+    "endTs": 1782777600,
+    "label": "dump",
+    "note": "May 5-Jun 30 2026: slow grind -39.6% peak-to-trough (6.70e-06 on 05-11 to 4.05e-06 on 06-25), net -32%; just under the -40% rule, labeled dump by judgment, ann vol 0.61"
+   },
+   {
+    "startTs": 1782777600,
+    "endTs": 1784149200,
+    "label": "calm",
+    "note": "Jul 2026: stabilization 4.08e-06 to 4.58e-06, net flat, lowest vol of year (ann 0.48)"
+   }
+  ]
+ },
+ "FLOKI": {
+  "files": {
+   "h1": "/private/tmp/claude-501/-Users-yanisberkani-my-projects-fera/0a293387-2114-4833-816f-2e1ef58645c6/scratchpad/backtest/data/FLOKI_1h.json",
+   "m5": "/private/tmp/claude-501/-Users-yanisberkani-my-projects-fera/0a293387-2114-4833-816f-2e1ef58645c6/scratchpad/backtest/data/FLOKI_5m.json"
+  },
+  "regimes": [
+   {
+    "startTs": 1752616800,
+    "endTs": 1753236000,
+    "label": "pump",
+    "note": "2025-07-15 to 07-23: rally 0.0000966 low -> 0.00015777 peak, +63% within window (year high). Data window starts mid-rally (365d cap), so run-up is truncated; below the strict +80% bar but the strongest sustained rally in the series."
+   },
+   {
+    "startTs": 1753236000,
+    "endTs": 1759269600,
+    "label": "dump",
+    "note": "2025-07-23 to 09-30: slow grind from 0.00015777 peak to 0.0000770 low, -51% peak-to-trough over ~10 weeks; hourly vol 0.7-1.3%."
+   },
+   {
+    "startTs": 1759269600,
+    "endTs": 1760479200,
+    "label": "dump",
+    "note": "2025-09-30 to 10-14: +44% spike to 0.000116 by Oct 4, faded, then Oct 10 ~20:00-21:00 UTC liquidation cascade: -84% wick from 0.0000957 to 0.00001544 (series low) within hours, V-recovery to ~0.0000744. Weekly high-low range 559%; most violent event in the series and the key stress window."
+   },
+   {
+    "startTs": 1760479200,
+    "endTs": 1767196800,
+    "label": "dump",
+    "note": "2025-10-14 to 12-31: post-crash bleed 0.0000744 -> 0.0000377 low (Dec 18), -49% over 11 weeks; moderate vol (hourly ~0.8-1.2%)."
+   },
+   {
+    "startTs": 1767196800,
+    "endTs": 1767801600,
+    "label": "pump",
+    "note": "2025-12-31 to 2026-01-07: New Year rally 0.0000386 low -> 0.0000619 peak, +60% in ~6 days (below strict +80% bar; second-strongest rally in series)."
+   },
+   {
+    "startTs": 1767801600,
+    "endTs": 1770897600,
+    "label": "dump",
+    "note": "2026-01-07 to 02-12: 0.0000567 -> 0.0000256 low (Feb 6), -55% peak-to-trough over 5 weeks."
+   },
+   {
+    "startTs": 1770897600,
+    "endTs": 1778623200,
+    "label": "chop",
+    "note": "2026-02-12 to 05-12: range-bound 0.0000261-0.0000383 (~47% band), net +18% close-to-close drift, hourly vol 0.56-1.10%; no sustained trend."
+   },
+   {
+    "startTs": 1782900000,
+    "endTs": 1784149200,
+    "label": "calm",
+    "note": "2026-07-01 to 07-15: flat low-vol drift 0.0000215 -> 0.0000223; weekly ranges 3-10%, hourly vol 0.45-0.67% (quietest stretch of the year)."
+   }
+  ]
+ }
+}
