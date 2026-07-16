@@ -11,10 +11,12 @@ const FEATURED: PoolId =
 
 export function FeaturedHero() {
   const { data: pools } = usePools();
-  const { data: detail } = usePool(FEATURED);
-  const { data: depth } = useDepth(FEATURED);
-
+  // Live mode serves REAL pool ids, so the fixture FEATURED id won't match — fall back
+  // to the top pool and query detail/depth for the pool we actually render.
   const pool = pools?.find((p) => p.poolId === FEATURED) ?? pools?.[0];
+  const { data: detail } = usePool(pool?.poolId);
+  const { data: depth } = useDepth(pool?.poolId);
+
   if (!pool) return <Skeleton className="h-64 w-full rounded-lg" />;
 
   // "deepest NVDA/USDG pool" when FERA leads the depth table.

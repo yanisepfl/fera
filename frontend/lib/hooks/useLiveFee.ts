@@ -33,7 +33,13 @@ export interface LiveFee {
   tick: number;
 }
 
-export function useLiveFee(seedPips: number, regime: Regime, intervalMs = 1600): LiveFee {
+export function useLiveFee(
+  seedPips: number,
+  regime: Regime,
+  intervalMs = 1600,
+  /** false = the vault fee doesn't exist (pre-launch live mode): no simulated walk. */
+  enabled = true,
+): LiveFee {
   const [state, setState] = useState<LiveFee>({
     pips: seedPips,
     prevPips: seedPips,
@@ -43,6 +49,7 @@ export function useLiveFee(seedPips: number, regime: Regime, intervalMs = 1600):
   const current = useRef(seedPips);
 
   useEffect(() => {
+    if (!enabled) return;
     const [lo, hi] = RANGE[regime];
     const reduce =
       typeof window !== "undefined" &&
@@ -66,7 +73,7 @@ export function useLiveFee(seedPips: number, regime: Regime, intervalMs = 1600):
       }));
     }, intervalMs);
     return () => clearInterval(id);
-  }, [seedPips, regime, intervalMs]);
+  }, [seedPips, regime, intervalMs, enabled]);
 
   return state;
 }

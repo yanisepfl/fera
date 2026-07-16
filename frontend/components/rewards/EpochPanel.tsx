@@ -33,6 +33,27 @@ export function EpochPanel() {
   if (isLoading || !epoch)
     return <Skeleton className="h-44 w-full rounded-lg" />;
 
+  // PRE-LAUNCH LIVE MODE: no epoch exists on-chain yet — say so instead of
+  // counting down to nothing or showing $0.00 as if it were a measured balance.
+  if (epoch.vaultLive === false) {
+    return (
+      <Card className="card-glow overflow-hidden">
+        <div className="flex flex-col gap-3 p-6 md:p-7">
+          <div className="overline">Epochs</div>
+          <h3 className="text-heading font-semibold text-text">
+            Weekly epochs start at launch
+          </h3>
+          <p className="max-w-xl text-body-sm text-dim">
+            Rewards run in weekly epochs: fees you pay and earn are tallied, then
+            esFERA becomes claimable when each epoch closes. The contracts aren&apos;t
+            deployed yet, so nothing is accruing — there are no numbers to show here,
+            and we won&apos;t invent any.
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
   const c = countdown(epoch.endsAt, now);
 
   return (

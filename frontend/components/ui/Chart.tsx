@@ -45,6 +45,15 @@ export function Chart({
     let disposed = false;
     let ro: ResizeObserver | undefined;
 
+    // lightweight-charts parses colors itself and can't read CSS custom properties —
+    // resolve "var(--token)" to its computed literal value before handing colors over.
+    const resolveColor = (c: string): string => {
+      const m = /^var\((--[^)]+)\)$/.exec(c.trim());
+      if (!m) return c;
+      const v = getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim();
+      return v || "#888888";
+    };
+
     (async () => {
       const lc: any = await import("lightweight-charts");
       if (disposed || !ref.current) return;
@@ -80,16 +89,17 @@ export function Chart({
           lastValueVisible: false,
           title: s.title,
         };
+        const color = resolveColor(s.color);
         let ser: any;
         if (s.type === "area") {
           ser = chart.addAreaSeries({
             ...opts,
-            lineColor: s.color,
-            topColor: s.topColor ?? s.color + "40",
-            bottomColor: s.bottomColor ?? s.color + "00",
+            lineColor: color,
+            topColor: s.topColor ? resolveColor(s.topColor) : color + "40",
+            bottomColor: s.bottomColor ? resolveColor(s.bottomColor) : color + "00",
           });
         } else {
-          ser = chart.addLineSeries({ ...opts, color: s.color });
+          ser = chart.addLineSeries({ ...opts, color });
         }
         ser.setData(s.data);
       }
@@ -102,7 +112,7 @@ export function Chart({
         for (const pl of priceLines) {
           anchor.createPriceLine({
             price: pl.price,
-            color: pl.color,
+            color: resolveColor(pl.color),
             lineWidth: 1,
             lineStyle: pl.lineStyle ?? 2,
             axisLabelVisible: true,

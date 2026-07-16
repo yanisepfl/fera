@@ -72,6 +72,47 @@ export interface Token {
 export type MarketHoursState = "OPEN" | "CLOSED" | "HOLIDAY" | "PRE" | "POST";
 
 // ----------------------------------------------------------------------------
+// Live market facts (pre-launch live mode)
+// ----------------------------------------------------------------------------
+
+/**
+ * REAL market stats for the pool's UNDERLYING venue, fetched live by the backend
+ * (GeckoTerminal / Robinhood Chain). Served pre-deployment alongside `vaultLive:false`:
+ * market numbers are real; vault numbers don't exist yet. `tvlUsd` here is the venue
+ * pool's reserve — NOT vault TVL (that's `PoolSummary.tvlUsd`, inactive pre-launch).
+ */
+export interface PoolMarketStats {
+  /** base-token price, USD */
+  priceUsd: number;
+  /** 24h price change, decimal fraction (-0.221 = -22.1%) */
+  priceChange24h: number;
+  volume24hUsd: number;
+  /** the underlying pool's TVL (reserve in USD) */
+  tvlUsd: number;
+  /** buys + sells over 24h */
+  txns24h: number;
+  /** venue id, e.g. "uniswap-v3-robinhood" */
+  dex: string;
+  /** humanized venue, e.g. "Uniswap v3" */
+  dexLabel: string;
+  poolAddress: string;
+  source: "geckoterminal";
+  /** unix seconds the snapshot was fetched upstream (~60s cache) */
+  fetchedAt: number;
+}
+
+/** One OHLCV bucket from GET /pools/:poolId/ohlcv — real venue trade data. */
+export interface PriceCandle {
+  /** unix seconds (bucket start) */
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  volUsd: number;
+}
+
+// ----------------------------------------------------------------------------
 // GET /pools  → PoolSummary[]
 // ----------------------------------------------------------------------------
 
@@ -95,6 +136,15 @@ export interface PoolSummary {
    * `emissionsApr`/`tvlUsd` above remain the whole-pool blend for list summaries.
    */
   tranches?: TrancheInfo[];
+  /**
+   * HONESTY FLAG (pre-deployment live mode). `false` = the FERA vault for this pool is
+   * NOT deployed: every vault field above (currentFeePips, feeApr, emissionsApr, tvlUsd,
+   * depthVsBest) is an inactive zero and MUST render as a quiet "opens at launch" state —
+   * never as a number. Absent/`true` = vault numbers are real (indexed on-chain).
+   */
+  vaultLive?: boolean;
+  /** REAL market facts for the underlying venue (present in live mode; always real). */
+  market?: PoolMarketStats;
 }
 
 // ----------------------------------------------------------------------------
@@ -197,7 +247,9 @@ export interface DepthComparison {
   poolId: PoolId;
   /** e.g. "NVDA/USDG" */
   pair: string;
+  /** Pre-launch (`vaultLive:false`) this is EMPTY — FERA depth doesn't exist yet. */
   venues: VenueDepth[];
+  vaultLive?: boolean;
 }
 
 // ----------------------------------------------------------------------------
@@ -236,6 +288,8 @@ export interface CurrentEpoch {
   feesEarned: number;
   /** projected esFERA for the account at current pro-rata - 18-dec STRING (§8 v0.2). */
   projectedEsFera: string;
+  /** `false` = no epochs exist yet (contracts not deployed) — render "starts at launch". */
+  vaultLive?: boolean;
 }
 
 // ----------------------------------------------------------------------------
@@ -289,6 +343,8 @@ export interface StakingSummary {
    * MUST be shown DISTINCTLY from emissions APR (real yield vs token emission).
    */
   revenueShareApr: number;
+  /** `false` = staking is not deployed yet — zeros are structural, not balances. */
+  vaultLive?: boolean;
 }
 
 // ----------------------------------------------------------------------------

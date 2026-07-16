@@ -17,6 +17,11 @@ const j = <T>(data: T, ms = 60) =>
 export const handlers = [
   http.get("/api/pools", () => j(fx.POOLS)),
 
+  // Real-market candle series exists only in live mode (vaultLive:false pools);
+  // fixtures model deployed vaults, so mocks serve an EMPTY series (the price-history
+  // card simply doesn't render) - never a fabricated one.
+  http.get("/api/pools/:poolId/ohlcv", () => j([])),
+
   http.get("/api/pools/:poolId/depth", ({ params }) => {
     const d = fx.DEPTH[String(params.poolId)];
     return d ? j(d) : new HttpResponse(null, { status: 404 });

@@ -22,16 +22,29 @@ export function PoolList() {
   const [filter, setFilter] = useState<Filter>("ALL");
   const [sort, setSort] = useState<Sort>("tvl");
 
+  // PRE-LAUNCH LIVE MODE: vaults aren't deployed (vaultLive:false from the API), so the
+  // list shows REAL market columns (price / volume / market TVL) and quiet vault cells.
+  // Sort keys are remapped onto the market facts; vault zeros are never sorted or shown
+  // as numbers.
+  const marketMode = (pools ?? []).some((p) => p.vaultLive === false);
+
   const rows = useMemo(() => {
     const list = (pools ?? []).filter(
       (p) => filter === "ALL" || p.regime === filter
     );
     return [...list].sort((a, b) => {
+      if (marketMode) {
+        const ma = a.market, mb = b.market;
+        if (sort === "tvl") return (mb?.tvlUsd ?? 0) - (ma?.tvlUsd ?? 0);
+        if (sort === "fee")
+          return Math.abs(mb?.priceChange24h ?? 0) - Math.abs(ma?.priceChange24h ?? 0);
+        return (mb?.volume24hUsd ?? 0) - (ma?.volume24hUsd ?? 0);
+      }
       if (sort === "tvl") return b.tvlUsd - a.tvlUsd;
       if (sort === "fee") return b.currentFeePips - a.currentFeePips;
       return b.feeApr + b.emissionsApr - (a.feeApr + a.emissionsApr);
     });
-  }, [pools, filter, sort]);
+  }, [pools, filter, sort, marketMode]);
 
   return (
     <div className="rounded-lg border border-line bg-card shadow-card">
@@ -60,22 +73,23 @@ export function PoolList() {
             onChange={(e) => setSort(e.target.value as Sort)}
             className="rounded-md border border-line bg-surface px-2 py-1 text-body-sm text-dim outline-none focus:border-accent-line"
           >
-            <option value="tvl">TVL</option>
-            <option value="total">Total APR</option>
-            <option value="fee">Live fee</option>
+            <option value="tvl">{marketMode ? "Market TVL" : "TVL"}</option>
+            <option value="total">{marketMode ? "24h volume" : "Total APR"}</option>
+            <option value="fee">{marketMode ? "24h change" : "Live fee"}</option>
           </select>
         </label>
       </div>
 
       {/* header row (desktop) */}
       <div className="hidden md:grid grid-cols-[1.6fr_0.9fr_1.3fr_0.9fr_1fr_auto] gap-3 border-b border-line px-4 py-2">
-        {["Pool", "Live fee", "APR (fee + emissions)", "TVL", "Depth vs best", ""].map(
-          (h, i) => (
-            <div key={i} className="overline">
-              {h}
-            </div>
-          )
-        )}
+        {(marketMode
+          ? ["Pool", "Price · 24h", "Vault APR", "Market TVL", "24h volume", ""]
+          : ["Pool", "Live fee", "APR (fee + emissions)", "TVL", "Depth vs best", ""]
+        ).map((h, i) => (
+          <div key={i} className="overline">
+            {h}
+          </div>
+        ))}
       </div>
 
       {/* rows */}

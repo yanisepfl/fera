@@ -42,6 +42,19 @@ export function usd(n: number, dp = 2): string {
   return usdFmt(dp).format(n);
 }
 
+/**
+ * USD *price* with magnitude-aware precision (memecoin prices live far below $1).
+ * 1884.11 → "$1,884.11" · 0.0962 → "$0.0962" · 0.00124852 → "$0.00125".
+ */
+export function usdPrice(n: number): string {
+  if (!Number.isFinite(n) || n === 0) return "$0.00";
+  const abs = Math.abs(n);
+  if (abs >= 1) return usdFmt(2).format(n);
+  // <$1: keep ~3 significant digits (maxFractionDigits ≥ 2 so Intl never throws)
+  const digits = Math.min(12, Math.max(2, 2 - Math.floor(Math.log10(abs))));
+  return usdFmt(digits).format(n);
+}
+
 /** Plain number with thousands separators and fixed dp. */
 export function num(n: number, dp = 0): string {
   return new Intl.NumberFormat("en-US", {

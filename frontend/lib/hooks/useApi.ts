@@ -13,15 +13,29 @@ import type { Address, PoolId } from "@/lib/types";
 export const usePools = () =>
   useQuery({ queryKey: ["pools"], queryFn: api.pools, refetchInterval: 15_000 });
 
-export const usePool = (poolId: PoolId) =>
+export const usePool = (poolId?: PoolId) =>
   useQuery({
     queryKey: ["pool", poolId],
-    queryFn: () => api.pool(poolId),
+    queryFn: () => api.pool(poolId!),
+    enabled: !!poolId,
     refetchInterval: 15_000,
   });
 
-export const useDepth = (poolId: PoolId) =>
-  useQuery({ queryKey: ["depth", poolId], queryFn: () => api.depth(poolId) });
+export const useDepth = (poolId?: PoolId) =>
+  useQuery({
+    queryKey: ["depth", poolId],
+    queryFn: () => api.depth(poolId!),
+    enabled: !!poolId,
+  });
+
+/** REAL venue price candles (pre-launch live mode); ~60s server cache upstream. */
+export const useCandles = (poolId?: PoolId) =>
+  useQuery({
+    queryKey: ["candles", poolId],
+    queryFn: () => api.candles(poolId!),
+    enabled: !!poolId,
+    refetchInterval: 60_000,
+  });
 
 export const usePositions = (account?: Address) =>
   useQuery({

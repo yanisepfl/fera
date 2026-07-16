@@ -97,7 +97,21 @@ export function DepositDialog({
             <RegimeBadge regime={pool.regime} />
           </div>
 
-          {geo.blocked ? (
+          {pool.vaultLive === false ? (
+            /* PRE-LAUNCH: the vault contract isn't deployed — no deposit exists to make.
+               The market data shown elsewhere is real; nothing accrues yet. */
+            <div className="space-y-3">
+              <div className="rounded-lg border border-line bg-well p-3 text-body-sm text-dim">
+                <span className="font-semibold text-text">Deposits open at launch.</span>{" "}
+                The vault for this market isn&apos;t deployed yet. Prices and volume you
+                see are the live market it will run — vault deposits, fees and FERA
+                rewards start when the contracts go live.
+              </div>
+              <Button className="w-full" onClick={reset}>
+                Got it
+              </Button>
+            </div>
+          ) : geo.blocked ? (
             <div className="rounded-lg border border-danger-line bg-danger-wash p-3 text-body-sm text-text">
               {geo.reason} Swapping remains permissionless everywhere.
             </div>

@@ -11,6 +11,7 @@
     "dev": "ponder dev",
     "start": "ponder start",
     "serve": "ponder serve",
+    "api:dev": "tsx api/devServer.ts",
     "codegen": "ponder codegen",
     "db": "ponder db",
     "typecheck": "tsc --noEmit -p tsconfig.json",

@@ -22,6 +22,7 @@ import type {
   VestingGrant,
   EmissionsTransparency,
   RevenueTransparency,
+  PriceCandle,
   Address,
   PoolId,
 } from "./types";
@@ -97,6 +98,14 @@ export const api = {
   /** GET /vesting/:account (added v0.2, OD-6/FE-6) - esFERA grants, string amounts. */
   vesting: (account: Address) =>
     get<VestingGrant[]>(`/vesting/${account}`, () => fx.VESTING),
+
+  /**
+   * GET /pools/:poolId/ohlcv - REAL venue price candles (pre-launch live mode).
+   * Fixture mode has no market feed, so the local value is an empty series (the
+   * price-history card simply doesn't render) - never a fabricated one.
+   */
+  candles: (poolId: PoolId) =>
+    get<PriceCandle[]>(`/pools/${poolId}/ohlcv`, () => []),
 
   /** GET /transparency/emissions */
   emissions: () =>
