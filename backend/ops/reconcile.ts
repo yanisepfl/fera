@@ -8,9 +8,10 @@
 //  1. INV-3 (perf fee = 10% of collected LP fees): for every indexed FeesCollected, assert
 //     perfFee0/1 == 10% of fee0/1 within a rounding tolerance. A breach means either a contract
 //     bug or an indexer decode bug — either is a stop-the-line event.
-//  2. On-chain vs indexed accrual drift: read FeraVault.accruedFees(poolId) (uncollected fees
-//     currently sitting in the position) and compare the indexer's view of the pool's
-//     not-yet-collected fees. Large drift ⇒ missed/duplicated events (reorg gap) or a decode bug.
+//  2. On-chain vs indexed accrual drift: read FeraVault.pendingFees(poolId, tranche) (uncollected
+//     fees currently sitting in the position), summed over the pool's tranches, and compare the
+//     indexer's view of the pool's not-yet-collected fees. Large drift ⇒ missed/duplicated events
+//     (reorg gap) or a decode bug. (Fees are tracked per-tranche; there is no pool-level getter.)
 //
 // SOURCES: indexed data via the API (FERA_API_URL, read-only, already reorg-safe) + on-chain via
 // viem (FERA_RPC). This job is standalone (`npm run reconcile`) — it does NOT import ponder
@@ -83,12 +84,26 @@ export async function reconcile(opts: {
   const driftByPool: ReconcileReport["driftByPool"] = [];
   if (opts.vaultAddress) {
     for (const p of pools) {
-      const [fee0, fee1] = (await opts.publicClient.readContract({
+      // Uncollected fees are tracked PER (pool, tranche). Sum pendingFees over the pool's tranches
+      // (trancheCount) to get the pool total — there is no pool-level uncollected-fees getter.
+      const trancheCount = (await opts.publicClient.readContract({
         address: opts.vaultAddress,
         abi: FeraVaultAbi,
-        functionName: "accruedFees",
+        functionName: "trancheCount",
         args: [p.poolId],
-      })) as [bigint, bigint];
+      })) as number;
+      let fee0 = 0n;
+      let fee1 = 0n;
+      for (let t = 0; t < trancheCount; t++) {
+        const [f0, f1] = (await opts.publicClient.readContract({
+          address: opts.vaultAddress,
+          abi: FeraVaultAbi,
+          functionName: "pendingFees",
+          args: [p.poolId, t],
+        })) as [bigint, bigint];
+        fee0 += f0;
+        fee1 += f1;
+      }
       driftByPool.push({ poolId: p.poolId, onchainFee0: fee0.toString(), onchainFee1: fee1.toString() });
     }
   }

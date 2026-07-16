@@ -1,81 +1,407 @@
-// EmissionsController ABI — RECONCILED against contracts/out/EmissionsController.sol v2
-// (BK-1, 2026-07-12). Carries the §6 EpochFinalized event + the reads/writes the root-poster
-// keeper needs, matched bit-for-bit to the compiled artifact.
-//
-// F-11: `finalizeEpoch` now takes a leading `emissionRequested` (= the pipeline's committed total,
-// Σ leaf amounts) so the controller FUNDS EXACTLY that (D-BK-12 / R-19) rather than recomputing the
-// envelope. Drift fixed: the old ASSUMED `epochEndsAt(uint256)` did not exist on-chain — the real
-// getter is `epochEnd(uint256)`.
+// EmissionsControllerAbi — GENERATED from contracts/out/EmissionsController.sol/EmissionsController.json (BK-1 regen, 2026-07-16).
+// Source of truth: the compiled forge artifact's .abi (i.e. contracts/src/EmissionsController.sol).
+// Do not hand-edit: re-run the BK-1 ABI regen to refresh. 17 functions, 3 events, 7 errors.
 export const EmissionsControllerAbi = [
   {
-    type: "event",
-    name: "EpochFinalized",
-    inputs: [
-      { name: "epochId", type: "uint256", indexed: true },
-      { name: "capAmount", type: "uint256", indexed: false },
-      { name: "revenueBound", type: "uint256", indexed: false },
-      { name: "emitted", type: "uint256", indexed: false },
-      { name: "feraTwap", type: "uint256", indexed: false },
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "fera_",
+        "type": "address",
+        "internalType": "contract IFeraToken"
+      },
+      {
+        "name": "esFera_",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "keeper_",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "timelockOwner",
+        "type": "address",
+        "internalType": "address"
+      }
     ],
-    anonymous: false,
-  },
-  // Epoch clock reads.
-  {
-    type: "function",
-    name: "currentEpoch",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint256" }],
+    "stateMutability": "nonpayable"
   },
   {
-    type: "function",
-    name: "epochEnd", // was ASSUMED `epochEndsAt` — reconciled to the real name (BK-1).
-    stateMutability: "view",
-    inputs: [{ name: "epochId", type: "uint256" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "capAt", // cumulative emittable up to time t (INV-7 first arm).
-    stateMutability: "view",
-    inputs: [{ name: "t", type: "uint256" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "beta", // β (1e18-fixed) — INV-7 second arm.
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  // R-19 / D-M9 C2 reads — the Distributor binds its posted totalEsFera to `emittedOf(epochId)`.
-  {
-    type: "function",
-    name: "finalized",
-    stateMutability: "view",
-    inputs: [{ name: "epochId", type: "uint256" }],
-    outputs: [{ name: "", type: "bool" }],
-  },
-  {
-    type: "function",
-    name: "emittedOf",
-    stateMutability: "view",
-    inputs: [{ name: "epochId", type: "uint256" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  // F-11: the root-poster funds the epoch by passing the pipeline's committed total
-  // `emissionRequested` (= Σ leaf amounts, which MUST fit inside min(cap, β·revenueValuedInFera)).
-  // The controller mints exactly `emitted == emissionRequested` as esFERA backing (D-BK-12).
-  {
-    type: "function",
-    name: "finalizeEpoch",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "epochId", type: "uint256" },
-      { name: "emissionRequested", type: "uint256" },
-      { name: "revenueValuedInFera", type: "uint256" },
-      { name: "feraTwap", type: "uint256" },
+    "type": "function",
+    "name": "beta",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
     ],
-    outputs: [{ name: "emitted", type: "uint256" }],
+    "stateMutability": "view"
   },
+  {
+    "type": "function",
+    "name": "capAt",
+    "inputs": [
+      {
+        "name": "t",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "currentEpoch",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "emittedOf",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "epochEnd",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "esFera",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "fera",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IFeraToken"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "finalizeEpoch",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "emissionRequested",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "revenueValuedInFera",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "feraTwap",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "emitted",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "finalized",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "genesisTs",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "keeper",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "owner",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "renounceOwnership",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setBeta",
+    "inputs": [
+      {
+        "name": "newBetaWad",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setKeeper",
+    "inputs": [
+      {
+        "name": "newKeeper",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "totalEmitted",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "transferOwnership",
+    "inputs": [
+      {
+        "name": "newOwner",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "EpochFinalized",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "capAmount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "revenueBound",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "emitted",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "feraTwap",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "KeeperUpdated",
+    "inputs": [
+      {
+        "name": "keeper",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OwnershipTransferred",
+    "inputs": [
+      {
+        "name": "previousOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "EmissionBoundExceeded",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EpochAlreadyFinalized",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EpochNotOver",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OnlyKeeper",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OwnableInvalidOwner",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OwnableUnauthorizedAccount",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ZeroAddress",
+    "inputs": []
+  }
 ] as const;

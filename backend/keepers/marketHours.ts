@@ -1,7 +1,8 @@
 // KEEPER 1/4 — RWA market-hours / holiday flag (MASTER_SPEC §10).
 //
 // TRIGGER: schedule + holiday calendar (run each minute near session open/close).
-// ACTION: flip the per-pool market-open flag via FeraVault.setHolidayFlag(poolId, isHoliday).
+// ACTION: flip the per-pool holiday flag via FeraVault.setHoliday(poolId, isHoliday) — the Vault's
+// `_isMarketOpen` gate force-closes while `holiday` is set, so this is the keeper's market-closed switch.
 //
 // ON-CHAIN VERIFICATION BOUNDS (§10): "Vault verifies hours against an on-chain schedule; keeper
 // only flips a flag within bounds." The keeper does NOT decide fees — it toggles a boolean the
@@ -81,7 +82,7 @@ async function tick(env: KeeperEnv): Promise<void> {
     const desiredHoliday = !open;
     if (onchainOpen === open) continue; // already correct
     if (env.dryRun || !env.walletClient || !env.account) {
-      log("market-hours", "info", "DRY-RUN would setHolidayFlag", { poolId, isHoliday: desiredHoliday });
+      log("market-hours", "info", "DRY-RUN would setHoliday", { poolId, isHoliday: desiredHoliday });
       continue;
     }
     const hash = await env.walletClient.writeContract({
@@ -89,10 +90,10 @@ async function tick(env: KeeperEnv): Promise<void> {
       account: env.account,
       address: vault as `0x${string}`,
       abi: FeraVaultAbi,
-      functionName: "setHolidayFlag",
+      functionName: "setHoliday",
       args: [poolId, desiredHoliday],
     });
-    log("market-hours", "info", "setHolidayFlag submitted", { poolId, isHoliday: desiredHoliday, hash });
+    log("market-hours", "info", "setHoliday submitted", { poolId, isHoliday: desiredHoliday, hash });
   }
 }
 

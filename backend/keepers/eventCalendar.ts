@@ -2,7 +2,7 @@
 //
 // TRIGGER: scheduled earnings / known event windows (an exogenous calendar: earnings before
 // the next open for the pool's underlying).
-// ACTION: FeraVault.setEventWindowFlag(poolId, active) — flips a per-pool boolean for the
+// ACTION: FeraVault.setEventWindow(poolId, active) — flips a per-pool boolean for the
 // affected session ONLY.
 //
 // ON-CHAIN VERIFICATION BOUNDS (§10 + PARAMS.md#RWA_EVENT_WITHDRAW_FRAC): the keeper ONLY
@@ -93,7 +93,7 @@ async function tick(env: KeeperEnv): Promise<void> {
     if (onchain === desired) continue;
 
     if (env.dryRun || !env.walletClient || !env.account) {
-      log("event-calendar", "info", "DRY-RUN would setEventWindowFlag", { poolId, active: desired });
+      log("event-calendar", "info", "DRY-RUN would setEventWindow", { poolId, active: desired });
       continue;
     }
     const hash = await env.walletClient.writeContract({
@@ -101,10 +101,10 @@ async function tick(env: KeeperEnv): Promise<void> {
       account: env.account,
       address: vault as `0x${string}`,
       abi: FeraVaultAbi,
-      functionName: "setEventWindowFlag",
+      functionName: "setEventWindow",
       args: [poolId, desired],
     });
-    log("event-calendar", "info", "setEventWindowFlag submitted (Vault bounds q ≤ 0.80 on-chain)", {
+    log("event-calendar", "info", "setEventWindow submitted (Vault bounds q ≤ 0.80 on-chain)", {
       poolId,
       active: desired,
       hash,

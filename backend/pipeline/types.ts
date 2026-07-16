@@ -158,8 +158,13 @@ export interface EpochSnapshot {
   // OPTIONAL extra per-pool absolute cap (FERA wei), min()-ed into the D-M8 per-pool lock.
   // The normative locks (capShare_p, β·R_p/twap) always apply; this can only lower E_p.
   poolCapFeraWei?: Record<Hex, bigint>;
-  // per-account boost in 1e18 fixed point (1e18 = 1x .. 2e18 = 2x). From AnchorStaking.boostOf.
-  // Applied to the LP leaf only (Decision B), normalized WITHIN each pool (D-M8).
+  // per-account boost multiplier in 1e18 fixed point (1e18 = 1x). FLAT-MODEL / no chain source:
+  // the on-chain staking boost was REMOVED (AnchorStaking exposes no boost getter — staking is a
+  // flat stake/unstake model), so this is not read from any contract getter. In production it is
+  // empty {} ⇒ every account defaults to 1x ⇒ §9 emission attribution is flat/time-weighted, no
+  // boost multiplier. Retained (applied to the LP leaf only, normalized WITHIN each pool — D-M8)
+  // solely so the emissions leaf math + its counterfactual dry-run tests stay expressible; a
+  // non-empty map is a TEST-ONLY override. Safe to delete wholesale in a follow-up.
   boostX18: Record<Address, bigint>;
   // opening vault-share balances per (pool, tranche) at epoch start (carried from prior epoch's
   // closing indexer state). Needed so LP fees that accrue before any in-epoch Deposit are

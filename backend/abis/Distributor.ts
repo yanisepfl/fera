@@ -1,57 +1,303 @@
-// Distributor ABI — RECONCILED against contracts/out/Distributor.sol v2 (BK-1, 2026-07-12): the
-// RootPosted/Claimed events + postRoot(epochId,root,totalEsFera) / rootOf / isClaimed all match
-// on-chain. postRoot reverts unless totalEsFera == controller.emittedOf(epochId) (R-19) — see the
-// root-poster keeper's F-11 flow.
+// DistributorAbi — GENERATED from contracts/out/Distributor.sol/Distributor.json (BK-1 regen, 2026-07-16).
+// Source of truth: the compiled forge artifact's .abi (i.e. contracts/src/Distributor.sol).
+// Do not hand-edit: re-run the BK-1 ABI regen to refresh. 9 functions, 2 events, 9 errors.
 export const DistributorAbi = [
   {
-    type: "event",
-    name: "RootPosted",
-    inputs: [
-      { name: "epochId", type: "uint256", indexed: true },
-      { name: "merkleRoot", type: "bytes32", indexed: false },
-      { name: "totalEsFera", type: "uint256", indexed: false },
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "esFera_",
+        "type": "address",
+        "internalType": "contract IEsFera"
+      },
+      {
+        "name": "rootPoster_",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "controller_",
+        "type": "address",
+        "internalType": "contract IEmissionsController"
+      }
     ],
-    anonymous: false,
+    "stateMutability": "nonpayable"
   },
   {
-    type: "event",
-    name: "Claimed",
-    inputs: [
-      { name: "epochId", type: "uint256", indexed: true },
-      { name: "account", type: "address", indexed: true },
-      { name: "kind", type: "uint8", indexed: false }, // 0 traderRebate 1 lpReward
-      { name: "amount", type: "uint256", indexed: false },
+    "type": "function",
+    "name": "claim",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "kind",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "proof",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
     ],
-    anonymous: false,
-  },
-  // ---- ASSUMED write/read, pending contracts/. Distributor accepts ONE root per epoch. ----
-  {
-    type: "function",
-    name: "postRoot",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "epochId", type: "uint256" },
-      { name: "merkleRoot", type: "bytes32" },
-      { name: "totalEsFera", type: "uint256" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "rootOf",
-    stateMutability: "view",
-    inputs: [{ name: "epochId", type: "uint256" }],
-    outputs: [{ name: "merkleRoot", type: "bytes32" }],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
-    type: "function",
-    name: "isClaimed",
-    stateMutability: "view",
-    inputs: [
-      { name: "epochId", type: "uint256" },
-      { name: "account", type: "address" },
-      { name: "kind", type: "uint8" },
+    "type": "function",
+    "name": "claimedOf",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
     ],
-    outputs: [{ name: "claimed", type: "bool" }],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
+  {
+    "type": "function",
+    "name": "controller",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IEmissionsController"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "esFera",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IEsFera"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isClaimed",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "kind",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "postRoot",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "merkleRoot",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "totalEsFera",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "rootOf",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "rootPoster",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalEsFeraOf",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "Claimed",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "kind",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RootPosted",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "merkleRoot",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "totalEsFera",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "AlreadyClaimed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EmittedMismatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "EpochNotFinalized",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ExceedsEmitted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidProof",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OnlyRootPoster",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RootAlreadyPosted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RootNotPosted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroAddress",
+    "inputs": []
+  }
 ] as const;

@@ -1,99 +1,497 @@
-// AnchorStaking ABI — RECONCILED against contracts/out/AnchorStaking.sol v2 (BK-1, 2026-07-12).
-// Events (Staked/Unstaked/RevenueShareClaimed) match §6. Reads reconciled: `boostOf` is `pure`
-// on-chain (output `boostWad`); the ASSUMED `multiplierPoints(address)` getter does NOT exist and
-// was removed (the /staking `multiplierPoints` field is a view snapshot tracked off-chain, not this
-// call). Added the v2 revenue-share ALLOWLIST surface (addRewardToken/isRewardToken/rewardTokens…)
-// + stake reads used by the /staking endpoint and revenue-share reconciliation.
+// AnchorStakingAbi — GENERATED from contracts/out/AnchorStaking.sol/AnchorStaking.json (BK-1 regen, 2026-07-16).
+// Source of truth: the compiled forge artifact's .abi (i.e. contracts/src/AnchorStaking.sol).
+// Do not hand-edit: re-run the BK-1 ABI regen to refresh. 22 functions, 4 events, 10 errors.
 export const AnchorStakingAbi = [
   {
-    type: "event",
-    name: "Staked",
-    inputs: [
-      { name: "account", type: "address", indexed: true },
-      { name: "amount", type: "uint256", indexed: false },
-      { name: "lockWeeks", type: "uint256", indexed: false },
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "fera_",
+        "type": "address",
+        "internalType": "contract IERC20"
+      },
+      {
+        "name": "revenueDistributor_",
+        "type": "address",
+        "internalType": "contract IRevenueDistributor"
+      },
+      {
+        "name": "rewardTokenAdmin_",
+        "type": "address",
+        "internalType": "address"
+      }
     ],
-    anonymous: false,
+    "stateMutability": "nonpayable"
   },
   {
-    type: "event",
-    name: "Unstaked",
-    inputs: [
-      { name: "account", type: "address", indexed: true },
-      { name: "amount", type: "uint256", indexed: false },
+    "type": "function",
+    "name": "MAX_REWARD_TOKENS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
     ],
-    anonymous: false,
+    "stateMutability": "view"
   },
   {
-    type: "event",
-    name: "RevenueShareClaimed",
-    inputs: [
-      { name: "account", type: "address", indexed: true },
-      { name: "token", type: "address", indexed: true },
-      { name: "amount", type: "uint256", indexed: false },
+    "type": "function",
+    "name": "accPerShare",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
     ],
-    anonymous: false,
-  },
-  // ---- Reads (reconciled to contracts/out v2). ----
-  {
-    type: "function",
-    name: "boostOf",
-    stateMutability: "pure", // pure on-chain (boost is a deterministic fn of lock state, not storage)
-    inputs: [{ name: "account", type: "address" }],
-    // boost in 1e18 fixed point: 1e18 = 1x (no boost), 2e18 = max 2x.
-    outputs: [{ name: "boostWad", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "stakedOf",
-    stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "lockUntil",
-    stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "totalStaked",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  // v2 revenue-share ALLOWLIST (SEC-hardened: only allowlisted tokens accrue revenue share).
-  {
-    type: "function",
-    name: "isRewardToken",
-    stateMutability: "view",
-    inputs: [{ name: "token", type: "address" }],
-    outputs: [{ name: "", type: "bool" }],
-  },
-  {
-    type: "function",
-    name: "rewardTokenCount",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "rewardTokens",
-    stateMutability: "view",
-    inputs: [{ name: "index", type: "uint256" }],
-    outputs: [{ name: "", type: "address" }],
-  },
-  {
-    type: "function",
-    name: "claimableRevenue",
-    stateMutability: "view",
-    inputs: [
-      { name: "account", type: "address" },
-      { name: "token", type: "address" },
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
     ],
-    outputs: [{ name: "", type: "uint256" }],
+    "stateMutability": "view"
   },
+  {
+    "type": "function",
+    "name": "addRewardToken",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "claimRevenueShare",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "claimableRevenue",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "fera",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IERC20"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "forfeitNotifier",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "harvestReward",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "isRewardToken",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "lastStakeTs",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "notifyForfeitShare",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "pendingForfeitFera",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "revenueDistributor",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IRevenueDistributor"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "rewardTokenAdmin",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "rewardTokenCount",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "rewardTokens",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "setForfeitNotifier",
+    "inputs": [
+      {
+        "name": "notifier",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "stake",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "stakedOf",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalStaked",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "unstake",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "unstakeAvailableAt",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "ForfeitShareNotified",
+    "inputs": [
+      {
+        "name": "booked",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RevenueShareClaimed",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Staked",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Unstaked",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "ForfeitNotifierAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidRewardToken",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotForfeitNotifier",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotRewardAdmin",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ReentrancyGuardReentrantCall",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SafeERC20FailedOperation",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "StillLocked",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TooManyRewardTokens",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroAddress",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroAmount",
+    "inputs": []
+  }
 ] as const;
