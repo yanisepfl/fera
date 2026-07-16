@@ -12,6 +12,31 @@ anyone provide liquidity to a memecoin or tokenized-stock pool without running a
   nothing on your principal, deposits, or withdrawals.
 - A usage-only emission token whose issuance **can never exceed protocol revenue.**
 
+## System at a glance
+
+```mermaid
+flowchart LR
+    subgraph OC["Contracts (on-chain) — hold all value, enforce every rule"]
+        HK["FeraHook — dynamic fee, never gates swaps"]
+        VT["FeraVault — managed LP, 10% perf fee"]
+        TK["FERA / esFERA — usage emissions + staking"]
+    end
+    subgraph BE["Backend — Ponder indexer + API + weekly emissions pipeline + keepers"]
+        IX["indexer → REST/JSON API"]
+    end
+    FE["Frontend — Next.js app"]
+
+    OC -.->|"events"| IX
+    IX -->|"reads ONLY via the API"| FE
+    FE ==>|"writes: wallet tx straight to chain"| OC
+```
+
+*Three layers; the frontend reads only through the API and writes only by sending wallet
+transactions to chain.* **Honesty note:** the contracts are feature-complete but **not deployed
+yet** — today the "live" API is a standalone GeckoTerminal-backed dev server (every vault field
+`vaultLive:false`) and write paths are mocked. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full, illustrated map.
+
 ## Documentation
 
 **Read the docs: [`docs/gitbook/`](docs/gitbook/README.md)** — the canonical, GitBook-synced
