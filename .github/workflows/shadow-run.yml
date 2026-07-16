@@ -1,0 +1,48 @@
+name: shadow-run
+
+# Automated limit-band shadow run (docs/research/SHADOW_RUN_PLAN.md). Runs the contract-faithful
+# simulator over each approved Robinhood Chain pool's LIVE data daily and publishes a dated
+# recommendation (DEFAULT 20% vs LAUNCH 0-5% per pool) as a build artifact. No server needed — this
+# IS the "put into place": it runs unattended on GitHub's scheduler, today, even pre-deployment.
+# GeckoTerminal is a free public API (no secrets). Post-deployment, swap the seeded approved_pools.json
+# for the vault's curated/emissionsEligible set (read via the indexer) — see shadow_run.py header.
+on:
+  schedule:
+    - cron: "0 6 * * *" # daily 06:00 UTC
+  workflow_dispatch: {} # manual "run now" button
+  push:
+    paths:
+      - "docs/research/backtest/shadow_run.py"
+      - "docs/research/backtest/approved_pools.json"
+      - ".github/workflows/shadow-run.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shadow-run
+  cancel-in-progress: false
+
+jobs:
+  shadow-run:
+    name: shadow run (live venue → per-pool preset)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run the shadow run over the approved pools
+        working-directory: docs/research/backtest
+        run: |
+          python3 shadow_run.py --days 30 --now-ts "$(date +%s)" | tee shadow_run.stdout.txt
+          echo "::notice::shadow run complete — see the uploaded shadow-report artifact for per-pool presets."
+      - name: Upload the dated report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shadow-report-${{ github.run_id }}
+          path: |
+            docs/research/backtest/shadow_report.jsonl
+            docs/research/backtest/shadow_run.stdout.txt
+          retention-days: 90
