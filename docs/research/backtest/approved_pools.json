@@ -1,0 +1,10 @@
+{
+  "_comment": "The pool set the shadow run evaluates daily. PRE-DEPLOYMENT: seeded with curation-candidate Robinhood Chain memecoin pools (top by volume, TVL > $100k). POST-DEPLOYMENT: this list should be generated from the vault's curated/emissionsEligible set (read via the indexer) — see shadow_run.py header.",
+  "network": "robinhood",
+  "pools": [
+    { "symbol": "CASHCAT", "address": "0xa70fc67c9f69da90b63a0e4c05d229954574e313", "listed_ts": 0 },
+    { "symbol": "VIRTUAL", "address": "0xd95e8e2cd04c207625c6f23c974d365a5f3a91d3", "listed_ts": 0 },
+    { "symbol": "INDEX", "address": "0x00dd2df2f17d431cf3a0938f06c9cf9abc5e9643b6cc466ca3f71f3af246edf3", "listed_ts": 0 },
+    { "symbol": "PONS", "address": "0x10cc6bd38112cac182db90b6a71d8bb5939526ba", "listed_ts": 0 }
+  ]
+}

@@ -48,3 +48,7 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# shadow-run runtime output (regenerated daily)
+docs/research/backtest/shadow_report.jsonl
+docs/research/backtest/shadow_run.cron.log
