@@ -1,0 +1,47 @@
+{
+ "CASHCAT": {
+  "pool": "0xa70fc67c9f69da90b63a0e4c05d229954574e313",
+  "tvl_usd": 7839004,
+  "vol24h_usd": 35409975,
+  "candles": 4492,
+  "days": 16.9,
+  "avg_daily_vol_usd": 20057919,
+  "implied_turnover_per_day": 2.56,
+  "p0": 0.000329095498306053,
+  "p_end": 0.100673798928905,
+  "ret_pct": 30491.1
+ },
+ "PONS": {
+  "pool": "0x10cc6bd38112cac182db90b6a71d8bb5939526ba",
+  "tvl_usd": 667450,
+  "candles": 686,
+  "days": 2.4,
+  "avg_daily_vol_usd": 13038228,
+  "implied_turnover_per_day": 19.53,
+  "p0": 3.00136675466998e-06,
+  "p_end": 0.00929105298189568,
+  "ret_pct": 309460.7
+ },
+ "INDEX": {
+  "pool": "0x00dd2df2f17d431cf3a0938f06c9cf9abc5e9643b6cc466ca3f71f3af246edf3",
+  "tvl_usd": 1315793,
+  "candles": 2638,
+  "days": 13.1,
+  "avg_daily_vol_usd": 1525534,
+  "implied_turnover_per_day": 1.16,
+  "p0": 2.88993353818251e-05,
+  "p_end": 0.0184009071243896,
+  "ret_pct": 63572.4
+ },
+ "VIRTUAL": {
+  "pool": "0xd95e8e2cd04c207625c6f23c974d365a5f3a91d3",
+  "tvl_usd": 4895671,
+  "candles": 3907,
+  "days": 14.1,
+  "avg_daily_vol_usd": 5595453,
+  "implied_turnover_per_day": 1.14,
+  "p0": 0.594057867209469,
+  "p_end": 0.627184441060658,
+  "ret_pct": 5.6
+ }
+}
