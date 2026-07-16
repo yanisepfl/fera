@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log*
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+bundles
+run1.txt
+run2.txt
+*.log
+.DS_Store
+.ponder
+generated
+coverage
