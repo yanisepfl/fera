@@ -218,9 +218,10 @@ interface IFeraVault {
     ///         redeploy ONE limit near spot whose width is VOL-ADAPTIVE (§2) and whose SKEW is
     ///         DETERMINISTICALLY derived from the tranche's actual token surplus, mean-reversion-
     ///         biased toward the Chainlink oracle for RWA pools (§3) — swap-free. Bounded by the
-    ///         regime min-interval + TWAP sanity. PERMISSIONLESS (v3): every safety property is
-    ///         enforced on-chain regardless of caller (Uniswap-v3-collect / Aave-liquidation
-    ///         pattern) — see contracts/THREAT_MODEL.md.
+    ///         regime min-interval + TWAP sanity. KEEPER-ONLY (v3.4): every safety property is ALSO
+    ///         enforced on-chain (they now guard keeper mistakes/key compromise). Only pokeOutOfRange
+    ///         stays permissionless — see contracts/THREAT_MODEL.md + the v3.4 addendum in
+    ///         contracts/VAULT_STRATEGY_V3.md.
     function rebalanceLimit(PoolId poolId, uint8 tranche) external;
 
     /// @notice GUARDED wide-BASE recenter: permitted only on sustained OOR (≥ regime dwell), ≥ the
@@ -230,27 +231,27 @@ interface IFeraVault {
     ///         call): if the self-swap that would balance the recentered base exceeds that NAV
     ///         budget, the call executes a PARTIAL recenter (bounded swap, `BaseRecenterPartial`
     ///         event) instead of reverting — the base band is still fully re-anchored; the leftover
-    ///         imbalance is picked up by a later action. PERMISSIONLESS (v3) — see item 6 in
-    ///         contracts/VAULT_STRATEGY_V3.md.
+    ///         imbalance is picked up by a later action. KEEPER-ONLY for BOTH modes (v3.4) — see the
+    ///         v3.4 addendum in contracts/VAULT_STRATEGY_V3.md.
     function rebalanceBase(PoolId poolId, uint8 tranche, bool selfSwap) external;
 
     /// @notice Standalone bounded self-swap against the OWN v4 pool (ratio balancing). Spends only
     ///         the tranche's own reserve. Bounded by BOTH the execution-slippage-vs-TWAP check and
     ///         (v3 NEW) the SAME per-call IL-budget notional cap `rebalanceBase` uses (reverts
     ///         `IlBudgetExceeded` rather than silently truncating a user-specified `amountIn` — the
-    ///         caller picks a smaller amount instead). PERMISSIONLESS (v3).
+    ///         caller picks a smaller amount instead). KEEPER-ONLY (v3.4, swap path).
     function selfSwap(PoolId poolId, uint8 tranche, bool zeroForOne, uint256 amountIn)
         external
         returns (uint256 amountOut);
 
     /// @notice Route a bounded ratio-balancing swap through a whitelisted EXTERNAL venue. Executed
     ///         output re-verified ≥ (1 − MAX_REBALANCE_SLIPPAGE_BPS) × pool-TWAP-implied.
-    ///         PERMISSIONLESS (v3).
+    ///         KEEPER-ONLY (v3.4, swap path); the venue allowlist is the second safety boundary.
     function rebalanceViaVenue(PoolId poolId, uint8 tranche, address venue, bool zeroForOne, uint256 amountIn)
         external
         returns (uint256 amountOut);
 
-    /// @notice v3-hardening (§5.1): RWA IN-HOURS oracle-anchored base recenter. Permissionless; RWA
+    /// @notice v3-hardening (§5.1): RWA IN-HOURS oracle-anchored base recenter. KEEPER-ONLY (v3.4); RWA
     ///         only. Re-anchors the base band TOWARD the Chainlink oracle when the pool has drifted
     ///         past `RWA_ORACLE_RECENTER_HYSTERESIS_BPS` during market hours (TWAP-sanity-checked).
     ///         Swap-free / value-conserving. Reverts NotRwaPool / MarketClosed / OracleUnavailable /
@@ -259,7 +260,7 @@ interface IFeraVault {
 
     /// @notice v3-hardening (§5.1): RWA OFF-HOURS / EVENT-WINDOW defense — WIDEN the base band and
     ///         PARTIAL-WITHDRAW a fraction into idle reserve to survive weekend drift + a Monday gap.
-    ///         Permissionless; RWA only; eligible when the market is closed OR an event window is
+    ///         KEEPER-ONLY (v3.4); RWA only; eligible when the market is closed OR an event window is
     ///         flagged. Swap-free / value-conserving. Reverts NotRwaPool / MarketOpen / RebalanceTooSoon.
     function defendRwaOffHours(PoolId poolId, uint8 tranche) external;
 

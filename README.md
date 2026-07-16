@@ -18,6 +18,10 @@ anyone provide liquidity to a memecoin or tokenized-stock pool without running a
 documentation set. Start with the [Introduction](docs/gitbook/README.md) and
 [What is FERA?](docs/gitbook/what-is-fera.md).
 
+**System architecture (visual): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** — an illustrated
+map of the whole system (contracts, off-chain backend, frontend) with sequence and flow diagrams for
+every money path. The best single starting point for newcomers and auditors.
+
 | If you are… | Read |
 |-------------|------|
 | A liquidity provider | [LP guide](docs/gitbook/lp-guide.md), [How the fee works](docs/gitbook/how-fees-work.md), [Rewards & vesting](docs/gitbook/rewards-and-vesting.md), [Risks](docs/gitbook/risks.md) |
@@ -30,7 +34,7 @@ documentation set. Start with the [Introduction](docs/gitbook/README.md) and
 | Path | Contents |
 |------|----------|
 | [`docs/gitbook/`](docs/gitbook/README.md) | The documentation set (GitBook-synced via `SUMMARY.md`). |
-| `docs/` | Reference specs: `MASTER_SPEC.md`, `mechanism/` (fee math + params + sims), `VAULT_ARCHITECTURE.md`, `CHAIN.md`, `RISK_REGISTER.md`, `deployment/` guides. |
+| `docs/` | Reference specs: [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) (visual system map), `MASTER_SPEC.md`, `mechanism/` (fee math + params + sims), `VAULT_ARCHITECTURE.md`, `CHAIN.md`, `RISK_REGISTER.md`, `deployment/` guides. |
 | `contracts/` | Foundry project — the v4 hook, vault, token, emissions, staking, treasury. See `contracts/SETUP.md`. |
 | `backend/` | Ponder indexer, REST/JSON API, the deterministic weekly emissions pipeline, and keepers. |
 | `frontend/` | Next.js app + design system (`frontend/DESIGN.md`). |
