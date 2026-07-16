@@ -257,10 +257,19 @@ library FeraConstants {
     int24 internal constant STEADY_LIMIT_HALF_TICKS = 2_624; // ±30% narrow limit
     uint16 internal constant STEADY_IDLE_BPS = 1_000; // 10% of NAV kept idle
 
-    // Active tier — narrow base, aggressive limit, small idle (yield-max capital).
+    // Active tier — narrow base, aggressive limit, MATERIAL limit budget (yield-max capital).
     int24 internal constant ACTIVE_BASE_HALF_TICKS = 2_624; // ±30% narrow base (8.1x CE)
     int24 internal constant ACTIVE_LIMIT_HALF_TICKS = 953; // ±10% aggressive limit
-    uint16 internal constant ACTIVE_IDLE_BPS = 300; // 3% idle
+    /// @dev The skim fraction FUNDS THE LIMIT BAND (skimIdle -> reserve -> rebalanceLimit deploys it),
+    ///      so this is the tranche's effective LIMIT BUDGET, not dead capital. 20% per the limit-band
+    ///      backtest (docs/research/LIMIT_BAND_BACKTEST.md): heavy limit wins on established/choppy/
+    ///      crashing tokens (monotone to the grid edge; +14..+37pp median per regime window), but is a
+    ///      4-6x opportunity-cost drag during LAUNCH-PHASE hyper-pumps (real Robinhood Chain pools,
+    ///      §4.5) — so NEW price-discovery pools should be configured LIMIT-LIGHT via configureTier
+    ///      (LAUNCH preset: 0-500 bps) and flipped to this default once discovery cools. Model optimum
+    ///      sat at the 75% grid edge with optimistic fills; 20% is deliberately well inside it.
+    ///      Shadow-run on live venue telemetry before the mainnet freeze (§5 of the research note).
+    uint16 internal constant ACTIVE_IDLE_BPS = 2_000; // 20% limit budget (was 3% pre-research)
 
     /// @notice Hard bound on the keeper/owner-settable idle fraction (misuse-resistance: an idle of
     ///         100% would silently un-invest the whole vault). Timelocked-owner set WITHIN this.

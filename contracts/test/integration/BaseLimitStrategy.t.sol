@@ -165,7 +165,7 @@ contract BaseLimitStrategyTest is Deployers {
         assertEq(tier0, FeraConstants.TIER_STEADY);
         assertEq(tier1, FeraConstants.TIER_ACTIVE);
         assertEq(idle0, FeraConstants.STEADY_IDLE_BPS, "steady idle 10%");
-        assertEq(idle1, FeraConstants.ACTIVE_IDLE_BPS, "active idle 3%");
+        assertEq(idle1, FeraConstants.ACTIVE_IDLE_BPS, "active limit budget 20%");
 
         // Exactly one BASE band per tranche at init (limit deployed on demand).
         assertEq(vault.bandCount(memeId, 0), 1, "one base band");
