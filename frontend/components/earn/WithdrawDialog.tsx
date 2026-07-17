@@ -11,10 +11,11 @@ import { usd, esFera } from "@/lib/format";
 import type { PoolSummary, Position } from "@/lib/types";
 
 /**
- * Withdraw dialog. Withdrawals are in-kind and pro-rata — you get your share of the actual
- * pool tokens, with no pricing — and are never blocked once the one-time 1-hour post-deposit
- * hold has passed (lib/jit#DEPOSIT_HOLD_SEC). While a fresh position is still inside that hold
- * the dialog says so and the confirm is held back, with a live countdown.
+ * Withdraw dialog. Withdrawals are ASYNC (ERC-7540-style): you REQUEST now and the position
+ * becomes claimable after a 24-hour safety delay, then settles in-kind and pro-rata — your share
+ * of the actual pool tokens, with no pricing. A one-time 1-hour post-deposit hold gates when you
+ * can request (lib/jit#DEPOSIT_HOLD_SEC); while a fresh position is inside it the confirm is held
+ * back with a live countdown. (The two-step request → claim UI lands with the on-chain wiring.)
  */
 export function WithdrawDialog({
   pool,
@@ -64,7 +65,8 @@ export function WithdrawDialog({
                 ✓
               </div>
               <p className="text-body text-text">
-                Withdrawn from {pool.token0.symbol}/{pool.token1.symbol}.
+                Withdrawal requested from {pool.token0.symbol}/{pool.token1.symbol}. It&apos;ll
+                be claimable in 24 hours, in-kind and pro-rata.
               </p>
               <Button className="w-full" onClick={reset}>
                 Done
@@ -100,10 +102,10 @@ export function WithdrawDialog({
               />
 
               <p className="text-caption text-mute">
-                Withdrawals are in-kind and pro-rata — you get your share of the actual pool
-                tokens, with no pricing — and are never blocked once the {HOLD_LABEL} hold has
-                passed. Any pending esFERA keeps vesting; withdrawing shares doesn&apos;t
-                forfeit it.
+                You request now; the position becomes claimable after a 24-hour safety delay,
+                then settles in-kind and pro-rata — your share of the actual pool tokens, with no
+                pricing. Any pending esFERA keeps vesting; withdrawing shares doesn&apos;t forfeit
+                it.
               </p>
 
               <Button
@@ -121,8 +123,8 @@ export function WithdrawDialog({
                 {submitting
                   ? "Confirming…"
                   : h.held
-                  ? `Withdraw in ${windowCountdown(h.secondsLeft)}`
-                  : "Confirm withdraw"}
+                  ? `Request in ${windowCountdown(h.secondsLeft)}`
+                  : "Request withdrawal"}
               </Button>
             </>
           )}

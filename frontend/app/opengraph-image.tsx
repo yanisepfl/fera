@@ -5,7 +5,7 @@ import { ImageResponse } from "next/og";
  * the bundled default font, no external assets, so shared FERA links unfurl with a
  * real preview instead of a blank card. Satori-safe (every container is flex).
  */
-export const alt = "FERA - earn like a market maker, on Robinhood Chain";
+export const alt = "FERA - put your meme coins to work, on Robinhood Chain";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -68,7 +68,7 @@ export default function OpengraphImage() {
               maxWidth: 900,
             }}
           >
-            Earn like a market maker.
+Put your meme coins to work.
           </div>
           <div
             style={{
@@ -79,8 +79,8 @@ export default function OpengraphImage() {
               maxWidth: 940,
             }}
           >
-            Deposit into a vault that provides and auto-manages the liquidity - and
-            earn the trading fees. On meme coins and stocks.
+Deposit your coins in a vault that earns the trading fees from all their
+            volatility. Meme coins now, tokenized stocks soon.
           </div>
         </div>
 

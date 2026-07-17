@@ -118,14 +118,16 @@
     background-color: var(--ink-950);
     /* Subtle top vignette: a barely-lifted center over the near-black canvas so the
      * dark surface never reads dead-flat - the calm premium-dark trait of the
-     * alphix.fi / Shui reference family. Static (reduced-motion-safe), additive. */
+     * alphix.fi / Shui reference family. Static (reduced-motion-safe), additive.
+     * NB: deliberately NOT `background-attachment: fixed` — a fixed gradient forces
+     * a full-viewport repaint on every scroll/paint and is a documented jank source
+     * on macOS. Anchored to the top of the page, it reads as the same top vignette. */
     background-image: radial-gradient(
       120% 80% at 50% -10%,
       rgba(231, 184, 75, 0.035) 0%,
       rgba(231, 184, 75, 0) 42%
     );
     background-repeat: no-repeat;
-    background-attachment: fixed;
     color: var(--text);
     font-family: var(--font-sans);
     font-feature-settings: "cv01", "ss01";
@@ -201,7 +203,11 @@
       transform var(--dur-base) var(--ease-out),
       border-color var(--dur-base) var(--ease-out),
       box-shadow var(--dur-base) var(--ease-out);
-    will-change: transform;
+    /* NB: no `will-change` here. Permanently hinting `will-change: transform` on
+     * every card promotes each to its own GPU layer for the whole session; on a
+     * card-dense page (e.g. Rewards) that exhausts the compositor's layer budget
+     * and the viewport visibly blanks/flickers on mouse-move. The browser promotes
+     * on demand for the 200ms hover transition anyway — that is enough. */
   }
   .card-glow:hover,
   .card-glow:focus-within {

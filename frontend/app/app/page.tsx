@@ -10,13 +10,13 @@ export default function EarnPage() {
         eyebrow="Earn"
         title={
           <>
-            Be the <span className="text-accent">market maker</span>
+            Put your coins <span className="text-accent">to work</span>
           </>
         }
         subtitle={
           <>
-            Deposit. The vault makes the market. You earn the fees.{" "}
-            <span className="text-mute">Withdraw anytime.</span>
+            Deposit your coins. The vault earns the trading fees for you.{" "}
+            <span className="text-mute">The movement does the rest.</span>
           </>
         }
       />

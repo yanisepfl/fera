@@ -42,15 +42,15 @@ export function JitPenaltyNotice({
         <div className="flex items-center gap-1.5">
           <span aria-hidden className="text-accent">🔒</span>
           <span className="font-semibold text-text">
-            Withdraw anytime, after a one-time {HOLD_LABEL} hold
+            A one-time {HOLD_LABEL} hold before you can request a withdrawal
           </span>
         </div>
         <p className="mt-1 text-caption text-dim">
-          Right after you deposit there&apos;s a short {HOLD_LABEL} hold before you can
-          withdraw — a standard guard that keeps out gamers. Your{" "}
+          Right after you deposit there&apos;s a short {HOLD_LABEL} hold before you can request a
+          withdrawal — a standard guard that keeps out gamers. Your{" "}
           <span className="font-semibold text-text">deposit is never at risk</span>. Once the
-          hold passes you can withdraw anytime, straight from the pool, in-kind: you get your
-          share of the actual tokens, with no pricing and nothing to sell.
+          hold passes you can request a withdrawal; it becomes claimable after a 24-hour safety
+          delay, in-kind — your share of the actual tokens, with no pricing and nothing to sell.
         </p>
       </div>
     );
@@ -69,12 +69,12 @@ export function JitPenaltyNotice({
       >
         <div className="flex items-center gap-1.5 text-pos">
           <span aria-hidden>✓</span>
-          <span className="font-semibold">Free to withdraw</span>
+          <span className="font-semibold">Free to request</span>
         </div>
         <p className="mt-1 text-caption text-mute">
-          The {HOLD_LABEL} hold has passed. You can withdraw anytime, in-kind and pro-rata —
-          your share of the actual pool tokens, straight from the pool. A withdrawal is never
-          blocked.
+          The {HOLD_LABEL} hold has passed. You can request a withdrawal now; it settles in-kind
+          and pro-rata — your share of the actual pool tokens — once the 24-hour safety delay
+          elapses.
         </p>
       </div>
     );
@@ -98,9 +98,10 @@ export function JitPenaltyNotice({
       </div>
       <p className="mt-1 text-caption text-dim">
         You deposited recently, so this position is still inside its one-time {HOLD_LABEL}
-        hold. You&apos;ll be able to withdraw in{" "}
+        hold. You&apos;ll be able to request a withdrawal in{" "}
         <span className="font-semibold text-text">{windowCountdown(h.secondsLeft)}</span>. Your
-        deposit is never at risk, and after the hold you can withdraw anytime, in-kind.
+        deposit is never at risk, and after the hold you can request one anytime, claimable
+        in-kind after the 24-hour delay.
       </p>
     </div>
   );

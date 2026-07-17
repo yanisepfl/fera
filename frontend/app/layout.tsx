@@ -4,18 +4,18 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const SITE_TITLE = "FERA - Earn like a market maker";
+const SITE_TITLE = "FERA - Put your meme coins to work";
 const SITE_DESCRIPTION =
-  "Market makers earn a fee on every trade. FERA opens that seat to everyone: deposit into a vault that provides and auto-manages the liquidity, and earn the trading fees. On meme coins and stocks, built on Robinhood Chain.";
+  "Meme coins never sit still. Deposit the coins you hold into a FERA vault and earn the trading fees from all their volatility, automatically. Actively managed, non-custodial, on Robinhood Chain. Tokenized stocks coming soon.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://fera.fi"),
   title: {
-    default: "FERA - Earn like a market maker, on meme coins and stocks",
+    default: "FERA - Put your meme coins to work, on Robinhood Chain",
     template: "%s · FERA",
   },
   description:
-    "FERA democratizes market-making. Deposit into a vault that provides and actively manages liquidity in the pools you choose, and earn the trading fees - with an auto-adapting range and a dynamic fee that rises when it's volatile. Withdraw anytime. Built on Robinhood Chain.",
+    "Deposit the meme coins you already hold into a vault that provides and actively manages the liquidity, and earn the fees from every trade, climbing when the market runs hot. On-chain and verifiable. Tokenized stocks coming soon. Built on Robinhood Chain.",
   openGraph: {
     type: "website",
     siteName: "FERA",

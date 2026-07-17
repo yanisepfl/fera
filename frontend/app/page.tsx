@@ -9,21 +9,23 @@ import {
 } from "@/components/layout/SiteHeader";
 
 /**
- * Marketing landing (front door, "/"). Concept: FERA democratizes market-making.
- * Robinhood democratized trading; FERA opens the market-maker seat - the side that
- * earns the fees - to everyone.
+ * Marketing landing (front door, "/"). Concept: meme coins never sit still, and FERA turns
+ * that nonstop movement into a yield on the coins you already hold. Lead with the outcome
+ * (the volatility works for you); the fee mechanic is the plain "how", never the pitch.
  *
- * COLOR SYSTEM: gold (--accent) is the brand accent - titles + title highlights,
- * eyebrows, card glows, the mark/motif. Green (--accent2) is reserved for ACTIONS
- * (CTAs) and live/positive signals; positive numbers use --pos. No blue, anywhere.
+ * COLOR SYSTEM: gold (--accent) is the brand accent: titles and title highlights, eyebrows,
+ * card glows, the mark/motif. Green (--accent2) is reserved for ACTIONS (CTAs) and
+ * live/positive signals; positive numbers use --pos. No blue, anywhere.
  *
- * HONESTY (load-bearing): the vault is sold as managed + simple, NEVER as higher-yield
- * than a skilled self-managed LP. No "guaranteed" / "risk-free" / fixed yield. Risk
- * levels are Steady / Active (never "tranche"). Any figure that isn't live on-chain
- * data is visibly illustrative (the two viz cards carry their own honest framing). No
- * internal jargon (no "toxic flow", "regime", "TWAP", "LVR") in rendered copy.
- * Emissions / fee-split percentages are intentionally out of scope here. The app itself
- * lives under /app; nothing is live yet (see the "Launching on Robinhood Chain" badge).
+ * HONESTY (load-bearing): the vault is sold as managed and simple, NEVER as higher-yield than
+ * a skilled self-managed LP. No "guaranteed" / "risk-free" / fixed yield. Risk levels are
+ * Steady / Active (never "tranche"). Any figure that isn't live on-chain data is visibly
+ * illustrative (the two viz cards carry their own honest framing). No internal jargon (no
+ * "toxic flow", "regime", "TWAP", "LVR") in rendered copy. The app itself lives under /app;
+ * nothing is live yet (see the "Launching on Robinhood Chain" badge).
+ *
+ * STYLE: no em-dashes in rendered copy (the principal finds them AI-tell). Use periods,
+ * commas, or parentheses.
  */
 
 const DOCS_URL = "https://fera-3.gitbook.io/fera/";
@@ -41,8 +43,7 @@ const SECTIONS = [
   { href: "#how", label: "How it works" },
   { href: "#why", label: "Why it earns" },
   { href: "#levels", label: "Risk levels" },
-  { href: "#open", label: "Open to anyone" },
-  { href: "#chain", label: "Robinhood Chain" },
+  { href: "#faq", label: "FAQ" },
 ];
 
 export default function LandingPage() {
@@ -55,11 +56,7 @@ export default function LandingPage() {
         <HowItWorks />
         <WhyItEarns />
         <RiskLevels />
-        <HonestFraming />
-        <TrustMechanism />
-        <OpenToAnyone />
-        <RobinhoodChain />
-        <Verifiable />
+        <Faq />
         <BandDivider className="py-6" />
         <CtaBand />
       </main>
@@ -72,9 +69,7 @@ export default function LandingPage() {
 /* ------------------------------------------------------------------ header ---- */
 
 /**
- * Marketing header on the shared SiteHeader shell (same chrome as the app's
- * TopNav). Full nav only from lg: five links plus Docs don't fit an md viewport
- * without overflowing, so md tablets get the burger too.
+ * Marketing header on the shared SiteHeader shell (same chrome as the app's TopNav).
  */
 function MarketingHeader() {
   return (
@@ -117,7 +112,7 @@ function MarketingHeader() {
 function Hero() {
   return (
     <section className="relative overflow-hidden border-b border-line">
-      {/* soft top-crown glow (gold) - the lifted premium-dark trait, reduced-motion-safe */}
+      {/* soft top-crown glow (gold), the lifted premium-dark trait, reduced-motion-safe */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
@@ -126,15 +121,10 @@ function Hero() {
             "radial-gradient(60% 100% at 50% -10%, rgba(231,184,75,0.10) 0%, rgba(231,184,75,0) 60%)",
         }}
       />
-      {/* feather -> upward liquidity-band motif, subtle hero accent. xl-only: below
-          that there's no free corner for it, so it hides instead of colliding. */}
-      <FeatherBand
-        className="pointer-events-none absolute -right-16 -top-4 hidden h-[440px] w-[560px] opacity-70 xl:block"
-      />
+      {/* feather motif, subtle hero accent. xl-only: below that there's no free corner. */}
+      <FeatherBand className="pointer-events-none absolute -right-16 -top-4 hidden h-[440px] w-[560px] opacity-70 xl:block" />
 
       <div className="relative mx-auto max-w-app px-4 py-14 md:px-6 md:py-24">
-        {/* Stacks below lg (text, then chart); the chart column narrows at lg and
-            relaxes at xl so the headline never gets crushed at in-between widths. */}
         <div className="grid items-center gap-10 md:gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] xl:grid-cols-[minmax(0,1fr)_minmax(0,30rem)]">
           <div className="min-w-0">
             <div className="mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-accent2-line bg-accent2-wash px-3 py-1">
@@ -147,19 +137,16 @@ function Hero() {
               </span>
             </div>
 
-            {/* Fluid headline: 34px floor on phones -> 56px cap, no fixed md jump,
-                so narrow and in-between windows never overflow or crush. */}
             <h1 className="text-[clamp(2.125rem,1.1rem+3.4vw,3.5rem)] font-semibold leading-[1.05] tracking-[-0.02em] text-text">
-              Earn like a{" "}
-              <span className="text-accent">market maker</span>. On meme coins and
-              stocks.
+              Meme coins never sit still.{" "}
+              <span className="text-accent">Now the movement pays you.</span>
             </h1>
 
             <p className="mt-6 max-w-xl text-body text-dim md:text-heading md:leading-8">
-              Market makers earn a fee on every trade. FERA opens that seat to
-              everyone: deposit, and a vault provides and auto-manages the liquidity
-              in the pools you pick, so the trading that usually passes you by pays
-              you instead.
+              Every meme coin trade pays a fee, and there are a lot of trades. Drop your
+              coins in a FERA vault and that flow becomes your yield, automatically, climbing
+              when the market runs hot. You still hold what you believe in. The volatility
+              just starts working for you.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -173,8 +160,7 @@ function Hero() {
             </div>
 
             <p className="mt-6 text-caption text-mute">
-              Withdraw anytime. On-chain and verifiable. Meme coins now, tokenized
-              stocks soon.
+              On-chain and verifiable. Meme coins now, tokenized stocks soon.
             </p>
           </div>
 
@@ -194,17 +180,17 @@ const STEPS = [
   {
     n: "01",
     t: "Deposit",
-    d: "Add two tokens - or just the stablecoin - to a pool you believe in. Your money joins the vault. There's a short window right after you deposit before you can withdraw, to keep out gamers; after that, it's yours to pull anytime.",
+    d: "Add two tokens, or just the stablecoin, to a pool you believe in. Your money joins the vault and starts earning from the very next trade.",
   },
   {
     n: "02",
-    t: "The vault makes the market",
-    d: "It provides the liquidity and actively manages the price range for you. The range auto-adapts: it widens when the market gets wild and tightens when things are calm, so your money stays where the trading actually happens.",
+    t: "The vault does the work",
+    d: "It provides the liquidity and actively manages the price range for you. The range auto-adapts: wider when the market gets wild, tighter when things are calm, so your money stays where the trading actually happens.",
   },
   {
     n: "03",
-    t: "You earn the trading fees",
-    d: "Every swap pays a fee to whoever provides the liquidity. That's you now. And the fee rises when it's volatile - exactly when being the market maker is riskiest, so you're paid more for the harder moments.",
+    t: "The fees flow to you",
+    d: "Every swap pays a fee to whoever provides the liquidity. That's you now. And the fee climbs when it's volatile, exactly when providing liquidity is riskiest, so you're paid more for the harder moments.",
   },
 ];
 
@@ -214,7 +200,7 @@ function HowItWorks() {
       <div className="mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
         <div className="overline overline-gold mb-3">How it works</div>
         <h2 className="max-w-2xl text-display-l font-semibold tracking-tight text-text">
-          Three steps to the side of the trade that earns.
+          Three steps, and the vault takes it from there.
         </h2>
 
         <div className="mt-10 grid gap-4 md:grid-cols-3">
@@ -229,6 +215,18 @@ function HowItWorks() {
             </div>
           ))}
         </div>
+
+        {/* The same loop, drawn: deposit, the vault runs the range, the fees flow back. */}
+        <div className="mt-10 rounded-lg border border-line bg-card/60 p-6 shadow-card md:p-8">
+          <div className="mx-auto flex max-w-2xl flex-col items-center gap-4">
+            <p className="text-center text-body-sm text-mute">
+              The whole loop, start to finish. Your deposit provides the liquidity, the vault
+              keeps it where the trading happens, and every swap that crosses it pays a fee
+              back to you.
+            </p>
+            <MechanismFlow className="h-auto w-full max-w-md" />
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -240,9 +238,9 @@ const REASONS = [
   {
     tag: "Auto-adapting range",
     t: "The range moves so you don't have to.",
-    d: "Managing a liquidity range by hand is a full-time job. The vault does it: it widens the range through the chaos and tightens it back in the calm, keeping your money in the zone where swaps trade.",
+    d: "Managing a liquidity range by hand is a full-time job. The vault does it, widening through the chaos and tightening back in the calm, keeping your money in the zone where swaps actually trade.",
     honest:
-      "Managed, not magic. A well-run manual position can still do better - what you get here is that no one has to run it.",
+      "Managed, not magic. A well-run manual position can still do better. What you get here is that no one has to run it.",
   },
   {
     tag: "Dynamic fee",
@@ -252,11 +250,11 @@ const REASONS = [
       "Illustrative shape, not a promise. Quiet markets earn little, and a violent move still carries real risk.",
   },
   {
-    tag: "Your side of the trade",
-    t: "You're the house, not the player.",
-    d: "Trading is a coin flip; making the market is a fee business. FERA puts you on the maker side - collecting a cut of the flow - across the meme coins and, soon, the tokenized stocks people actually trade.",
+    tag: "Your coins, plus yield",
+    t: "Keep the coins. Earn on the trading.",
+    d: "You still hold what you deposited, with all of its upside. FERA adds a second stream on top: the fee from every swap that trades against your liquidity. The coins you already believe in, now doing two jobs at once.",
     honest:
-      "Fees are real income, but they're variable and never guaranteed. This isn't a fixed yield.",
+      "Fees are real income, but variable and never guaranteed. And when prices move hard, providing liquidity carries its own risk.",
   },
 ];
 
@@ -288,8 +286,7 @@ function WhyItEarns() {
               </h3>
               <p className="mt-3 text-body-sm text-dim">{x.d}</p>
               <p className="mt-3 border-l-2 border-line-strong pl-3 text-body-sm text-mute">
-                <span className="font-medium text-dim">The honest line:</span>{" "}
-                {x.honest}
+                <span className="font-medium text-dim">The honest line:</span> {x.honest}
               </p>
             </div>
           ))}
@@ -305,7 +302,7 @@ const LEVELS = [
   {
     name: "Steady",
     tagline: "Wider range, smoother ride.",
-    d: "Spreads across a wide range so you stay in position through the swings. A thinner slice of fees, but steadier - built for people who want exposure, not a trading desk.",
+    d: "Spreads across a wide range so you stay in position through the swings. A thinner slice of fees, but steadier, built for people who want exposure, not a trading desk.",
     accent: false,
   },
   {
@@ -320,14 +317,13 @@ function RiskLevels() {
   return (
     <section id="levels" className="scroll-mt-20 border-b border-line bg-well">
       <div className="mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
-        <div className="overline overline-gold mb-3">Pick your level</div>
+        <div className="overline overline-gold mb-3">Risk levels</div>
         <h2 className="max-w-2xl text-display-l font-semibold tracking-tight text-text">
-          Two risk levels per pool. You choose the one that fits.
+          Choose the risk level that fits your profile.
         </h2>
         <p className="mt-3 max-w-2xl text-body text-dim">
-          Same pool, same fees to earn - the difference is how much swing you&apos;re
-          comfortable with. No lock-ups either way: you can withdraw from either level
-          anytime.
+          Same pool, same fees to earn. The difference is how much swing you&apos;re
+          comfortable with. Neither level locks you in longer than the other.
         </p>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2">
@@ -340,14 +336,10 @@ function RiskLevels() {
                 <span
                   className="h-2.5 w-2.5 rounded-full"
                   style={{
-                    background: l.accent
-                      ? "var(--accent)"
-                      : "var(--regime-rwa)",
+                    background: l.accent ? "var(--accent)" : "var(--regime-rwa)",
                   }}
                 />
-                <span className="text-heading font-semibold text-text">
-                  {l.name}
-                </span>
+                <span className="text-heading font-semibold text-text">{l.name}</span>
               </div>
               <p className="mt-2 text-body font-medium text-dim">{l.tagline}</p>
               <p className="mt-2 text-body-sm text-dim">{l.d}</p>
@@ -359,32 +351,47 @@ function RiskLevels() {
   );
 }
 
-/* ----------------------------------------------------------- honest framing ---- */
+/* ------------------------------------------------------------------- faq ------ */
 
-const CLAIMS = [
+// One FAQ absorbs what used to be four thin sections (Our claim, Open to anyone,
+// Robinhood Chain, Verifiable). Straight answers, honest framing, native <details>
+// accordion so it stays server-rendered with no client JS.
+const FAQS = [
   {
-    t: "Managed, not magic.",
-    d: "You get an actively managed position, two risk levels, and one-tap simplicity. What you don't get is a claim that it beats a skilled hands-on provider. We'd rather be straight with you.",
+    q: "Is FERA permissionless?",
+    a: "Yes. Anyone can open a pool, any token or pair, with no listing desk and no approval queue. Every pool is open liquidity too: you can provide directly and run your own range. The managed vault gets no special treatment, it simply runs on the pools we curate so one-tap depositors aren't dropped into anything.",
   },
   {
-    t: "No fixed yield, no promises.",
-    d: "Fees are real income, but they rise and fall with real trading. We show you what's earned - we never quote a guaranteed number.",
+    q: "Is it custodial? Can anyone touch my funds?",
+    a: "No. FERA is non-custodial. Deposits, withdrawals, and fee accrual run on immutable contracts. Only you can move your funds, and the logic that holds them cannot be swapped out from under you.",
   },
   {
-    t: "Pause protects you.",
-    d: "If something looks wrong, deposits and risky moves can be frozen to keep funds safe. Withdrawals are never frozen - your exit is always open.",
+    q: "Can I verify what the vault does?",
+    a: "Everything is on-chain and in the open. Anyone can recompute the fees a pool earned from public data, and the rules that manage your money are fixed. Transparent and immutable, by construction.",
   },
   {
-    t: "We show our work.",
-    d: "Wherever we can, every number we publish is reproducible from public on-chain data. Anything modeled or illustrative is labeled as such, so you always know what you're looking at.",
+    q: "Does FERA beat managing my own liquidity?",
+    a: "We don't claim to. You get an actively managed position, two risk levels, and one-tap simplicity. A skilled hands-on provider can still do better. What FERA gives you is that no one has to run it. We'd rather be straight with you.",
+  },
+  {
+    q: "Is the yield fixed or guaranteed?",
+    a: "No. Fees are real income, but they rise and fall with real trading. We show you what's earned and never quote a guaranteed number. This is not a fixed yield.",
+  },
+  {
+    q: "What happens when I withdraw?",
+    a: "You request a withdrawal, and it becomes claimable after a 24-hour safety delay, then settles in-kind: your pro-rata share of the actual pool tokens, with no pricing. The short delay is a guardrail that gives the protocol time to react if anything ever looks wrong.",
+  },
+  {
+    q: "What is Robinhood Chain? Are you affiliated with Robinhood?",
+    a: "Robinhood Chain is simply where these pools live. FERA is not affiliated with Robinhood. We launch meme-coin-first, with tokenized stocks coming next: the same vault, the same idea, applied to the stocks people actually trade.",
   },
 ];
 
-function HonestFraming() {
+function Faq() {
   return (
     <section
-      id="claims"
-      className="relative overflow-hidden border-b border-line"
+      id="faq"
+      className="relative scroll-mt-20 overflow-hidden border-b border-line"
     >
       <div
         aria-hidden
@@ -395,187 +402,32 @@ function HonestFraming() {
         }}
       />
       <div className="relative mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
-        <div className="overline overline-gold mb-3">Our claim</div>
+        <div className="overline overline-gold mb-3">FAQ</div>
         <h2 className="max-w-2xl text-display-l font-semibold tracking-tight text-text">
-          Precise beats loud.
+          The questions worth asking.
         </h2>
         <p className="mt-3 max-w-2xl text-body text-dim">
-          Plenty of liquidity products shipped big promises and still died. Being
-          straight with you is the only credible way to do this.
+          Straight answers on how FERA works, what it doesn&apos;t promise, and who can use it.
         </p>
 
-        <div className="mt-10 grid gap-4 sm:grid-cols-2">
-          {CLAIMS.map((c) => (
-            <div
-              key={c.t}
-              className="card-glow rounded-lg border border-line bg-card p-6 shadow-card"
+        <div className="mx-auto mt-10 grid max-w-3xl gap-3">
+          {FAQS.map((f) => (
+            <details
+              key={f.q}
+              className="card-glow group rounded-lg border border-line bg-card p-5 shadow-card"
             >
-              <div className="text-body font-semibold text-text">{c.t}</div>
-              <p className="mt-2 text-body-sm text-dim">{c.d}</p>
-            </div>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-body font-semibold text-text [&::-webkit-details-marker]:hidden">
+                {f.q}
+                <span
+                  aria-hidden
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-line-strong text-accent transition-transform duration-fast group-open:rotate-45"
+                >
+                  +
+                </span>
+              </summary>
+              <p className="mt-3 text-body-sm text-dim">{f.a}</p>
+            </details>
           ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ---------------------------------------------------------- the mechanism ---- */
-
-function TrustMechanism() {
-  return (
-    <section id="mechanism" className="scroll-mt-20 border-b border-line bg-well">
-      <div className="mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
-        <div className="grid items-center gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
-          <div className="min-w-0">
-            <div className="overline overline-gold mb-3">The mechanism</div>
-            <h2 className="max-w-2xl text-display-l font-semibold tracking-tight text-text">
-              Trust the mechanism, not our word for it.
-            </h2>
-            <p className="mt-3 max-w-2xl text-body text-dim">
-              The strongest thing we can offer isn&apos;t a promise. It&apos;s a
-              loop you can check: your deposit provides the liquidity, the vault
-              keeps it where the trading happens, and every swap that crosses it
-              pays a fee back to you. The rules are fixed, in the open, and
-              can&apos;t quietly change.
-            </p>
-          </div>
-
-          {/* the loop, drawn: deposit -> vault runs the range -> fees flow back */}
-          <div className="min-w-0">
-            <MechanismFlow className="h-auto w-full max-w-md md:ml-auto" />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------ open to anyone -- */
-
-// The permissionless story. HONESTY: pool creation + direct LP are genuinely
-// ungated; the managed vault runs only on curated pools - say both plainly.
-const OPEN_POINTS = [
-  {
-    t: "Anyone can open a pool",
-    d: "Pool creation is permissionless. Any token, any pair - launch it straight through the protocol. No listing desk, no approval queue, no one to ask.",
-  },
-  {
-    t: "LP with or without us",
-    d: "Every pool is open liquidity. Provide directly and run your own range if you want - the vault holds no monopoly and gets no special treatment.",
-  },
-  {
-    t: "Curated where it counts",
-    d: "The managed vault only runs on pools we curate, so one-tap depositors aren't dropped into just anything. Open underneath, a safer default on top.",
-  },
-];
-
-function OpenToAnyone() {
-  return (
-    <section id="open" className="scroll-mt-20 border-b border-line">
-      <div className="mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
-        <div className="overline overline-gold mb-3">Open to anyone</div>
-        <h2 className="max-w-2xl text-display-l font-semibold tracking-tight text-text">
-          No gatekeepers. Anyone can make a market.
-        </h2>
-        <p className="mt-3 max-w-2xl text-body text-dim">
-          FERA is a protocol, not a walled garden. The doors - creating pools,
-          providing liquidity - are open to everyone, not just our vault.
-        </p>
-
-        <div className="mt-10 grid gap-4 md:grid-cols-3">
-          {OPEN_POINTS.map((x) => (
-            <div
-              key={x.t}
-              className="card-glow rounded-lg border border-line bg-card p-6 shadow-card"
-            >
-              <div className="text-body font-semibold text-text">{x.t}</div>
-              <p className="mt-2 text-body-sm text-dim">{x.d}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------- built on robinhood ---- */
-
-const CHAIN_POINTS = [
-  {
-    t: "Meme coins first, stocks next",
-    d: "FERA launches MEME-first on the pairs people actually trade. Tokenized stocks (RWA) are coming soon - same vault, same idea, applied to stock tokens.",
-  },
-  {
-    t: "Your money stays yours",
-    d: "Deposits, withdrawals, and fee accrual run on immutable contracts. The logic that holds your funds can't be swapped out from under you, and withdrawals are never blocked.",
-  },
-];
-
-function RobinhoodChain() {
-  return (
-    <section id="chain" className="scroll-mt-20 border-b border-line bg-well">
-      <div className="mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
-        <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-          <div className="max-w-2xl">
-            <div className="overline overline-gold mb-3">Built on Robinhood Chain</div>
-            <h2 className="text-display-l font-semibold tracking-tight text-text">
-              Where trading got democratized, now market-making does too.
-            </h2>
-            <p className="mt-3 text-body text-dim">
-              FERA is built on Robinhood Chain. We&apos;re not affiliated with
-              Robinhood - it&apos;s simply where these pools live.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-10 grid gap-4 sm:grid-cols-2">
-          {CHAIN_POINTS.map((x) => (
-            <div
-              key={x.t}
-              className="card-glow rounded-lg border border-line bg-card p-6 shadow-card"
-            >
-              <div className="text-body font-semibold text-text">{x.t}</div>
-              <p className="mt-2 text-body-sm text-dim">{x.d}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------- verifiable ----- */
-
-function Verifiable() {
-  return (
-    <section
-      id="verifiable"
-      className="relative overflow-hidden border-b border-line"
-    >
-      <div className="relative mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">
-        {/* Same treatment as every other card: quiet at rest, glow on hover only. */}
-        <div className="card-glow rounded-lg border border-line bg-card p-8 shadow-card md:p-10">
-          <div className="overline overline-gold mb-3">Verifiable by construction</div>
-          <h2 className="max-w-2xl text-title font-semibold tracking-tight text-text md:text-display-l">
-            Don&apos;t trust the numbers - check them.
-          </h2>
-          <p className="mt-3 max-w-2xl text-body text-dim">
-            What the vault does is recorded on-chain, in the open. Anyone can recompute
-            the fees a pool earned from public data, and the rules that manage your
-            money are fixed - they can&apos;t quietly change. The full breakdown lives
-            in the docs.
-          </p>
-          <div className="mt-6">
-            <a
-              href={DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-body-sm font-medium text-accent hover:text-accent-strong"
-            >
-              Read the docs <span aria-hidden>&rarr;</span>
-            </a>
-          </div>
         </div>
       </div>
     </section>
@@ -589,11 +441,11 @@ function CtaBand() {
     <section className="border-b border-line">
       <div className="mx-auto max-w-app px-4 py-20 text-center md:px-6 md:py-28">
         <h2 className="mx-auto max-w-2xl text-display-l font-semibold tracking-tight text-text md:text-display-xl">
-          Take the market-maker&apos;s seat.
+          Put the volatility to work.
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-body text-dim">
-          Deposit into a vault that provides and manages the liquidity for you, earn a
-          cut of the trading fees, and withdraw whenever you want.
+          Deposit the meme coins you already hold into a vault that earns the trading fees for
+          you. The movement does the rest.
         </p>
         <div className="mt-8 flex justify-center">
           <Link href="/app" className={btnPrimary}>
@@ -616,7 +468,7 @@ function MarketingFooter() {
           <div className="max-w-sm">
             <BrandLockup />
             <p className="mt-3 text-body-sm text-dim">
-              Democratizing market-making. Built on Robinhood Chain.
+              Where meme coin movement pays you. Built on Robinhood Chain.
             </p>
           </div>
 
@@ -627,10 +479,7 @@ function MarketingFooter() {
                 { href: "#how", label: "How it works" },
                 { href: "#why", label: "Why it earns" },
                 { href: "#levels", label: "Risk levels" },
-                { href: "#mechanism", label: "The mechanism" },
-                { href: "#open", label: "Open to anyone" },
-                { href: "#chain", label: "Robinhood Chain" },
-                { href: "#verifiable", label: "Verifiable" },
+                { href: "#faq", label: "FAQ" },
                 { href: DOCS_URL, label: "Docs", external: true },
               ]}
             />
@@ -638,7 +487,12 @@ function MarketingFooter() {
               title="Build"
               links={[
                 { href: "/app", label: "Launch App" },
-                { href: GITHUB_URL, label: "GitHub", external: true },
+                {
+                  href: GITHUB_URL,
+                  label: "GitHub",
+                  external: true,
+                  icon: <GitHubIcon />,
+                },
               ]}
             />
             <FollowUs />
@@ -730,12 +584,32 @@ function TelegramIcon() {
   );
 }
 
+function GitHubIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={14}
+      height={14}
+      fill="currentColor"
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      <path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58 0-.29-.01-1.04-.02-2.05-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.95 0-1.31.47-2.39 1.24-3.23-.13-.3-.54-1.53.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.65.25 2.88.12 3.18.77.84 1.24 1.92 1.24 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.82 1.1.82 2.22 0 1.6-.02 2.89-.02 3.29 0 .32.22.7.83.58A12.01 12.01 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z" />
+    </svg>
+  );
+}
+
 function FooterCol({
   title,
   links,
 }: {
   title: string;
-  links: { href: string; label: string; external?: boolean }[];
+  links: {
+    href: string;
+    label: string;
+    external?: boolean;
+    icon?: React.ReactNode;
+  }[];
 }) {
   return (
     <div>
@@ -748,15 +622,17 @@ function FooterCol({
                 href={l.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-body-sm text-dim transition-colors hover:text-text"
+                className="inline-flex items-center gap-2 text-body-sm text-dim transition-colors hover:text-text"
               >
+                {l.icon}
                 {l.label}
               </a>
             ) : (
               <Link
                 href={l.href}
-                className="text-body-sm text-dim transition-colors hover:text-text"
+                className="inline-flex items-center gap-2 text-body-sm text-dim transition-colors hover:text-text"
               >
+                {l.icon}
                 {l.label}
               </Link>
             )}
