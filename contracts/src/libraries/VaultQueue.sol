@@ -91,7 +91,9 @@ library VaultQueue {
 
         // ESCROW: pull the shares into the vault's own custody. They REMAIN in totalSupply (not burned)
         // ⇒ the requester stays proportionally invested for the full delay; only the EXIT is delayed.
-        IFeraShare(tr.share).transferFrom(msg.sender, address(this), shares);
+        // SafeERC20: FeraShare reverts on failure and returns true, but the checked call keeps the
+        // static analyzers quiet and is defense-in-depth if the share impl ever changes.
+        IERC20(tr.share).safeTransferFrom(msg.sender, address(this), shares);
 
         uint64 unlockTime = uint64(block.timestamp) + FeraConstants.WITHDRAW_DELAY_SEC;
         requests[reqId] = WithdrawRequest({
@@ -270,7 +272,7 @@ library VaultQueue {
             emit IFeraVault.WithdrawFlagResolved(reqId);
         } else {
             r.settled = true; // void (terminal) — before the external share transfer (CEI)
-            IFeraShare(tranches[r.id][r.t].share).transfer(r.owner, r.shares);
+            IERC20(tranches[r.id][r.t].share).safeTransfer(r.owner, r.shares);
             emit IFeraVault.WithdrawReturned(reqId, r.owner, r.shares);
         }
     }
@@ -288,7 +290,7 @@ library VaultQueue {
         if (r.settled) revert IFeraVault.RequestSettled();
         if (r.flagged) revert IFeraVault.RequestFlagged(); // frozen: only the owner-resolve can move it
         r.settled = true; // void (terminal) — before the external share transfer (CEI)
-        IFeraShare(tranches[r.id][r.t].share).transfer(r.owner, r.shares);
+        IERC20(tranches[r.id][r.t].share).safeTransfer(r.owner, r.shares);
         emit IFeraVault.WithdrawCanceled(reqId, r.owner, r.shares);
     }
 
