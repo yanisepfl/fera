@@ -27,6 +27,7 @@ import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {QW} from "../utils/QW.sol";
 import {SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -218,9 +219,7 @@ contract BaseLimitStrategyTest is Deployers {
 
         vm.warp(block.timestamp + COOLDOWN + 1);
         _refreshTwap(memeKey);
-        vm.startPrank(alice);
-        vault.withdraw(memeId, 0, sh, 0, 0);
-        vm.stopPrank();
+        QW.drain(vault, memeId, 0, sh, 0, 0, alice); // request → delay → claim (in-kind)
         (uint256 b0, uint256 b1) = _bal(alice);
         uint256 valueAfter = b0 + b1;
         // Idle reshaping (a keeper action) cannot dilute alice NOR let her extract from others — her
@@ -402,10 +401,10 @@ contract BaseLimitStrategyTest is Deployers {
         vm.expectRevert(bytes("venue down"));
         vault.rebalanceViaVenue(memeId, 0, address(venue), true, r0 / 10);
 
-        // The bounded call is fully isolated: an ordinary in-kind withdraw still succeeds (INV-11).
+        // The bounded call is fully isolated: an ordinary in-kind withdraw still succeeds (no swap/venue dep).
         vm.warp(block.timestamp + COOLDOWN + 1);
         uint256 sh = IERC20(vault.shareToken(memeId, 0)).balanceOf(address(this));
-        (uint256 out0, uint256 out1) = vault.withdraw(memeId, 0, sh, 0, 0);
+        (uint256 out0, uint256 out1) = QW.drain(vault, memeId, 0, sh, 0, 0, address(this));
         assertGt(out0 + out1, 0, "in-kind withdraw must always work");
     }
 
@@ -422,13 +421,23 @@ contract BaseLimitStrategyTest is Deployers {
         // ⇒ pro-rata NAV ≈ 100e18 valued in token0 at the ~1:1 spot.
         uint256 slice = sh / 20;
 
-        // Impossible minOut ⇒ SingleOutTooLow (and the user can still exit in-kind — see below).
+        // Impossible minOut ⇒ SingleOutTooLow at CLAIM. Universal async: request → warp delay → refresh
+        // TWAP (the claim self-swaps) → claim reverts; the owner then reclaims the escrow (anti-trap).
+        uint256 ridBad = QW.requestSingle(vault, memeId, 0, slice, Currency.unwrap(currency0), type(uint256).max, address(this));
+        QW.warpPastUnlock(vault, ridBad);
+        _refreshTwap(memeKey);
         vm.expectRevert(IFeraVault.SingleOutTooLow.selector);
-        vault.withdrawSingle(memeId, 0, slice, Currency.unwrap(currency0), type(uint256).max);
+        vault.claimWithdraw(ridBad);
+        vault.cancelWithdraw(ridBad); // never trapped — reclaim the escrowed shares
 
-        // Reasonable single-coin redemption succeeds and returns NO MORE than pro-rata NAV.
+        // Reasonable single-coin redemption succeeds and returns NO MORE than pro-rata NAV. Capture
+        // balances AFTER the refresh (it swaps with THIS contract's funds), right before the claim.
+        uint256 ridOk = QW.requestSingle(vault, memeId, 0, slice, Currency.unwrap(currency0), 0, address(this));
+        QW.warpPastUnlock(vault, ridOk);
+        _refreshTwap(memeKey);
         (uint256 b0,) = _bal(address(this));
-        uint256 out = vault.withdrawSingle(memeId, 0, slice, Currency.unwrap(currency0), 0);
+        (uint256 c0, uint256 c1) = vault.claimWithdraw(ridOk);
+        uint256 out = c0 + c1; // single leg (tokenOut == currency0 ⇒ carried in c0)
         (uint256 a0,) = _bal(address(this));
         assertEq(a0 - b0, out, "returned token0 mismatch");
         // Single-coin swap only loses fee/slippage ⇒ out ≤ the pro-rata NAV (~100e18). Never more.
@@ -440,12 +449,17 @@ contract BaseLimitStrategyTest is Deployers {
         _seedMeme();
         uint256 sh = IERC20(vault.shareToken(memeId, 0)).balanceOf(address(this));
 
-        // withdrawSingle with an unreachable minOut reverts...
+        // A single-token CLAIM with an unreachable minOut reverts (universal async: request → warp
+        // delay → refresh TWAP → claim)...
+        uint256 ridBad = QW.requestSingle(vault, memeId, 0, sh, Currency.unwrap(currency1), type(uint256).max, address(this));
+        vm.warp(block.timestamp + QW.DELAY);
+        _refreshTwap(memeKey);
         vm.expectRevert(IFeraVault.SingleOutTooLow.selector);
-        vault.withdrawSingle(memeId, 0, sh, Currency.unwrap(currency1), type(uint256).max);
+        vault.claimWithdraw(ridBad);
+        vault.cancelWithdraw(ridBad); // ...owner reclaims the escrowed shares (never trapped)...
 
-        // ...but the plain in-kind withdraw is NEVER blockable (INV-11) — the true fallback.
-        (uint256 out0, uint256 out1) = vault.withdraw(memeId, 0, sh, 0, 0);
+        // ...and the plain in-kind exit — no swap/venue dependency — is the true fallback.
+        (uint256 out0, uint256 out1) = QW.drain(vault, memeId, 0, sh, 0, 0, address(this));
         assertGt(out0, 0, "in-kind token0 missing");
         assertGt(out1, 0, "in-kind token1 missing");
     }
@@ -479,14 +493,17 @@ contract BaseLimitStrategyTest is Deployers {
         _refreshTwap(memeKey);
         vault.rebalanceLimit(memeId, 0); // swap-free skewed limit redeploy
 
-        // ref exits: a small single-coin slice + the in-kind rest (both never-blockable, INV-11).
+        // ref exits: a small single-coin slice + the in-kind rest. Universal async: the single claim
+        // self-swaps, so refresh the TWAP after its 24h warp. (_refreshTwap swaps with THIS contract's
+        // funds, not ref's, so ref's balance delta below is exactly its two claims.)
         vm.warp(block.timestamp + COOLDOWN + 1);
         _refreshTwap(memeKey);
         (uint256 s0, uint256 s1) = _bal(ref);
-        vm.startPrank(ref);
-        vault.withdrawSingle(memeId, 0, sh / 20, Currency.unwrap(currency0), 0);
-        vault.withdraw(memeId, 0, IERC20(vault.shareToken(memeId, 0)).balanceOf(ref), 0, 0);
-        vm.stopPrank();
+        uint256 ridSingle = QW.requestSingle(vault, memeId, 0, sh / 20, Currency.unwrap(currency0), 0, ref);
+        vm.warp(block.timestamp + QW.DELAY);
+        _refreshTwap(memeKey);
+        vault.claimWithdraw(ridSingle);
+        QW.drain(vault, memeId, 0, IERC20(vault.shareToken(memeId, 0)).balanceOf(ref), 0, 0, ref);
         (uint256 e0, uint256 e1) = _bal(ref);
         uint256 valueOut = (e0 - s0) + (e1 - s1);
 
@@ -494,6 +511,25 @@ contract BaseLimitStrategyTest is Deployers {
         assertLe(valueOut, valueIn + 1e15, "system created value (NAV conservation violated)");
         // And the holder is not grossly diluted by the bounded keeper actions.
         assertGe(valueOut, (valueIn * 9_700) / 10_000, "holder diluted beyond bounded slippage");
+    }
+
+    /// @dev Foreign FULL in-kind exit (guarded), extracted from the fuzz loop for via_ir stack relief.
+    ///      Universal async redemption: request → warp WITHDRAW_DELAY_SEC → claim (in-kind, swap-free).
+    function _foreignExit(address fon) internal returns (uint256 outVal) {
+        address shr = vault.shareToken(memeId, 1);
+        uint256 fb = IERC20(shr).balanceOf(fon);
+        if (fb == 0) return 0;
+        (uint256 fbb0, uint256 fbb1) = _bal(fon);
+        vm.prank(fon);
+        IERC20(shr).approve(address(vault), fb);
+        vm.prank(fon);
+        try vault.requestWithdraw(memeId, 1, fb, 0, 0) returns (uint256 rid) {
+            vm.warp(block.timestamp + QW.DELAY);
+            try vault.claimWithdraw(rid) {
+                (uint256 faa0, uint256 faa1) = _bal(fon);
+                outVal = (faa0 - fbb0) + (faa1 - fbb1);
+            } catch {}
+        } catch {}
     }
 
     /// Swap-free fuzz: idle reshaping + limit redeploys + a foreign actor cannot dilute or enrich a
@@ -528,22 +564,13 @@ contract BaseLimitStrategyTest is Deployers {
                 try vault.rebalanceLimit(memeId, 1) {} catch {}
             } else {
                 vm.warp(block.timestamp + COOLDOWN + 1);
-                uint256 fb = IERC20(vault.shareToken(memeId, 1)).balanceOf(fon);
-                if (fb != 0) {
-                    (uint256 fbb0, uint256 fbb1) = _bal(fon);
-                    vm.prank(fon);
-                    try vault.withdraw(memeId, 1, fb, 0, 0) {
-                        (uint256 faa0, uint256 faa1) = _bal(fon);
-                        fOut += (faa0 - fbb0) + (faa1 - fbb1);
-                    } catch {}
-                }
+                fOut += _foreignExit(fon); // extracted (via_ir stack relief)
             }
         }
 
         vm.warp(block.timestamp + COOLDOWN + 1);
         (uint256 rs0, uint256 rs1) = _bal(ref);
-        vm.prank(ref);
-        vault.withdraw(memeId, 1, sh, 0, 0);
+        QW.drain(vault, memeId, 1, sh, 0, 0, ref);
         (uint256 re0, uint256 re1) = _bal(ref);
         uint256 valueOut = (re0 - rs0) + (re1 - rs1);
 

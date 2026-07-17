@@ -188,6 +188,14 @@ library FeraConstants {
 
     /// PARAMS.md#DEPOSIT_COOLDOWN_SEC (FROZEN v2). Veda-style lock on the depositor's OWN shares.
     uint32 internal constant DEPOSIT_COOLDOWN_SEC = 3_600; // 1h
+
+    /// @notice UNIVERSAL async-redemption delay (ERC-7540-style). EVERY exit is now request → wait
+    ///         WITHDRAW_DELAY_SEC → claim; there is no instant asset-exit. The delay window is the
+    ///         incident-response surface (a guardian can FREEZE a suspicious pending claim; the vault
+    ///         pause freezes ALL claims) and the settle-at-claim discipline (in-kind pro-rata of
+    ///         CURRENT holdings vs CURRENT totalSupply) makes the queue SOLVENT BY CONSTRUCTION —
+    ///         a matured claim can never remove more than its live share of what actually exists.
+    uint32 internal constant WITHDRAW_DELAY_SEC = 24 hours; // 86_400
     /// PARAMS.md#DEPOSIT_TWAP_WINDOW_SEC (FROZEN v2). NAV-mint reference TWAP window.
     uint32 internal constant DEPOSIT_TWAP_WINDOW_SEC = 600; // 10 min
 

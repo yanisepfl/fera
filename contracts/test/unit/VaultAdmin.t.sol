@@ -22,6 +22,7 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {QW} from "../utils/QW.sol";
 
 /// @notice Coverage for the Vault admin surface + the on-chain market-hours gate branches the
 ///         lifecycle/strategy suites don't reach: schedule-bitmap gating (holiday / keeper-flag /
@@ -265,14 +266,18 @@ contract VaultAdminTest is Deployers {
         assertFalse(vault.depositsPaused(memeId), "unpause did not take");
     }
 
-    /// @notice Pause posture (pause hardening): a pool pause freezes DEPOSITS *and every*
-    ///         position-moving strategy action (rebalance / skim / self-swap), but NEVER withdrawal —
-    ///         funds are never trapped. Deposit-only pause was too weak: a mid-incident rebalance or
-    ///         swap path could still fire. Withdrawal stays unblockable so users can always exit.
-    function test_pauseFreezesStrategy_butNeverWithdrawals() public {
+    /// @notice Pause posture (universal async-redemption queue): a pool pause freezes DEPOSITS, *every*
+    ///         position-moving strategy action (rebalance / skim / self-swap), AND — NEW — CLAIMS. This
+    ///         DELIBERATELY reverses the legacy "withdrawal is never pause-gated" rule: with a 24h
+    ///         delay on every exit, pausing claims is the incident circuit-breaker (a confirmed exploit
+    ///         → no attacker's matured claim can settle). REQUESTS stay open (a holder can always ENTER
+    ///         the queue), and unpausing settles them — funds are never trapped. Re-audit anchor:
+    ///         FeraVault.claimWithdraw / VaultQueue.claim `ClaimsPaused`.
+    function test_pauseFreezesStrategy_andClaims_requestsStayOpen() public {
         vault.deposit(memeId, 0, 100e18, 100e18, 0);
         uint256 sh = FeraShare(vault.shareToken(memeId, 0)).balanceOf(address(this));
         assertGt(sh, 0, "no shares minted");
+        vm.warp(block.timestamp + 3_601); // past the 1h deposit cooldown (gates the REQUEST)
 
         vault.pauseDeposits(memeId);
 
@@ -286,12 +291,20 @@ contract VaultAdminTest is Deployers {
         vm.expectRevert(IFeraVault.DepositsPaused.selector);
         vault.selfSwap(memeId, 0, true, 1e18);
 
-        // ...but withdrawal ALWAYS works — a pause can never trap funds. (Warp past the 1h
-        // DEPOSIT_COOLDOWN_SEC Veda share-lock, which is an anti-JIT guard unrelated to pause — its
-        // presence here, rather than DepositsPaused, is itself proof withdraw is NOT pause-gated.)
-        vm.warp(block.timestamp + 3_601);
-        vault.withdraw(memeId, 0, sh, 0, 0);
-        assertEq(FeraShare(vault.shareToken(memeId, 0)).balanceOf(address(this)), 0, "shares not burned on withdraw");
+        // REQUEST stays OPEN while paused (a holder can always enter the exit queue); the escrow moves
+        // the shares into the vault, so the holder's own balance is already 0 post-request.
+        uint256 reqId = QW.request(vault, memeId, 0, sh, 0, 0, address(this));
+        assertEq(FeraShare(vault.shareToken(memeId, 0)).balanceOf(address(this)), 0, "shares not escrowed on request");
+        vm.warp(block.timestamp + QW.DELAY);
+
+        // CLAIM is FROZEN while paused (NEW incident circuit-breaker).
+        vm.expectRevert(IFeraVault.ClaimsPaused.selector);
+        vault.claimWithdraw(reqId);
+
+        // Unpause → the matured claim settles; funds are never trapped.
+        vault.unpauseDeposits(memeId);
+        (uint256 out0, uint256 out1) = vault.claimWithdraw(reqId);
+        assertGt(out0 + out1, 0, "claim blocked after unpause");
     }
 
     /// @notice ERC-4626-style quote pricing (for DefiLlama / Rabby): the vault exposes a TWAP-priced,

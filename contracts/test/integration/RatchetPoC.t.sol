@@ -18,6 +18,7 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {QW} from "../utils/QW.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice R-17 — the Bunni Sept-2025 exploit class, replayed against FERA's share accounting.
@@ -111,14 +112,15 @@ contract RatchetPoCTest is Deployers {
 
         vm.warp(block.timestamp + COOLDOWN); // both cooldowns lapse
 
-        // 44 micro-withdrawals (the Bunni count) + the final remainder.
+        // 44 micro-withdrawals (the Bunni count) + the final remainder. Universal async redemption:
+        // each is request → wait WITHDRAW_DELAY_SEC → claim (QW.drain). They are SEQUENTIAL and no swaps
+        // occur between them, so each claim's floored pro-rata math is identical to the pre-queue path —
+        // the ratchet property (rounding always against the withdrawer) is unchanged by the escrow.
         uint256 slice = aShares / 45;
-        vm.startPrank(attacker);
         for (uint256 i; i < 44; ++i) {
-            vault.withdraw(id, 0, slice, 0, 0);
+            QW.drain(vault, id, 0, slice, 0, 0, attacker);
         }
-        vault.withdraw(id, 0, aShares - 44 * slice, 0, 0);
-        vm.stopPrank();
+        QW.drain(vault, id, 0, aShares - 44 * slice, 0, 0, attacker);
 
         // (1) Rounding is ALWAYS against the withdrawer: strict no-profit round trip.
         (uint256 a0After, uint256 a1After) = _bal(attacker);
@@ -131,9 +133,7 @@ contract RatchetPoCTest is Deployers {
 
         // (2) Remaining holders' claim never grows beyond collected fees (ZERO here) + dust the
         //     attacker forfeited. The honest exit proves it: out ≤ in + attacker's dust; out ≈ in.
-        vm.startPrank(honest);
-        vault.withdraw(id, 0, hShares, 0, 0);
-        vm.stopPrank();
+        QW.drain(vault, id, 0, hShares, 0, 0, honest);
         (uint256 h0After, uint256 h1After) = _bal(honest);
         uint256 hOut0 = h0After - h0Mid;
         uint256 hOut1 = h1After - h1Mid;
@@ -165,12 +165,10 @@ contract RatchetPoCTest is Deployers {
         vm.warp(block.timestamp + COOLDOWN);
 
         uint256 slice = aShares / nSlices;
-        vm.startPrank(attacker);
         for (uint256 i; i + 1 < nSlices; ++i) {
-            vault.withdraw(id, 0, slice, 0, 0);
+            QW.drain(vault, id, 0, slice, 0, 0, attacker);
         }
-        vault.withdraw(id, 0, aShares - (nSlices - 1) * slice, 0, 0);
-        vm.stopPrank();
+        QW.drain(vault, id, 0, aShares - (nSlices - 1) * slice, 0, 0, attacker);
 
         (uint256 a0After, uint256 a1After) = _bal(attacker);
         assertLe(a0After - a0Mid, a0Before - a0Mid, "profitable ratchet found (token0)");

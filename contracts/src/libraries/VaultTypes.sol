@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {FeraTypes} from "./FeraTypes.sol";
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -54,9 +55,38 @@ struct PoolInfo {
     uint8 trancheCount;
     bool marketOpen; // keeper-set within on-chain schedule bounds (feeds the hook's RWA fee overlay)
     bool eventWindow; // keeper-flagged scheduled-event session (reserved; no on-chain consumer in v3)
-    bool paused; // deposits paused (INV-11)
+    bool paused; // deposits paused (INV-11); ALSO gates claimWithdraw (the incident circuit-breaker)
     bool initialized;
     bool holiday; // keeper holiday flag — force-closes regardless of schedule/flag (mirrors to hook)
     bool quoteIsToken0; // v3.1 unified fee-routing (§9): which side is the liquid QUOTE asset. Immutable.
     uint256 scheduleBitmap; // on-chain UTC weekly calendar (168 bits = hour-of-week; see _isMarketOpen)
+}
+
+/// @notice Universal async-redemption record (ERC-7540-style). One per `reqId`; the request-mapping
+///         + the incrementing `reqId` counter + the guardian live on the VAULT (VaultQueue receives
+///         them by reference and mutates the vault's storage via delegatecall).
+///
+///         SOLVENCY BY CONSTRUCTION. On `requestWithdraw` the caller's `shares` are ESCROWED into the
+///         vault's own custody (transferred in, NOT burned) — so they REMAIN in `totalSupply` and the
+///         requester STAYS proportionally invested during the delay (only their EXIT is delayed, not
+///         their exposure). No token amount is snapshotted. On `claimWithdraw` the payout is settled
+///         IN-KIND PRO-RATA of CURRENT holdings against the CURRENT `totalSupply` (the exact
+///         `mulDiv(liquidity, shares, totalShares)` floor primitive the vault already uses), and the
+///         escrowed shares are burned exactly as the assets leave — pricePerShare-neutral. Because a
+///         claim only ever removes a FLOORED FRACTION of what actually exists at claim time, the sum
+///         of all pending + live claims can never exceed the vault's holdings, regardless of what
+///         happened during the delay (fees, rebalances, price moves).
+struct WithdrawRequest {
+    address owner; // requester; the payout ALWAYS goes here (a third party may only PUSH a matured claim)
+    PoolId id;
+    uint8 t;
+    uint256 shares; // escrowed shares held by the vault (counted in totalSupply until burned at claim)
+    uint64 unlockTime; // block.timestamp + WITHDRAW_DELAY_SEC
+    bool single; // true => single-token exit (tokenOut/minOut); false => in-kind (minAmount0/minAmount1)
+    address tokenOut; // single path: the token to receive
+    uint256 minOut; // single path: min output slippage bound (settled at claim, same on-chain TWAP bound)
+    uint256 minAmount0; // in-kind path: min token0 out
+    uint256 minAmount1; // in-kind path: min token1 out
+    bool flagged; // guardian froze this pending claim (owner resolves); guardian can NEVER seize/burn
+    bool settled; // terminal: claimed OR returned (voided). Blocks any second settlement.
 }

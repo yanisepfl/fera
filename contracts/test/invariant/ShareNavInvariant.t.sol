@@ -22,6 +22,7 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {QW} from "../utils/QW.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice INV-16 (R-18 fix) — Share-NAV completeness, re-pointed at the v3 base+limit+idle surface
@@ -135,11 +136,11 @@ contract ShareNavInvariantTest is Deployers {
         valueIn = (b0 - m0) + (b1 - m1);
     }
 
-    /// @dev Withdraw all `shares` as `who` (after cooldown), returning value out.
+    /// @dev Withdraw all `shares` as `who` (after cooldown), returning value out. Universal async
+    ///      redemption: QW drives request → warp WITHDRAW_DELAY_SEC → claim (in-kind, TWAP-independent).
     function _withdrawAll(address who, PoolId id, uint256 shares) internal returns (uint256 valueOut) {
         (uint256 b0, uint256 b1) = _bal(who);
-        vm.prank(who);
-        vault.withdraw(id, 0, shares, 0, 0);
+        QW.drain(vault, id, 0, shares, 0, 0, who);
         (uint256 m0, uint256 m1) = _bal(who);
         valueOut = (m0 - b0) + (m1 - b1);
     }

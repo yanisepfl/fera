@@ -26,6 +26,7 @@ import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {QW} from "../utils/QW.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -282,8 +283,7 @@ contract VaultHardeningV3Test is Deployers {
         _refreshTwap(memeKey);
         uint256 b0 = IERC20(Currency.unwrap(currency0)).balanceOf(bob);
         uint256 b1 = IERC20(Currency.unwrap(currency1)).balanceOf(bob);
-        vm.prank(bob);
-        vault.withdraw(memeId, 1, sh, 0, 0);
+        QW.drain(vault, memeId, 1, sh, 0, 0, bob); // request → delay → claim (in-kind works OOR)
         uint256 got = (IERC20(Currency.unwrap(currency0)).balanceOf(bob) - b0)
             + (IERC20(Currency.unwrap(currency1)).balanceOf(bob) - b1);
         assertGt(got, 0, "OOR withdrawal returned nothing (operability broken)");
@@ -303,7 +303,7 @@ contract VaultHardeningV3Test is Deployers {
 
         uint256 b0 = IERC20(Currency.unwrap(currency0)).balanceOf(address(this));
         uint256 b1 = IERC20(Currency.unwrap(currency1)).balanceOf(address(this));
-        vault.withdraw(memeId, 1, sh, 0, 0); // in-kind, no rebalance — must succeed
+        QW.drain(vault, memeId, 1, sh, 0, 0, address(this)); // in-kind, no rebalance — must succeed
         uint256 got = (IERC20(Currency.unwrap(currency0)).balanceOf(address(this)) - b0)
             + (IERC20(Currency.unwrap(currency1)).balanceOf(address(this)) - b1);
         assertGt(got, 0, "in-kind withdraw failed without a rebalance (liveness coupled to rebalancing)");

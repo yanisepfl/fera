@@ -33,6 +33,7 @@ import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {QW} from "../utils/QW.sol";
 import {SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -376,17 +377,21 @@ contract BaseLimitReauditPoC is Deployers {
         (uint160 sp0,,,) = manager.getSlot0(memeId);
         uint256 snap = vm.snapshotState();
 
-        // (1) single-token exit. Value the output at the pre-exit spot (the pro-rata NAV reference).
-        vm.prank(alice);
-        uint256 got = vault.withdrawSingle(memeId, 0, aSh, tokenOut, 0);
+        // (1) single-token exit. Universal async: request single → warp delay → refresh TWAP (the
+        //     claim self-swaps, so it needs a fresh TWAP after the 24h gap) → claim. Value the output
+        //     at the pre-exit spot (the pro-rata NAV reference); the tiny net-zero refresh keeps spot≈sp0.
+        uint256 ridSingle = QW.requestSingle(vault, memeId, 0, aSh, tokenOut, 0, alice);
+        vm.warp(block.timestamp + QW.DELAY);
+        _refreshTwap();
+        (uint256 gs0, uint256 gs1) = vault.claimWithdraw(ridSingle);
+        uint256 got = gs0 + gs1; // single leg (the other is 0)
         uint256 valSingle = wantToken0 ? _valueT1At(sp0, got, 0) : _valueT1At(sp0, 0, got);
 
         vm.revertToState(snap);
 
         // (2) in-kind exit of the SAME shares — the true pro-rata NAV (spot unchanged, no swap).
         (uint256 bb0, uint256 bb1) = _bal(alice);
-        vm.prank(alice);
-        vault.withdraw(memeId, 0, aSh, 0, 0);
+        QW.drain(vault, memeId, 0, aSh, 0, 0, alice);
         (uint256 ba0, uint256 ba1) = _bal(alice);
         uint256 valInkind = _valueT1At(sp0, ba0 - bb0, ba1 - bb1);
 
@@ -395,8 +400,12 @@ contract BaseLimitReauditPoC is Deployers {
         assertLe(valSingle, valInkind + 1e12, "withdrawSingle over-paid vs pro-rata NAV");
     }
 
-    /// A4.b The in-kind `withdraw` is UNBLOCKABLE even with deposits paused AND every swap venue down
-    ///      AND withdrawSingle failing on minOut — INV-11. VERDICT: SAFE.
+    /// A4.b The in-kind exit carries NO swap/venue dependency, and the owner is NEVER trapped — even
+    ///      when a single-token claim can't meet its minOut, `cancelWithdraw` reclaims the escrowed
+    ///      shares and the plain in-kind exit settles. PAUSE SEMANTICS CHANGE (universal async queue):
+    ///      unlike the legacy INV-11, CLAIMS are now pause-gated (the incident circuit-breaker), so the
+    ///      pool is unpaused before the in-kind claim; the preserved property is the no-swap/no-venue
+    ///      LIVENESS of the in-kind path + the anti-trap `cancelWithdraw` recourse. VERDICT: SAFE.
     function test_A4_inKind_withdraw_unblockable() public {
         _fund(alice, 20_000e18);
         vm.prank(alice);
@@ -410,19 +419,29 @@ contract BaseLimitReauditPoC is Deployers {
         vault.setVenueAllowed(address(venue), true);
 
         vm.warp(block.timestamp + COOLDOWN + 1);
+
+        // A single-token exit REQUEST succeeds even while paused (requests stay open)...
+        uint256 ridBad = QW.requestSingle(vault, memeId, 0, aSh, Currency.unwrap(currency0), type(uint256).max, alice);
+        vm.warp(block.timestamp + QW.DELAY);
+        // Claims are pause-gated now (the incident brake); unpause to settle. The single claim then
+        // can't meet the impossible minOut (the own-pool self-swap can't clear it)...
+        vault.unpauseDeposits(memeId);
         _refreshTwap();
-
-        // withdrawSingle with an unmeetable minOut fails (swap can't clear) — but this NEVER blocks...
-        vm.prank(alice);
         vm.expectRevert(IFeraVault.SingleOutTooLow.selector);
-        vault.withdrawSingle(memeId, 0, aSh, Currency.unwrap(currency0), type(uint256).max);
+        vault.claimWithdraw(ridBad);
 
-        // ...the plain in-kind exit, which carries no pause/venue/swap dependency.
-        (uint256 b0, uint256 b1) = _bal(alice);
+        // ...the owner is NEVER trapped: cancel reclaims the escrowed shares (no guardian required).
         vm.prank(alice);
-        vault.withdraw(memeId, 0, aSh, 0, 0);
+        vault.cancelWithdraw(ridBad);
+        assertEq(IERC20(vault.shareToken(memeId, 0)).balanceOf(alice), aSh, "cancel did not return escrowed shares");
+
+        // ...then the plain IN-KIND exit — no venue/swap dependency — settles once unpaused (claims are
+        // pause-gated now; unpause is the deliberate incident brake being lifted).
+        vault.unpauseDeposits(memeId);
+        (uint256 b0, uint256 b1) = _bal(alice);
+        QW.drain(vault, memeId, 0, aSh, 0, 0, alice);
         (uint256 a0, uint256 a1) = _bal(alice);
-        assertGt((a0 - b0) + (a1 - b1), 0, "in-kind withdraw MUST always succeed (INV-11)");
+        assertGt((a0 - b0) + (a1 - b1), 0, "in-kind exit MUST succeed after cancel (no swap/venue dep)");
     }
 
     // ═════════════════════════════════════════════════════════════════════════════════════════
