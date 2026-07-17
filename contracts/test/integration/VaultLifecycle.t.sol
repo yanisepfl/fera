@@ -13,7 +13,6 @@ import {IFeraVault} from "../../src/interfaces/IFeraVault.sol";
 import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol";
 import {IAnchorStaking} from "../../src/interfaces/IAnchorStaking.sol";
 import {FeraTypes} from "../../src/libraries/FeraTypes.sol";
-import {QW} from "../utils/QW.sol";
 
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
@@ -122,9 +121,8 @@ contract VaultLifecycleTest is Deployers {
         uint256 bal0Before = MockERC20(Currency.unwrap(currency0)).balanceOf(address(this));
         uint256 shares = vault.deposit(id, 0, 100e18, 100e18, 0);
 
-        vm.warp(block.timestamp + COOLDOWN); // PARAMS.md#DEPOSIT_COOLDOWN_SEC (gates the REQUEST)
-        // Universal async redemption: request → wait WITHDRAW_DELAY_SEC → claim (QW drives all three).
-        (uint256 out0, uint256 out1) = QW.drain(vault, id, 0, shares, 0, 0, address(this));
+        vm.warp(block.timestamp + COOLDOWN); // PARAMS.md#DEPOSIT_COOLDOWN_SEC
+        (uint256 out0, uint256 out1) = vault.withdraw(id, 0, shares, 0, 0);
 
         assertGt(out0 + out1, 0, "withdrew nothing");
         assertEq(_share().balanceOf(address(this)), 0, "shares not burned");
@@ -138,12 +136,11 @@ contract VaultLifecycleTest is Deployers {
     function test_cooldown_blocksOwnEarlyWithdraw() public {
         uint256 shares = vault.deposit(id, 0, 10e18, 10e18, 0);
 
-        // The 1h cooldown now gates the REQUEST (the entry to the queue), not the claim.
         vm.expectRevert(IFeraVault.CooldownActive.selector);
-        vault.requestWithdraw(id, 0, shares, 0, 0);
+        vault.withdraw(id, 0, shares, 0, 0);
 
         vm.warp(block.timestamp + COOLDOWN);
-        (uint256 out0,) = QW.drain(vault, id, 0, shares, 0, 0, address(this));
+        (uint256 out0,) = vault.withdraw(id, 0, shares, 0, 0);
         assertGt(out0, 0, "withdraw after cooldown failed");
     }
 
@@ -161,39 +158,24 @@ contract VaultLifecycleTest is Deployers {
         vault.deposit(id, 0, 1e18, 1e18, 0);
         vm.stopPrank();
 
-        (uint256 out0,) = QW.drain(vault, id, 0, shares, 0, 0, address(this)); // my cooldown lapsed — must work
+        (uint256 out0,) = vault.withdraw(id, 0, shares, 0, 0); // my cooldown lapsed — must work
         assertGt(out0, 0, "another user's deposit re-armed my cooldown");
     }
 
-    // ── PAUSE SEMANTICS CHANGE (universal async-redemption queue) ────────────────────────────
-    /// @notice DELIBERATE reversal of the legacy INV-11 "withdrawals are NEVER pausable" rule: the 24h
-    ///         delay + the pause together are the new incident circuit-breaker. REQUESTS stay open
-    ///         during a pause (a user can always ENTER the queue); CLAIMS are FROZEN while paused so a
-    ///         confirmed exploit cannot let an attacker's matured claims settle. Deposits remain paused
-    ///         as before. Re-audit anchor: FeraVault.claimWithdraw / VaultQueue.claim `ClaimsPaused`.
-    function test_pause_freezesClaims_requestsStayOpen() public {
+    // ── INV-11: deposits pausable, withdrawals never ─────────────────────────────────────────
+    function test_INV11_depositPausable_withdrawNever() public {
         uint256 shares = vault.deposit(id, 0, 10e18, 10e18, 0);
-        vm.warp(block.timestamp + COOLDOWN);
 
         vault.pauseDeposits(id);
         assertTrue(vault.depositsPaused(id));
 
-        // Deposits remain blocked by the pause (unchanged).
         vm.expectRevert(IFeraVault.DepositsPaused.selector);
         vault.deposit(id, 0, 1e18, 1e18, 0);
 
-        // REQUEST stays OPEN while paused — a holder can always enter the exit queue.
-        uint256 reqId = QW.request(vault, id, 0, shares / 2, 0, 0, address(this));
-        vm.warp(block.timestamp + QW.DELAY);
-
-        // CLAIM is FROZEN while paused (NEW: the incident circuit-breaker).
-        vm.expectRevert(IFeraVault.ClaimsPaused.selector);
-        vault.claimWithdraw(reqId);
-
-        // Unpausing lets the matured claim settle.
-        vault.unpauseDeposits(id);
-        (uint256 out0, uint256 out1) = vault.claimWithdraw(reqId);
-        assertGt(out0 + out1, 0, "claim blocked after unpause");
+        // Withdrawals must still work while deposits are paused (INV-11).
+        vm.warp(block.timestamp + COOLDOWN);
+        (uint256 out0, uint256 out1) = vault.withdraw(id, 0, shares / 2, 0, 0);
+        assertGt(out0 + out1, 0, "withdraw blocked while paused");
     }
 
     // ── OD-V5 / Gamma: the TWAP gate's legal range [50,500]bp is immutable in code ───────────

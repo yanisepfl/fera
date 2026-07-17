@@ -22,7 +22,6 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
-import {QW} from "../utils/QW.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice SECURITY AGENT 6 — R-17 (Bunni-class share-accounting) + the deposit-NAV finding, now
@@ -159,7 +158,8 @@ contract ShareAccountingPoCTest is Deployers {
         // 4) After cooldown, attacker withdraws — would extract a slice of the reserve it never
         //    funded IF the deposit had over-minted against banded liquidity alone (the pre-R-18 bug).
         vm.warp(block.timestamp + COOLDOWN);
-        QW.drain(vault, rwaId, 0, aShares, 0, 0, attacker); // request → delay → claim
+        vm.prank(attacker);
+        vault.withdraw(rwaId, 0, aShares, 0, 0);
         (uint256 a0a, uint256 a1a) = _bal(attacker);
         uint256 aOut = (a0a - a0m) + (a1a - a1m);
 
@@ -170,7 +170,8 @@ contract ShareAccountingPoCTest is Deployers {
         }
 
         // 5) Honest LP exits: recovers ~all of its deposit (no theft).
-        QW.drain(vault, rwaId, 0, hShares, 0, 0, honest);
+        vm.prank(honest);
+        vault.withdraw(rwaId, 0, hShares, 0, 0);
         (uint256 h0a, uint256 h1a) = _bal(honest);
         uint256 hOut = (h0a - h0m) + (h1a - h1m);
         emit log_named_decimal_uint("honest deposited (value)", hIn, 18);
@@ -218,7 +219,8 @@ contract ShareAccountingPoCTest is Deployers {
         uint256 aIn = (a0b - a0m) + (a1b - a1m);
 
         vm.warp(block.timestamp + COOLDOWN);
-        QW.drain(vault, memeId, 0, aShares, 0, 0, attacker); // request → delay → claim
+        vm.prank(attacker);
+        vault.withdraw(memeId, 0, aShares, 0, 0);
         (uint256 a0a, uint256 a1a) = _bal(attacker);
         uint256 aOut = (a0a - a0m) + (a1a - a1m);
 
@@ -262,12 +264,12 @@ contract ShareAccountingPoCTest is Deployers {
         vm.warp(block.timestamp + COOLDOWN);
 
         uint256 slice = aShares / 45;
-        // Universal async redemption: each micro-withdrawal is request → delay → claim (QW.drain);
-        // sequential, no swaps between them ⇒ the floored-rounding ratchet math is unchanged.
+        vm.startPrank(attacker);
         for (uint256 i; i < 44; ++i) {
-            QW.drain(vault, memeId, 0, slice, 0, 0, attacker);
+            vault.withdraw(memeId, 0, slice, 0, 0);
         }
-        QW.drain(vault, memeId, 0, aShares - 44 * slice, 0, 0, attacker);
+        vault.withdraw(memeId, 0, aShares - 44 * slice, 0, 0);
+        vm.stopPrank();
 
         (uint256 a0a, uint256 a1a) = _bal(attacker);
         uint256 aOut0 = a0a - a0m;

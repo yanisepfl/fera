@@ -10,6 +10,7 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import {IFeraShare} from "../interfaces/IFeraShare.sol";
 import {IFeraVault} from "../interfaces/IFeraVault.sol";
 import {IRevenueDistributor} from "../interfaces/IRevenueDistributor.sol";
 import {IAnchorStaking} from "../interfaces/IAnchorStaking.sol";
@@ -38,6 +39,7 @@ library VaultActions {
     // Callback action tags — MUST match FeraVault's internal encoding.
     uint8 internal constant CB_REBALANCE_BASE = 6;
     uint8 internal constant CB_SELF_SWAP = 7;
+    uint8 internal constant CB_WITHDRAW_SINGLE = 8;
 
     /// @notice GUARDED wide-BASE recenter (KEEPER-ONLY v3.4, gated on the vault; every bound on-chain). See FeraVault NatSpec.
     function rebalanceBase(
@@ -156,12 +158,54 @@ library VaultActions {
         emit IFeraVault.StrategyAction(PoolId.unwrap(c.id), uint8(FeraTypes.StrategyKind.VenueSwap), 0, 0, amountOut, bytes32(0));
     }
 
-    // NOTE (24h async-redemption queue): the single-token redemption ORCHESTRATION formerly here
-    // (`withdrawSingle`) moved to VaultQueue as the CLAIM-time settlement of a `single=true` request —
-    // there is no longer any INSTANT single-token exit. The CB_WITHDRAW_SINGLE callback it drives is
-    // unchanged (VaultOps.cbWithdrawSingle); only the entrypoint became request→delay→claim.
+    /// @notice Redeem `shares` into ONE token (`tokenOut`), swapping the other leg within the bound.
+    ///         NEVER pausable (INV-11). `_requireBaseLimit` stays on the vault wrapper (runs first).
+    function withdrawSingle(
+        TrancheState storage tr,
+        PoolInfo storage p,
+        VaultOps.Ctx memory c,
+        uint256 shares,
+        address tokenOut,
+        uint256 minOut,
+        IRevenueDistributor rd,
+        IAnchorStaking anchor,
+        mapping(address => uint64) storage depositClock
+    ) public returns (uint256 amountOut) {
+        if (block.timestamp < depositClock[msg.sender] + FeraConstants.DEPOSIT_COOLDOWN_SEC) {
+            revert IFeraVault.CooldownActive();
+        }
+        bool wantToken0 = tokenOut == Currency.unwrap(p.key.currency0);
+        if (!wantToken0 && tokenOut != Currency.unwrap(p.key.currency1)) revert IFeraVault.BadTier();
+
+        VaultFees.checkpoint(tr, p, c, rd, anchor);
+        uint256 totalShares = IFeraShare(tr.share).totalSupply();
+
+        // Pro-rata slice of held (non-banded) balances — round DOWN (R-17). Debited reserve-first.
+        uint256 held0 = FullMath.mulDiv(shares, tr.pending0 + tr.reserve0, totalShares);
+        uint256 held1 = FullMath.mulDiv(shares, tr.pending1 + tr.reserve1, totalShares);
+        _debitHeldPreferReserve(tr, held0, held1);
+
+        IFeraShare(tr.share).burn(msg.sender, shares); // CEI
+
+        amountOut = abi.decode(
+            c.pm.unlock(abi.encode(CB_WITHDRAW_SINGLE, c.id, c.t, abi.encode(shares, totalShares, wantToken0, held0, held1))),
+            (uint256)
+        );
+        if (amountOut < minOut) revert IFeraVault.SingleOutTooLow();
+        IERC20(tokenOut).safeTransfer(msg.sender, amountOut);
+        emit IFeraVault.WithdrawSingle(PoolId.unwrap(c.id), msg.sender, tokenOut, amountOut, shares, c.t);
+    }
 
     // ── local ports of the vault's gate / accounting helpers ─────────────────────────────────
+
+    function _debitHeldPreferReserve(TrancheState storage tr, uint256 amt0, uint256 amt1) internal {
+        uint256 r0 = amt0 < tr.reserve0 ? amt0 : tr.reserve0;
+        tr.reserve0 -= r0;
+        if (amt0 - r0 != 0) tr.pending0 -= (amt0 - r0);
+        uint256 r1 = amt1 < tr.reserve1 ? amt1 : tr.reserve1;
+        tr.reserve1 -= r1;
+        if (amt1 - r1 != 0) tr.pending1 -= (amt1 - r1);
+    }
 
     function _oorDwell(PoolInfo storage p) internal view returns (uint32) {
         return p.regime == FeraTypes.Regime.MEME ? FeraConstants.MEME_OOR_DWELL_SEC : FeraConstants.RWA_OOR_DWELL_SEC;

@@ -13,8 +13,7 @@ import {VaultMath} from "./libraries/VaultMath.sol";
 import {VaultFees} from "./libraries/VaultFees.sol";
 import {VaultRwa} from "./libraries/VaultRwa.sol";
 import {VaultActions} from "./libraries/VaultActions.sol";
-import {VaultQueue} from "./libraries/VaultQueue.sol";
-import {Band, TierConfig, TrancheState, PoolInfo, WithdrawRequest} from "./libraries/VaultTypes.sol";
+import {Band, TierConfig, TrancheState, PoolInfo} from "./libraries/VaultTypes.sol";
 
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
@@ -161,23 +160,6 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///         staker/treasury/ops split exactly like any other pool.
     mapping(PoolId => bool) public emissionsEligible;
 
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-    // UNIVERSAL 24h ASYNC-REDEMPTION QUEUE (ERC-7540-style). EVERY exit is request → wait
-    // WITHDRAW_DELAY_SEC → claim; NO instant asset-exit remains. State lives HERE (the heavy escrow/
-    // settle/burn bodies delegate to VaultQueue). See the WithdrawRequest NatSpec + VaultQueue for the
-    // solvency-by-construction argument (escrow shares in totalSupply → settle in-kind pro-rata of
-    // CURRENT holdings at claim → burn as assets leave).
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-    /// @notice All pending / settled redemption requests, keyed by an incrementing `reqId`.
-    mapping(uint256 => WithdrawRequest) public withdrawRequests;
-    /// @notice Monotonic request-id counter (next id to assign).
-    uint256 public nextReqId;
-    /// @notice The address permitted to FREEZE (flag) a suspicious pending claim during the delay
-    ///         window. It can ONLY freeze — never seize, redirect, or burn; the owner (timelock)
-    ///         resolves every flag. Defaults to address(0) (flagging disabled until the team sets one).
-    address public withdrawGuardian;
-
     // Callback action tags (internal encoding only — never externally exposed).
     uint8 internal constant CB_CHECKPOINT = 0; // poke bands, realize fees to the Vault
     uint8 internal constant CB_FIRST_DEPOSIT = 1; // weight-split initial mint
@@ -194,11 +176,6 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
 
     modifier onlyKeeper() {
         if (msg.sender != keeper) revert OnlyKeeper();
-        _;
-    }
-
-    modifier onlyGuardian() {
-        if (msg.sender != withdrawGuardian) revert OnlyGuardian();
         _;
     }
 
@@ -363,83 +340,57 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     }
 
     /// @inheritdoc IFeraVault
-    /// @dev UNIVERSAL ASYNC REDEMPTION (ERC-7540-style) — this REPLACES the old instant `withdraw`.
-    ///      There is NO instant asset-exit anymore: this only ESCROWS the caller's shares into the
-    ///      vault and records a request that matures after WITHDRAW_DELAY_SEC; assets leave later via
-    ///      `claimWithdraw`. The 1h deposit cooldown gates the REQUEST (not the claim). The caller must
-    ///      have approved the vault to pull `shares` of the tranche share token. NOT `notPaused`:
-    ///      requests stay open during a pause (only CLAIMS are frozen). Escrow body in VaultQueue.
-    function requestWithdraw(PoolId id, uint8 t, uint256 shares, uint256 minAmount0, uint256 minAmount1)
+    /// @dev NEVER pausable (INV-11): no `notPaused` modifier here, by design. The only constraint
+    ///      is the withdrawer's OWN deposit cooldown (PARAMS §D2 — kills flash-loan round trips).
+    function withdraw(PoolId id, uint8 t, uint256 shares, uint256 minAmount0, uint256 minAmount1)
         external
         nonReentrant
         knownTranche(id, t)
-        returns (uint256 reqId)
+        returns (uint256 amount0, uint256 amount1)
     {
-        reqId = nextReqId++;
-        VaultQueue.request(
-            withdrawRequests, tranches[id][t], pools[id], lastDepositTs[id][t], reqId, id, t, shares, false, address(0), 0, minAmount0, minAmount1
+        if (block.timestamp < lastDepositTs[id][t][msg.sender] + FeraConstants.DEPOSIT_COOLDOWN_SEC) {
+            revert CooldownActive();
+        }
+
+        // D-18: realize fees first so the exiting shares are paid at a fee-checkpointed NAV and
+        // the burn cannot strand unrealized fees with the leavers/stayers asymmetrically.
+        _checkpoint(id, t);
+
+        TrancheState storage tr = tranches[id][t];
+        uint256 totalShares = IFeraShare(tr.share).totalSupply();
+
+        // Pro-rata slice of held (non-banded) balances — ALL rounding DOWN (against the
+        // withdrawer; R-17 ratchet discipline: dust stays with remaining holders, never leaves).
+        uint256 heldOut0;
+        uint256 heldOut1;
+        {
+            uint256 dPending0 = FullMath.mulDiv(shares, tr.pending0, totalShares);
+            uint256 dPending1 = FullMath.mulDiv(shares, tr.pending1, totalShares);
+            uint256 dReserve0 = FullMath.mulDiv(shares, tr.reserve0, totalShares);
+            uint256 dReserve1 = FullMath.mulDiv(shares, tr.reserve1, totalShares);
+            tr.pending0 -= dPending0;
+            tr.pending1 -= dPending1;
+            tr.reserve0 -= dReserve0;
+            tr.reserve1 -= dReserve1;
+            heldOut0 = dPending0 + dReserve0;
+            heldOut1 = dPending1 + dReserve1;
+        }
+
+        // Burn FIRST (CEI), then realize the banded withdrawal via the callback.
+        IFeraShare(tr.share).burn(msg.sender, shares);
+
+        (uint256 out0, uint256 out1) = abi.decode(
+            poolManager.unlock(abi.encode(CB_WITHDRAW, id, t, abi.encode(shares, totalShares, msg.sender))),
+            (uint256, uint256)
         );
-    }
 
-    /// @inheritdoc IFeraVault
-    /// @dev Settle a matured, un-flagged request. PERMISSIONLESS caller; the payout ALWAYS goes to
-    ///      `request.owner` (a third party can only PUSH the matured claim to the owner, never
-    ///      redirect it). Solvency by construction: pays the escrowed shares' FLOORED pro-rata fraction
-    ///      of CURRENT holdings vs CURRENT totalSupply (reusing the exact CB_WITHDRAW/CB_WITHDRAW_SINGLE
-    ///      primitives) and burns the escrow as the assets leave — pricePerShare-neutral. Settlement +
-    ///      the pause gate + all request-state guards live in VaultQueue.claim.
-    /// @dev PAUSE SEMANTICS CHANGE (re-audit note): this is DELIBERATELY gated by the vault pause
-    ///      (VaultQueue.claim reverts `ClaimsPaused` when `pools[id].paused`). This REVERSES the legacy
-    ///      "withdrawals are NEVER pausable" rule (INV-11) — the 24h delay + pause together ARE the new
-    ///      incident circuit-breaker: during a confirmed exploit, pausing freezes ALL queued claims so
-    ///      an attacker's matured claims cannot settle. `requestWithdraw` stays open; deposits + every
-    ///      strategy action remain paused exactly as before.
-    function claimWithdraw(uint256 reqId) external nonReentrant returns (uint256 amount0, uint256 amount1) {
-        WithdrawRequest storage r = withdrawRequests[reqId];
-        PoolId id = r.id;
-        uint8 t = r.t;
-        return VaultQueue.claim(
-            withdrawRequests, tranches[id][t], pools[id], _vaultCtx(id, t), reqId, revenueDistributor, anchorStaking
-        );
-    }
+        amount0 = out0 + heldOut0;
+        amount1 = out1 + heldOut1;
+        _refund(pools[id].key.currency0, msg.sender, heldOut0);
+        _refund(pools[id].key.currency1, msg.sender, heldOut1);
 
-    /// @inheritdoc IFeraVault
-    /// @dev Guardian-only incident FREEZE of a pending claim (only while `!settled`). The guardian can
-    ///      ONLY freeze — never seize, redirect, or burn. A flagged request cannot be claimed until the
-    ///      owner (timelock) resolves it via `resolveFlagged`. Body in VaultQueue (bytecode relief).
-    function flag(uint256 reqId) external onlyGuardian {
-        VaultQueue.flag(withdrawRequests, reqId, msg.sender);
-    }
-
-    /// @inheritdoc IFeraVault
-    /// @dev Owner (timelock) resolution of a FLAGGED request — the ONLY authority that resolves a
-    ///      flag, so a frozen request can never be trapped. `release=true` clears the flag (the claim
-    ///      proceeds once matured). `release=false` (the default incident action) RETURNS the escrowed
-    ///      shares to `request.owner` and voids the request — the owner keeps their shares (still fully
-    ///      invested) and may re-request. Body in VaultQueue.
-    function resolveFlagged(uint256 reqId, bool release) external onlyOwner {
-        VaultQueue.resolve(withdrawRequests, tranches, reqId, release);
-    }
-
-    /// @inheritdoc IFeraVault
-    /// @dev ANTI-TRAP recourse: the request OWNER reclaims their own ESCROWED shares from a still-
-    ///      pending request, voiding it. This is what guarantees "no exit can trap funds" under the
-    ///      async model — WITHOUT it, a request whose recorded slippage bound (minAmount*/minOut) can
-    ///      never be met would revert on every claim forever, and (since the guardian defaults to
-    ///      address(0), so nothing can be flagged) the owner-only `resolveFlagged` return path could
-    ///      never fire either. Returns SHARES (never assets) so it moves no value and cannot bypass the
-    ///      delay — to actually exit, the owner must re-`requestWithdraw` and wait again. NOT pause-
-    ///      gated (reclaiming one's own shares is harmless during an incident — no assets move). A
-    ///      FLAGGED request cannot be self-canceled (guardian freeze; only the owner resolves it).
-    ///      Body in VaultQueue.
-    function cancelWithdraw(uint256 reqId) external nonReentrant {
-        VaultQueue.cancel(withdrawRequests, tranches, reqId, msg.sender);
-    }
-
-    /// @inheritdoc IFeraVault
-    function setWithdrawGuardian(address guardian) external onlyOwner {
-        withdrawGuardian = guardian;
-        emit WithdrawGuardianSet(guardian);
+        if (amount0 < minAmount0 || amount1 < minAmount1) revert Slippage();
+        emit Withdraw(PoolId.unwrap(id), msg.sender, amount0, amount1, shares, t);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
@@ -867,22 +818,30 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     }
 
     /// @inheritdoc IFeraVault
-    /// @dev UNIVERSAL ASYNC REDEMPTION (single-token variant) — REPLACES the old instant
-    ///      `withdrawSingle`. ESCROWS the caller's shares and records a `single=true` request carrying
-    ///      `tokenOut`/`minOut`; the bounded single-token swap executes at CLAIM time within the SAME
-    ///      on-chain TWAP slippage bound the pre-queue path used. NO instant exit remains. The always-
-    ///      available fallback is the in-kind `requestWithdraw` (no swap, no venue). Escrow body in
-    ///      VaultQueue; the 1h deposit cooldown gates the REQUEST.
-    function requestWithdrawSingle(PoolId id, uint8 t, uint256 shares, address tokenOut, uint256 minOut)
+    /// @dev NEVER pausable (INV-11). Redeems into ONE token by first taking the pro-rata IN-KIND slice
+    ///      (base + limit + idle) and then self-swapping the unwanted leg within the slippage bound. If
+    ///      the swap cannot meet `minOut`, this reverts — and the user ALWAYS retains the unblockable
+    ///      in-kind exit via `withdraw` (no swap, no venue). Output value ≤ pro-rata NAV by construction.
+    function withdrawSingle(PoolId id, uint8 t, uint256 shares, address tokenOut, uint256 minOut)
         external
         nonReentrant
         knownTranche(id, t)
-        returns (uint256 reqId)
+        returns (uint256 amountOut)
     {
         _requireBaseLimit(id, t);
-        reqId = nextReqId++;
-        VaultQueue.request(
-            withdrawRequests, tranches[id][t], pools[id], lastDepositTs[id][t], reqId, id, t, shares, true, tokenOut, minOut, 0, 0
+        // EIP-170 size-split: cooldown, tokenOut validation, checkpoint, pro-rata held debit, burn,
+        // single-coin callback, minOut check + WithdrawSingle emit live in VaultActions (delegatecalled;
+        // `msg.sender` preserved). Byte-identical to the pre-split inline path.
+        return VaultActions.withdrawSingle(
+            tranches[id][t],
+            pools[id],
+            _vaultCtx(id, t),
+            shares,
+            tokenOut,
+            minOut,
+            revenueDistributor,
+            anchorStaking,
+            lastDepositTs[id][t]
         );
     }
 

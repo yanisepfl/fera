@@ -87,31 +87,6 @@ interface IFeraVault {
     ///         notion of per-pool eligibility) — has NO on-chain effect on fee generation/routing.
     event EmissionsEligibilityChanged(bytes32 indexed poolId, bool eligible);
 
-    // ── Universal 24h async-redemption queue (ERC-7540-style) ──────────────────────────────
-    /// @notice A redemption was REQUESTED: `shares` of `poolId`/`tranche` were escrowed into the vault
-    ///         (they REMAIN in totalSupply until burned at claim) and will mature at `unlockTime`.
-    event WithdrawRequested(
-        uint256 indexed reqId, address indexed owner, bytes32 indexed poolId, uint8 tranche, uint256 shares, uint64 unlockTime
-    );
-    /// @notice A matured request was CLAIMED (permissionless caller; payout always to `owner`). For a
-    ///         single-token claim, the paid leg is carried in whichever of amount0/amount1 matches the
-    ///         request's tokenOut; the other is 0.
-    event WithdrawClaimed(uint256 indexed reqId, address indexed owner, uint256 amount0, uint256 amount1);
-    /// @notice The guardian FROZE a pending claim (incident response). The guardian can only freeze —
-    ///         never seize/redirect/burn; the owner (timelock) resolves it.
-    event WithdrawFlagged(uint256 indexed reqId, address indexed guardian);
-    /// @notice The owner resolved a flag with `release=false`: the escrowed shares were RETURNED to
-    ///         `owner` and the request voided.
-    event WithdrawReturned(uint256 indexed reqId, address indexed owner, uint256 shares);
-    /// @notice The owner resolved a flag with `release=true`: the flag was cleared and the claim may
-    ///         proceed once matured.
-    event WithdrawFlagResolved(uint256 indexed reqId);
-    /// @notice The request owner self-CANCELED a still-pending request: the escrowed shares were
-    ///         returned to them (anti-trap recourse; moves no assets, does not bypass the delay).
-    event WithdrawCanceled(uint256 indexed reqId, address indexed owner, uint256 shares);
-    /// @notice The owner (timelock) set the withdraw guardian (the freeze-only incident role).
-    event WithdrawGuardianSet(address indexed guardian);
-
     // ── Errors ───────────────────────────────────────────────────────────────────────────
     error ZeroAddress(); // zero-address rejected on keeper setter + immutable ctor wiring
     error DepositsPaused(); // INV-11 (deposits ONLY — withdrawals are never pausable)
@@ -173,20 +148,6 @@ interface IFeraVault {
     /// @notice v3-hardening (§5.1): the pool-vs-oracle drift is below `RWA_ORACLE_RECENTER_HYSTERESIS_BPS`
     ///         — there is nothing meaningful to recenter (moving liquidity would be pure churn).
     error OracleDeviationTooSmall();
-    // ── Universal async-redemption queue errors ────────────────────────────────────────────
-    error ZeroShares(); // requestWithdraw* with shares == 0
-    error OnlyGuardian(); // flag() caller is not the withdraw guardian
-    error UnknownRequest(); // reqId was never issued (owner == address(0))
-    error RequestSettled(); // request already claimed OR returned (terminal)
-    error RequestFlagged(); // claimWithdraw on a guardian-frozen request
-    error RequestNotMatured(); // claimWithdraw before unlockTime (the 24h delay has not elapsed)
-    error RequestNotFlagged(); // resolveFlagged on a request that is not flagged
-    error NotRequestOwner(); // cancelWithdraw caller is not the request owner
-    /// @notice claimWithdraw while the pool is paused. DELIBERATE semantics change vs the legacy
-    ///         "withdrawals never pausable" rule: the delay + pause together are the incident
-    ///         circuit-breaker (a confirmed exploit → pause freezes ALL queued claims). Requests +
-    ///         (see the withdraw-guardian flow) flags stay available while paused.
-    error ClaimsPaused();
 
     /// @notice Deposit into a tranche of `poolId`, ratio-matched across its band set; mints the
     ///         tranche's ERC-20 shares at NAV. Respects pause + TWAP gate (INV-11 — pausable side).
@@ -194,48 +155,11 @@ interface IFeraVault {
         external
         returns (uint256 sharesMinted);
 
-    /// @notice REQUEST an in-kind redemption (ERC-7540-style). ESCROWS `shares` of the tranche into the
-    ///         vault (the caller must have approved the vault to pull them) and records a request that
-    ///         matures after `WITHDRAW_DELAY_SEC`. Returns the `reqId`. NO assets move here — settle
-    ///         later with `claimWithdraw`. Gated by the depositor's own 1h cooldown; NOT gated by pause
-    ///         (requests stay open during an incident — only claims freeze). The escrowed shares REMAIN
-    ///         in totalSupply (the requester stays proportionally invested through the delay).
-    function requestWithdraw(PoolId poolId, uint8 tranche, uint256 shares, uint256 minAmount0, uint256 minAmount1)
+    /// @notice Burn `shares` of a tranche pro-rata across its bands (+ held balances). NEVER
+    ///         pausable (INV-11); only the depositor's own 1h cooldown applies.
+    function withdraw(PoolId poolId, uint8 tranche, uint256 shares, uint256 minAmount0, uint256 minAmount1)
         external
-        returns (uint256 reqId);
-
-    /// @notice CLAIM a matured request — settle it IN-KIND PRO-RATA of the vault's CURRENT holdings
-    ///         against the CURRENT totalSupply (the exact floor primitive the vault already uses), then
-    ///         BURN the escrowed shares as the assets leave (pricePerShare-neutral). PERMISSIONLESS
-    ///         caller; the payout ALWAYS goes to `request.owner` (a third party can only push a matured
-    ///         claim, never redirect it). Reverts `RequestNotMatured` before the delay elapses,
-    ///         `RequestFlagged` if a guardian froze it, `RequestSettled` if already settled, and
-    ///         `ClaimsPaused` while the pool is paused (the incident circuit-breaker). For a
-    ///         single-token request, the paid leg is returned in whichever of amount0/amount1 matches
-    ///         the request's tokenOut (the other is 0).
-    function claimWithdraw(uint256 reqId) external returns (uint256 amount0, uint256 amount1);
-
-    /// @notice Guardian-only FREEZE of a pending claim during the delay window (incident response).
-    ///         The guardian can ONLY freeze — never seize, redirect, or burn. A flagged request cannot
-    ///         be claimed until the owner (timelock) resolves it. Reverts `OnlyGuardian` / `RequestSettled`.
-    function flag(uint256 reqId) external;
-
-    /// @notice Owner-only resolution of a FLAGGED request (the only authority — a frozen request can
-    ///         never be trapped). `release=true` clears the flag (the claim proceeds once matured);
-    ///         `release=false` (the default incident action) RETURNS the escrowed shares to
-    ///         `request.owner` and voids the request. Reverts `RequestNotFlagged` / `RequestSettled`.
-    function resolveFlagged(uint256 reqId, bool release) external;
-
-    /// @notice Anti-trap recourse: the request OWNER reclaims their own escrowed shares from a still-
-    ///         pending (un-settled, un-flagged) request, voiding it. Guarantees no exit can trap funds
-    ///         (e.g. a request whose recorded slippage bound can never be met). Returns SHARES, not
-    ///         assets — moves no value and does not bypass the delay (re-request to actually exit).
-    ///         Reverts `NotRequestOwner` / `RequestSettled` / `RequestFlagged`.
-    function cancelWithdraw(uint256 reqId) external;
-
-    /// @notice Owner-only setter for the withdraw guardian (the freeze-only incident role). address(0)
-    ///         disables flagging (the default until a guardian is set).
-    function setWithdrawGuardian(address guardian) external;
+        returns (uint256 amount0, uint256 amount1);
 
     /// @notice Checkpoint a tranche: poke its bands, realize fees, skim EXACTLY 10% to the
     ///         RevenueDistributor (INV-3 per tranche, INV-15), retain 90% as pending LP income.
@@ -367,14 +291,14 @@ interface IFeraVault {
     ///         VOL_WIDTH_MULT_MAX_LEGAL_BPS] legal range (the Gamma lesson).
     function setVolWidthMultBounds(uint256 minBps, uint256 maxBps) external;
 
-    /// @notice REQUEST a single-token redemption (ERC-7540-style). ESCROWS `shares` and records a
-    ///         `single=true` request carrying `tokenOut`/`minOut`; the bounded single-token swap runs
-    ///         at CLAIM time within the same on-chain TWAP slippage bound. Returns the `reqId`. NO
-    ///         assets move here — settle later with `claimWithdraw`. The always-available fallback is
-    ///         the in-kind `requestWithdraw` (no swap, no venue). Gated by the 1h deposit cooldown.
-    function requestWithdrawSingle(PoolId poolId, uint8 tranche, uint256 shares, address tokenOut, uint256 minOut)
+    /// @notice Redeem `shares` of a tranche into ONE token (`tokenOut`), swapping the other leg
+    ///         internally against the own pool within the slippage bound; reverts if `minOut` unmet.
+    ///         NEVER returns more than the pro-rata NAV. The always-available IN-KIND fallback is the
+    ///         plain `withdraw` (never pausable, no swap, no venue) — so redemptions are unblockable
+    ///         (INV-11) even if every swap venue is down. NEVER pausable.
+    function withdrawSingle(PoolId poolId, uint8 tranche, uint256 shares, address tokenOut, uint256 minOut)
         external
-        returns (uint256 reqId);
+        returns (uint256 amountOut);
 
     // ── Views ────────────────────────────────────────────────────────────────────────────
     /// @notice The per-(pool, tranche) ERC-20 share token address.

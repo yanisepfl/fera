@@ -22,7 +22,6 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
-import {QW} from "../utils/QW.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice Multi-tranche NAV conservation under interleaved deposit / withdraw / skimIdle /
@@ -157,7 +156,8 @@ contract VaultNavSequenceTest is Deployers {
         uint256 bal = share.balanceOf(who);
         if (bal == 0) return 0;
         (uint256 b0, uint256 b1) = _bal(who);
-        QW.drain(vault, p.id, p.t, bal, 0, 0, who); // request → warp WITHDRAW_DELAY_SEC → claim (in-kind)
+        vm.prank(who);
+        vault.withdraw(p.id, p.t, bal, 0, 0);
         (uint256 m0, uint256 m1) = _bal(who);
         valueOut = (m0 - b0) + (m1 - b1);
     }
@@ -205,16 +205,10 @@ contract VaultNavSequenceTest is Deployers {
         uint256 bal = share.balanceOf(actor);
         if (bal == 0) return 0;
         (uint256 b0, uint256 b1) = _bal(actor);
-        // Universal async redemption (guarded): request (may revert on cooldown) → delay → claim.
         vm.prank(actor);
-        share.approve(address(vault), bal);
-        vm.prank(actor);
-        try vault.requestWithdraw(pos.id, pos.t, bal, 0, 0) returns (uint256 rid) {
-            vm.warp(block.timestamp + QW.DELAY);
-            try vault.claimWithdraw(rid) {
-                (uint256 m0, uint256 m1) = _bal(actor);
-                out = (m0 - b0) + (m1 - b1);
-            } catch {}
+        try vault.withdraw(pos.id, pos.t, bal, 0, 0) {
+            (uint256 m0, uint256 m1) = _bal(actor);
+            out = (m0 - b0) + (m1 - b1);
         } catch {}
     }
 

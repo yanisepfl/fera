@@ -24,7 +24,6 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
-import {QW} from "../utils/QW.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -263,10 +262,8 @@ contract JitAndVaultPoCTest is Deployers {
         // Honest withdraws HALF inside the freshly re-armed vault window -> forfeiture fires on the
         // vault's own band poke/removals, donated to in-range LPs (vault remainder + the direct LP).
         vm.recordLogs();
-        // Universal async redemption: the band-removing settlement happens at CLAIM (QW.drain drives
-        // request → warp WITHDRAW_DELAY_SEC → claim). The JIT window is measured at the removal, i.e.
-        // at claim time — well past any re-armed window here — so forfeiture is naturally ≤ the bound.
-        QW.drain(vault, id, 0, hShares / 2, 0, 0, honest);
+        vm.prank(honest);
+        vault.withdraw(id, 0, hShares / 2, 0, 0);
         (uint256 f0, uint256 f1, uint256 n) = _forfeited(vm.getRecordedLogs());
 
         emit log_named_uint("V2-3 forfeit events during vault withdraw", n);
@@ -297,10 +294,10 @@ contract JitAndVaultPoCTest is Deployers {
 
         IFeraShare share = IFeraShare(vault.shareToken(id, 0));
 
-        // Attacker's OWN redemption REQUEST is cooldown-blocked (the cooldown gates the queue entry)...
+        // Attacker's OWN withdraw is cooldown-blocked...
         vm.prank(attacker);
         vm.expectRevert(IFeraVault.CooldownActive.selector);
-        vault.requestWithdraw(id, 0, aShares, 0, 0);
+        vault.withdraw(id, 0, aShares, 0, 0);
 
         // ...and the evasion route is now closed: transferring the fresh shares REVERTS while the
         // deposit cooldown is active (V2-2 patch). The cooldown can no longer be dodged.
@@ -312,7 +309,8 @@ contract JitAndVaultPoCTest is Deployers {
         vm.warp(block.timestamp + COOLDOWN);
         vm.prank(attacker);
         share.transfer(bob, aShares);
-        (uint256 out0, uint256 out1) = QW.drain(vault, id, 0, aShares, 0, 0, bob);
+        vm.prank(bob);
+        (uint256 out0, uint256 out1) = vault.withdraw(id, 0, aShares, 0, 0);
         assertGt(out0 + out1, 0, "post-cooldown transfer+withdraw should succeed");
         emit log("V2-2: 1h deposit cooldown transfer-evasion BLOCKED (share-transfer lock)");
     }

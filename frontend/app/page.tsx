@@ -379,7 +379,7 @@ const FAQS = [
   },
   {
     q: "What happens when I withdraw?",
-    a: "You request a withdrawal, and it becomes claimable after a 24-hour safety delay, then settles in-kind: your pro-rata share of the actual pool tokens, with no pricing. The short delay is a guardrail that gives the protocol time to react if anything ever looks wrong.",
+    a: "You withdraw straight from the pool, in-kind: your pro-rata share of the actual tokens, with no pricing and nothing to sell. The only wait is a short one-time hold right after you deposit (a standard anti-gaming guard); once it passes, your exit is always open.",
   },
   {
     q: "What is Robinhood Chain? Are you affiliated with Robinhood?",

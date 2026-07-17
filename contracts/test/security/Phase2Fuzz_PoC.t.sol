@@ -26,7 +26,6 @@ import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
-import {QW} from "../utils/QW.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -346,10 +345,10 @@ contract Phase2FuzzTest is Deployers {
         // Past the anti-JIT cooldown, both exit in the SAME block (no price move between them).
         vm.warp(block.timestamp + COOLDOWN + 1);
 
-        // Universal async redemption: each exits via request → delay → claim. No swaps happen during
-        // the delay, so spot (hence the pro-rata split) is unchanged; sequential claims stay pro-rata.
-        (uint256 a0, uint256 a1) = QW.drain(vault, memeId, 0, aliceSh, 0, 0, alice);
-        (uint256 b0, uint256 b1) = QW.drain(vault, memeId, 0, bobSh, 0, 0, bob);
+        vm.prank(alice);
+        (uint256 a0, uint256 a1) = vault.withdraw(memeId, 0, aliceSh, 0, 0);
+        vm.prank(bob);
+        (uint256 b0, uint256 b1) = vault.withdraw(memeId, 0, bobSh, 0, 0);
 
         // Pro-rata IN-KIND on BOTH legs: outputs split by the SHARE ratio, not by the quote NAV.
         assertApproxEqRel(a0 * bobSh, b0 * aliceSh, 1e15, "token0 leg not pro-rata to shares");

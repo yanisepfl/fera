@@ -22,7 +22,6 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
-import {QW} from "../utils/QW.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice AGENT-6 RE-AUDIT — stateful NAV-conservation invariant for the v2 BASE + LIMIT + IDLE
@@ -149,16 +148,10 @@ contract BaseLimitNavInvariantTest is Deployers {
         uint256 bal = share.balanceOf(who);
         if (bal == 0) return 0;
         (uint256 b0, uint256 b1) = _bal(who);
-        // Universal async redemption (guarded): request → delay → claim (in-kind — no TWAP dependency).
         vm.prank(who);
-        share.approve(address(vault), bal);
-        vm.prank(who);
-        try vault.requestWithdraw(blId, t, bal, 0, 0) returns (uint256 rid) {
-            vm.warp(block.timestamp + QW.DELAY);
-            try vault.claimWithdraw(rid) {
-                (uint256 m0, uint256 m1) = _bal(who);
-                valueOut = (m0 - b0) + (m1 - b1);
-            } catch {}
+        try vault.withdraw(blId, t, bal, 0, 0) {
+            (uint256 m0, uint256 m1) = _bal(who);
+            valueOut = (m0 - b0) + (m1 - b1);
         } catch {}
     }
 
@@ -183,9 +176,7 @@ contract BaseLimitNavInvariantTest is Deployers {
             _refresh();
             ghostForeignOut += _withdrawAllMeasured(actor, t);
         } else if (op == 3) {
-            // foreign FULL single-coin exit (self-swaps the unwanted leg — bounded, output ≤ pro-rata).
-            // Universal async redemption: request → delay → claim; the bounded self-swap runs at CLAIM,
-            // so the TWAP is refreshed AFTER the 24h warp (which would otherwise leave it stale).
+            // foreign FULL single-coin exit (self-swaps the unwanted leg — bounded, output ≤ pro-rata)
             vm.warp(block.timestamp + COOLDOWN + 1);
             _refresh();
             IERC20 share = IERC20(vault.shareToken(blId, t));
@@ -194,15 +185,9 @@ contract BaseLimitNavInvariantTest is Deployers {
                 address tok = (seed & 1) == 0 ? Currency.unwrap(currency0) : Currency.unwrap(currency1);
                 (uint256 b0, uint256 b1) = _bal(actor);
                 vm.prank(actor);
-                share.approve(address(vault), bal);
-                vm.prank(actor);
-                try vault.requestWithdrawSingle(blId, t, bal, tok, 0) returns (uint256 rid) {
-                    vm.warp(block.timestamp + QW.DELAY);
-                    _refresh();
-                    try vault.claimWithdraw(rid) {
-                        (uint256 m0, uint256 m1) = _bal(actor);
-                        ghostForeignOut += (m0 - b0) + (m1 - b1);
-                    } catch {}
+                try vault.withdrawSingle(blId, t, bal, tok, 0) {
+                    (uint256 m0, uint256 m1) = _bal(actor);
+                    ghostForeignOut += (m0 - b0) + (m1 - b1);
                 } catch {}
             }
         } else if (op == 4) {
