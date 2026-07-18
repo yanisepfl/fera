@@ -31,6 +31,9 @@ const EARLIEST = 12455000; // first FERA pool creation block
 // keccak256("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)")
 const SWAP_TOPIC =
   "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f";
+// keccak256("ModifyLiquidity(bytes32,address,int24,int24,int256,bytes32)")
+const ML_TOPIC =
+  "0xf208f4912782fd25c7f114ca3723a2d5dd6f3bcc3ac8db5af63baa85f711d5ec";
 
 // symbol, poolId, quoteIsToken0 (true = wWETH is token0)
 const POOLS = [
@@ -74,15 +77,15 @@ async function main() {
   const rate = (latestNum - hexInt(past.number)) / Math.max(latestTs - hexInt(past.timestamp), 1);
   const fromBlock = Math.max(Math.floor(latestNum - HOURS * 3600 * rate), EARLIEST);
 
-  // One log query covers all pools (topic1 = OR-list of poolIds).
-  const logs = await rpc("eth_getLogs", [
-    {
-      address: PM,
-      fromBlock: "0x" + fromBlock.toString(16),
-      toBlock: "latest",
-      topics: [SWAP_TOPIC, POOLS.map(([, id]) => id)],
-    },
-  ]);
+  // One log query per event type covers all pools (topic1 = OR-list of poolIds).
+  const windowFilter = (topic0) => ({
+    address: PM,
+    fromBlock: "0x" + fromBlock.toString(16),
+    toBlock: "latest",
+    topics: [topic0, POOLS.map(([, id]) => id)],
+  });
+  const logs = await rpc("eth_getLogs", [windowFilter(SWAP_TOPIC)]);
+  const mlLogs = await rpc("eth_getLogs", [windowFilter(ML_TOPIC)]);
 
   // wWETH price for USD valuation (best-effort; falls back to wWETH units).
   let ethUsd = 0;
@@ -103,6 +106,7 @@ async function main() {
   // Aggregate per pool.
   const stats = new Map(POOLS.map(([sym, id, q0]) => [id.toLowerCase(), {
     sym, q0, swaps: 0, vol: 0, router: 0, senders: new Set(), big: null,
+    feeLo: Infinity, feeHi: 0, liqAdds: 0, liqRemoves: 0,
   }]));
   for (const l of logs) {
     const s = stats.get(l.topics[1].toLowerCase());
@@ -110,14 +114,26 @@ async function main() {
     const d = l.data.slice(2);
     const a0 = int128(d.slice(0, 64));
     const a1 = int128(d.slice(64, 128));
+    // data layout: amount0, amount1, sqrtPriceX96, liquidity, tick, fee
+    const swapFee = Number(BigInt("0x" + d.slice(320, 384))) / 10_000; // pips → %
     const wethLeg = s.q0 ? a0 : a1;
     const weth = Math.abs(Number(wethLeg)) / 1e18;
     const sender = ("0x" + l.topics[2].slice(-40)).toLowerCase();
     s.swaps++;
     s.vol += weth;
     s.senders.add(sender);
+    s.feeLo = Math.min(s.feeLo, swapFee);
+    s.feeHi = Math.max(s.feeHi, swapFee);
     if (sender === ROUTER) s.router++;
     if (!s.big || weth > s.big.weth) s.big = { weth, tx: l.transactionHash };
+  }
+  // Liquidity modifications (vault rebalances, LP deposits/withdrawals) in the window.
+  for (const l of mlLogs) {
+    const s = stats.get(l.topics[1].toLowerCase());
+    if (!s) continue;
+    const delta = int128(l.data.slice(2).slice(128, 192)); // int256 slot 2
+    if (delta > 0n) s.liqAdds++;
+    else if (delta < 0n) s.liqRemoves++;
   }
 
   // Live fee + NAV per pool (eth_call).
@@ -148,11 +164,16 @@ async function main() {
     "",
   ];
   for (const r of rows) {
-    const fee = r.fee !== undefined ? `${r.fee.toFixed(2)}%` : "—";
+    // fee: live now + the day's traded range (from each swap's applied fee)
+    const feeNow = r.fee !== undefined ? `${r.fee.toFixed(2)}%` : "—";
+    const feeRange =
+      r.swaps > 0 ? ` (day ${r.feeLo.toFixed(2)}–${r.feeHi.toFixed(2)}%)` : "";
     const nav = r.nav !== undefined ? usd(r.nav) : "—";
+    const liq =
+      r.liqAdds || r.liqRemoves ? ` · liq +${r.liqAdds}/−${r.liqRemoves}` : "";
     lines.push(
       `<b>${r.sym}</b>  ${r.swaps} swaps · ${usd(r.vol)} vol · ${r.router} routed · ` +
-        `fee ${fee} · NAV ${nav}`,
+        `fee ${feeNow}${feeRange} · NAV ${nav}${liq}`,
     );
     if (r.big)
       lines.push(

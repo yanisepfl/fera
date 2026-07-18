@@ -23,7 +23,8 @@
     "keeper:rwa-strategy": "tsx keepers/rwaStrategy.ts",
     "keeper:root-poster": "tsx keepers/emissionsRootPoster.ts",
     "keeper:oracle-monitor": "tsx keepers/oracleStaleness.ts",
-    "keeper:event-calendar": "tsx keepers/eventCalendar.ts"
+    "keeper:event-calendar": "tsx keepers/eventCalendar.ts",
+    "keeper:vault": "tsx keepers/vaultStrategy.ts"
   },
   "dependencies": {
     "hono": "^4.6.0",

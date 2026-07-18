@@ -1,0 +1,51 @@
+# FERA vault-strategy keeper — free runner (GitHub Actions cron).
+#
+# Every ~30 min: discovers the pools on-chain, then per seeded tranche
+#   - recenters the base band ONLY if price has left it (position stopped earning)
+#   - builds the idle reserve + deploys the limit band where one is missing
+# Every action is SIMULATED first and sent only if the simulation succeeds, so a calm
+# tick costs zero gas. All actions are keeper-bounded on-chain (IL/TWAP/slippage clamps
+# + fail-static doctrine): a missed or late run just means positions hold.
+#
+# Setup (one-time), repo → Settings → Secrets and variables → Actions:
+#   KEEPER_PRIVATE_KEY  = the FERA_VAULT_KEEPER hot key (bounded on-chain by design)
+#   RPC_URL             = Alchemy Robinhood-Chain URL (recommended; falls back to public)
+# Without KEEPER_PRIVATE_KEY the job still runs and logs what it WOULD do (dry run).
+name: FERA keeper
+
+on:
+  schedule:
+    - cron: "*/30 * * * *" # every 30 min (best-effort scheduling is fine — fail-static)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fera-keeper
+  cancel-in-progress: false
+
+jobs:
+  keeper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Vault strategy tick
+        env:
+          PONDER_RPC_URL_RH: ${{ secrets.RPC_URL || 'https://rpc.mainnet.chain.robinhood.com' }}
+          PONDER_CHAIN_ID: "4663"
+          FERA_START_BLOCK: "12347590"
+          KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
+          # live mode only when the key is present; otherwise stays dry-run
+          KEEPER_DRY_RUN: ${{ secrets.KEEPER_PRIVATE_KEY != '' && 'false' || 'true' }}
+        run: npm run keeper:vault
