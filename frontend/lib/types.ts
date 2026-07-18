@@ -145,6 +145,33 @@ export interface PoolSummary {
   vaultLive?: boolean;
   /** REAL market facts for the underlying venue (present in live mode; always real). */
   market?: PoolMarketStats;
+  /**
+   * FRONTEND-ONLY overlay (NOT a §8 field — never sent by the API). Attached by
+   * lib/hooks/useLivePools.ts when the pool is in config/pools.ts (the deployed
+   * registry on chain 4663) and the values were just read from the contracts.
+   * Presence ⇒ the vault verifiably exists on-chain for this pool.
+   */
+  chain?: ChainLiveOverlay;
+}
+
+/** Values read straight from the chain (vault + hook), merged over the API/mock row. */
+export interface ChainLiveOverlay {
+  /**
+   * true ⇒ `currentFeePips` IS the real hook fee (FeraHook.getDynamicFee) — render it
+   * verbatim, with NO simulated walk (lib/hooks/useLiveFee's walk is mock-only).
+   */
+  feeLive: boolean;
+  /** Tranche-0 NAV in QUOTE TOKENS (decimal-scaled), from FeraVault.quoteNav. */
+  navQuote?: number;
+  /** Quote-token symbol `navQuote` is denominated in (e.g. "wWETH"). */
+  quoteSymbol?: string;
+  /**
+   * true ⇒ indexer-derived stats (APRs, USD TVL, depth, volume) are NOT available for
+   * this pool yet — render "—", never 0. On-chain values (fee, NAV) are still real.
+   */
+  statsPending?: boolean;
+  /** FeraVault.depositsPaused(poolId). */
+  depositsPaused?: boolean;
 }
 
 // ----------------------------------------------------------------------------

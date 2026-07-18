@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { usePools } from "@/lib/hooks/useApi";
-import type { Regime } from "@/lib/types";
+import { useLivePools } from "@/lib/hooks/useLivePools";
+import type { PoolSummary, Regime } from "@/lib/types";
 import { PoolRow } from "./PoolRow";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -18,7 +18,9 @@ const TABS: { key: Filter; label: string }[] = [
 type Sort = "tvl" | "total" | "fee";
 
 export function PoolList() {
-  const { data: pools, isLoading, error, refetch } = usePools();
+  // API/mock list with the deployed registry pools (config/pools.ts) enriched by LIVE
+  // on-chain reads (real dynamic fee + quote NAV) — see lib/hooks/useLivePools.ts.
+  const { data: pools, isLoading, error, refetch } = useLivePools();
   const [filter, setFilter] = useState<Filter>("ALL");
   const [sort, setSort] = useState<Sort>("tvl");
 
@@ -32,15 +34,21 @@ export function PoolList() {
     const list = (pools ?? []).filter(
       (p) => filter === "ALL" || p.regime === filter
     );
+    // Chain-live rows have real USD TVL only once indexed — sort those on quote NAV.
+    const tvlKey = (p: PoolSummary) =>
+      p.chain?.statsPending ? p.chain.navQuote ?? 0 : p.tvlUsd;
     return [...list].sort((a, b) => {
-      if (marketMode) {
+      // The deployed on-chain pools lead the list — they're the real product.
+      const liveDelta = (b.chain ? 1 : 0) - (a.chain ? 1 : 0);
+      if (liveDelta !== 0) return liveDelta;
+      if (marketMode && !a.chain && !b.chain) {
         const ma = a.market, mb = b.market;
         if (sort === "tvl") return (mb?.tvlUsd ?? 0) - (ma?.tvlUsd ?? 0);
         if (sort === "fee")
           return Math.abs(mb?.priceChange24h ?? 0) - Math.abs(ma?.priceChange24h ?? 0);
         return (mb?.volume24hUsd ?? 0) - (ma?.volume24hUsd ?? 0);
       }
-      if (sort === "tvl") return b.tvlUsd - a.tvlUsd;
+      if (sort === "tvl") return tvlKey(b) - tvlKey(a);
       if (sort === "fee") return b.currentFeePips - a.currentFeePips;
       return b.feeApr + b.emissionsApr - (a.feeApr + a.emissionsApr);
     });

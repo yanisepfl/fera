@@ -69,6 +69,18 @@ export class Store {
     return this.tvlUsdE6(p);
   }
 
+  /** On-chain-posted Merkle root for an epoch (indexed from Distributor:RootPosted), or null.
+   *  Used by the proof route to refuse to serve a bundle whose root is NOT posted on-chain
+   *  (e.g. a dry-run artifact) — the API must never hand out unclaimable/fabricated proofs. */
+  async epochPostedRoot(epochId: bigint): Promise<Hex | null> {
+    const rows: Row[] = await this.db
+      .select()
+      .from(this.schema.epoch)
+      .where(eq(this.schema.epoch.id, epochId))
+      .limit(1);
+    return (rows[0]?.merkleRoot as Hex | undefined) ?? null;
+  }
+
   private async latestFinalizedEpoch(): Promise<Row | null> {
     const rows: Row[] = await this.db
       .select()
@@ -87,7 +99,11 @@ export class Store {
     return rows[0] ?? null;
   }
 
-  private async bestCompetitorDepth(pairKey: string): Promise<CompetitorDepth | null> {
+  // Internal: deepest competitor on a pair, with the depth kept as E6 bigint (USD-string
+  // rendering happens only at the response boundary — §8 conventions v0.2).
+  private async bestCompetitorDepthE6(
+    pairKey: string,
+  ): Promise<{ competitorPoolId: Hex; dex: string; feePips: number; depthE6: bigint } | null> {
     // latest depth snapshot per competitor pool on this pair; pick the deepest.
     const rows: Row[] = await this.db
       .select()
@@ -95,18 +111,15 @@ export class Store {
       .where(eq(this.schema.competitorDepthSnapshot.pairKey, pairKey))
       .orderBy(desc(this.schema.competitorDepthSnapshot.timestamp));
     const seen = new Set<string>();
-    let best: CompetitorDepth | null = null;
+    let best: { competitorPoolId: Hex; dex: string; feePips: number; depthE6: bigint } | null = null;
     for (const r of rows) {
       if (seen.has(r.competitorPoolId)) continue; // first = latest per pool
       seen.add(r.competitorPoolId);
       const comp = await this.competitorMeta(r.competitorPoolId);
-      const d: CompetitorDepth = {
-        competitorPoolId: r.competitorPoolId,
-        dex: comp?.dex ?? "unknown",
-        feePips: r.feePips,
-        depth1PctUsd: (r.depth1PctUsdE6 ?? 0n).toString(),
-      };
-      if (!best || (r.depth1PctUsdE6 ?? 0n) > BigInt(best.depth1PctUsd)) best = d;
+      const depthE6 = (r.depth1PctUsdE6 ?? 0n) as bigint;
+      if (!best || depthE6 > best.depthE6) {
+        best = { competitorPoolId: r.competitorPoolId, dex: comp?.dex ?? "unknown", feePips: r.feePips, depthE6 };
+      }
     }
     return best;
   }
@@ -170,10 +183,10 @@ export class Store {
       const stat = latest ? await this.poolEpochStat(latest.id, p.id) : null;
       const feesEarnedWindow = stat?.feesEarnedUsdE6 ?? 0n;
       const emissionsUsd = await this.poolEmissionsUsdE6(p.id, latest);
-      const best = await this.bestCompetitorDepth(this.pairKeyOf(p));
+      const best = await this.bestCompetitorDepthE6(this.pairKeyOf(p));
       const feraDepth = this.feraDepth1PctUsdE6(p);
-      const depthVsBest = best && BigInt(best.depth1PctUsd) > 0n
-        ? this.ratio(feraDepth, BigInt(best.depth1PctUsd))
+      const depthVsBest = best && best.depthE6 > 0n
+        ? this.ratio(feraDepth, best.depthE6)
         : "0"; // 0 == no competitor benchmark indexed yet
       items.push({
         poolId: p.id,
@@ -280,27 +293,32 @@ export class Store {
     const seen = new Set<string>();
     const competitors: CompetitorDepth[] = [];
     let best: CompetitorDepth | null = null;
+    let bestE6 = 0n;
     for (const r of snaps) {
       if (seen.has(r.competitorPoolId)) continue;
       seen.add(r.competitorPoolId);
       const meta = await this.competitorMeta(r.competitorPoolId);
+      const depthE6 = (r.depth1PctUsdE6 ?? 0n) as bigint;
       const d: CompetitorDepth = {
         competitorPoolId: r.competitorPoolId,
         dex: meta?.dex ?? "unknown",
         feePips: r.feePips,
-        depth1PctUsd: (r.depth1PctUsdE6 ?? 0n).toString(),
+        depth1PctUsd: this.usd(depthE6), // §8 conventions v0.2: USD = human-unit decimal string
       };
       competitors.push(d);
-      if (!best || (r.depth1PctUsdE6 ?? 0n) > BigInt(best.depth1PctUsd)) best = d;
+      if (!best || depthE6 > bestE6) {
+        best = d;
+        bestE6 = depthE6;
+      }
     }
     const feraDepth = this.feraDepth1PctUsdE6(p);
     return {
       poolId: p.id,
       pairKey,
-      feraDepth1PctUsd: feraDepth.toString(),
+      feraDepth1PctUsd: this.usd(feraDepth), // §8 conventions v0.2 (was raw E6 — BK fix)
       competitors,
       best,
-      depthVsBest: best && BigInt(best.depth1PctUsd) > 0n ? this.ratio(feraDepth, BigInt(best.depth1PctUsd)) : "0",
+      depthVsBest: best && bestE6 > 0n ? this.ratio(feraDepth, bestE6) : "0",
     };
   }
 

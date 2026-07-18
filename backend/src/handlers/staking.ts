@@ -6,10 +6,13 @@
 
 import { ponder } from "ponder:registry";
 import schema from "ponder:schema";
-import { eventId } from "../lib/ids";
+import { eventId, lowerHex } from "../lib/ids";
 
 ponder.on("AnchorStaking:Staked", async ({ event, context }) => {
-  const { account, amount, lockWeeks } = event.args;
+  const { account, amount } = event.args;
+  // Deployed AnchorStaking v2 emits Staked(account, amount) — no lockWeeks field (BK-1
+  // reconciliation). Kept as 0 in the row; lock mechanics are not event-sourced on-chain.
+  const lockWeeks = 0;
   const ts = Number(event.block.timestamp);
 
   await context.db
@@ -29,7 +32,7 @@ ponder.on("AnchorStaking:Staked", async ({ event, context }) => {
   await context.db
     .insert(schema.stakingPosition)
     .values({
-      id: account.toLowerCase(),
+      id: lowerHex(account),
       account,
       sFera: amount,
       lockWeeks: Number(lockWeeks),
@@ -61,7 +64,7 @@ ponder.on("AnchorStaking:Unstaked", async ({ event, context }) => {
 
   await context.db
     .insert(schema.stakingPosition)
-    .values({ id: account.toLowerCase(), account, sFera: 0n, lastUpdated: ts })
+    .values({ id: lowerHex(account), account, sFera: 0n, lastUpdated: ts })
     .onConflictDoUpdate((row: { sFera: bigint }) => ({
       sFera: row.sFera > amount ? row.sFera - amount : 0n,
       lastUpdated: ts,

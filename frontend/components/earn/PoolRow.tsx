@@ -8,7 +8,7 @@ import { TokenPair } from "@/components/ui/TokenPair";
 import { LiveFee } from "./LiveFee";
 import { DepositDialog } from "./DepositDialog";
 import { Button } from "@/components/ui/Button";
-import { apr, usdCompact, usdPrice, signedPct, multiple } from "@/lib/format";
+import { apr, usdCompact, usdPrice, signedPct, multiple, tokenAmt } from "@/lib/format";
 
 /**
  * One pool in the Earn list. Fee is LIVE; APY is split into fee-yield vs emissions.
@@ -23,9 +23,17 @@ import { apr, usdCompact, usdPrice, signedPct, multiple } from "@/lib/format";
  * shows the REAL market facts for the underlying venue (price, 24h change, 24h volume,
  * pool TVL) and a quiet "Opens at launch" where the vault economics will live. The row
  * click navigates to the pool page (there is nothing to deposit into yet).
+ *
+ * ON-CHAIN LIVE MODE (`pool.chain` present, lib/hooks/useLivePools.ts): the vault IS
+ * deployed and the fee/NAV are read straight from the contracts — the fee renders
+ * verbatim (no simulated walk) and TVL shows the real quote-token NAV. Fields the
+ * indexer hasn't served yet (`chain.statsPending`: APRs, USD TVL, depth) render "—",
+ * never 0.
  */
 export function PoolRow({ pool }: { pool: PoolSummary }) {
   if (pool.vaultLive === false) return <MarketPoolRow pool={pool} />;
+  const chain = pool.chain;
+  const pending = chain?.statsPending === true;
   return (
     <DepositDialog
       pool={pool}
@@ -51,34 +59,53 @@ export function PoolRow({ pool }: { pool: PoolSummary }) {
             <RegimeBadge regime={pool.regime} className="hidden sm:inline-flex" />
           </div>
 
-          {/* live fee */}
+          {/* live fee — real on-chain value renders verbatim, never simulated */}
           <div className="text-right md:text-left">
             <div className="overline mb-0.5 md:hidden">Live fee</div>
-            <LiveFee seedPips={pool.currentFeePips} regime={pool.regime} />
+            {chain && !chain.feeLive ? (
+              <span className="font-mono tnum text-body font-semibold text-mute">—</span>
+            ) : (
+              <LiveFee
+                seedPips={pool.currentFeePips}
+                regime={pool.regime}
+                simulate={!chain?.feeLive}
+              />
+            )}
           </div>
 
-          {/* APY split */}
+          {/* APY split — "—" until the indexer serves real APRs for on-chain pools */}
           <div className="col-span-2 flex items-center gap-4 md:col-span-1">
             <div>
               <div className="overline mb-0.5">Fee APR</div>
               <div className="font-mono tnum text-body font-semibold text-pos">
-                {apr(pool.feeApr)}
+                {pending ? <span className="text-mute">—</span> : apr(pool.feeApr)}
               </div>
             </div>
             <div className="text-mute">+</div>
             <div>
               <div className="overline mb-0.5">Emissions</div>
               <div className="font-mono tnum text-body font-semibold text-accent">
-                {apr(pool.emissionsApr)}
+                {pending ? <span className="text-mute">—</span> : apr(pool.emissionsApr)}
               </div>
             </div>
           </div>
 
-          {/* TVL */}
+          {/* TVL — REAL quote-token NAV when the indexer hasn't priced it in USD yet */}
           <div className="hidden md:block">
             <div className="overline mb-0.5">TVL</div>
             <div className="font-mono tnum text-body text-text">
-              {usdCompact(pool.tvlUsd)}
+              {pending ? (
+                chain?.navQuote !== undefined ? (
+                  <>
+                    {tokenAmt(chain.navQuote, 4)}{" "}
+                    <span className="text-caption text-dim">{chain.quoteSymbol}</span>
+                  </>
+                ) : (
+                  <span className="text-mute">—</span>
+                )
+              ) : (
+                usdCompact(pool.tvlUsd)
+              )}
             </div>
           </div>
 
@@ -86,8 +113,14 @@ export function PoolRow({ pool }: { pool: PoolSummary }) {
           <div className="hidden md:block">
             <div className="overline mb-0.5">Depth vs best</div>
             <div className="font-mono tnum text-body text-text">
-              {multiple(pool.depthVsBest)}
-              <span className="ml-1 text-caption text-pos">deeper</span>
+              {pending ? (
+                <span className="text-mute">—</span>
+              ) : (
+                <>
+                  {multiple(pool.depthVsBest)}
+                  <span className="ml-1 text-caption text-pos">deeper</span>
+                </>
+              )}
             </div>
           </div>
 

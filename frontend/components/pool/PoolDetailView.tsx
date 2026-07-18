@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { PoolId, RiskClass } from "@/lib/types";
-import { usePool } from "@/lib/hooks/useApi";
+import { useLivePool } from "@/lib/hooks/useLivePools";
 import { RegimeBadge } from "@/components/ui/Badge";
 import { LiveFee } from "@/components/earn/LiveFee";
 import { LiveDot } from "@/components/ui/LiveDot";
@@ -20,10 +20,12 @@ import { StrategyLog } from "./StrategyLog";
 import { YourPosition } from "./YourPosition";
 import { RiskClassSelector } from "./RiskClassSelector";
 import { OpenLiquidityNote } from "./OpenLiquidityNote";
-import { apr, usdCompact, usdPrice, signedPct, multiple } from "@/lib/format";
+import { apr, usdCompact, usdPrice, signedPct, multiple, tokenAmt } from "@/lib/format";
 
 export function PoolDetailView({ poolId }: { poolId: PoolId }) {
-  const { data: pool, isLoading, error, refetch } = usePool(poolId);
+  // Registry pools (config/pools.ts) come enriched with LIVE on-chain fee/NAV — and
+  // render even when the API doesn't know the pool yet (pre-indexer).
+  const { data: pool, isLoading, error, refetch } = useLivePool(poolId);
   const [riskClass, setRiskClass] = useState<RiskClass>("CORE");
 
   if (isLoading) return <Skeleton className="h-96 w-full rounded-lg" />;
@@ -49,6 +51,10 @@ export function PoolDetailView({ poolId }: { poolId: PoolId }) {
   const vaultLive = pool.vaultLive !== false;
   const m = pool.market;
   const chg = m?.priceChange24h ?? 0;
+  // ON-CHAIN LIVE MODE: fee/NAV are read from the deployed contracts; indexer-derived
+  // stats (APRs, USD TVL, depth, history) aren't served yet → "—" / "indexing", never 0.
+  const chain = pool.chain;
+  const statsPending = chain?.statsPending === true;
 
   return (
     <div className="space-y-6">
@@ -85,7 +91,11 @@ export function PoolDetailView({ poolId }: { poolId: PoolId }) {
           {vaultLive ? (
             <>
               <LiveDot label="LIVE FEE" />
-              <LiveFee seedPips={pool.currentFeePips} regime={pool.regime} />
+              <LiveFee
+                seedPips={pool.currentFeePips}
+                regime={pool.regime}
+                simulate={!chain?.feeLive}
+              />
             </>
           ) : (
             <>
@@ -105,21 +115,36 @@ export function PoolDetailView({ poolId }: { poolId: PoolId }) {
             <>
               <Stat
                 label="Fee-yield APR"
-                value={apr(pool.feeApr)}
-                accent="var(--pos)"
+                value={statsPending ? "—" : apr(pool.feeApr)}
+                accent={statsPending ? undefined : "var(--pos)"}
+                sub={statsPending ? "arrives with the indexer" : undefined}
                 tip="The trading fees this position has been earning, shown after fees."
               />
               <Stat
                 label="Emissions APR"
-                value={apr(pool.emissionsApr)}
-                accent="var(--accent)"
+                value={statsPending ? "—" : apr(pool.emissionsApr)}
+                accent={statsPending ? undefined : "var(--accent)"}
+                sub={statsPending ? "arrives with the indexer" : undefined}
                 tip="esFERA emissions, a separate stream, never blended into fee yield."
               />
-              <Stat label="TVL" value={usdCompact(pool.tvlUsd)} />
+              {statsPending ? (
+                <Stat
+                  label="Vault NAV"
+                  value={
+                    chain?.navQuote !== undefined
+                      ? `${tokenAmt(chain.navQuote, 4)} ${chain.quoteSymbol}`
+                      : "—"
+                  }
+                  sub="read on-chain"
+                  tip="The vault's live net asset value for this pool, straight from quoteNav() on the contract."
+                />
+              ) : (
+                <Stat label="TVL" value={usdCompact(pool.tvlUsd)} />
+              )}
               <Stat
                 label="Depth vs best"
-                value={multiple(pool.depthVsBest)}
-                sub="deeper than best venue"
+                value={statsPending ? "—" : multiple(pool.depthVsBest)}
+                sub={statsPending ? "arrives with the indexer" : "deeper than best venue"}
               />
             </>
           ) : (
@@ -175,14 +200,39 @@ export function PoolDetailView({ poolId }: { poolId: PoolId }) {
             </>
           )}
           <OpenLiquidityNote />
-          {vaultLive ? <FeeHistory pool={pool} /> : null}
+          {/* no fee history to chart until the indexer has recorded some */}
+          {vaultLive && pool.feeHistory.length ? <FeeHistory pool={pool} /> : null}
         </div>
         <div className="space-y-6">
           <YourPosition pool={pool} riskClass={riskClass} />
-          {vaultLive ? <StrategyLog pool={pool} /> : <VaultAtLaunchCard />}
+          {vaultLive ? (
+            pool.strategyLog.length ? (
+              <StrategyLog pool={pool} />
+            ) : (
+              <IndexerPendingCard />
+            )
+          ) : (
+            <VaultAtLaunchCard />
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+/** Live vault, no indexer yet: history surfaces are pending, not zero. */
+function IndexerPendingCard() {
+  return (
+    <Card>
+      <CardHeader eyebrow="Vault" title="History is indexing" />
+      <div className="px-5 pb-5">
+        <p className="text-body-sm text-dim">
+          This vault is live on-chain — the fee and NAV above are read straight from
+          the contracts. Fee history, the strategy log and earnings breakdowns appear
+          once the indexer backend is deployed and has synced the pool&apos;s events.
+        </p>
+      </div>
+    </Card>
   );
 }
 

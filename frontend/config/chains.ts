@@ -33,7 +33,11 @@ export const robinhoodChain = defineChain({
   },
   testnet: false,
   // ~100ms soft blocks - poll fast when live.
-  contracts: {},
+  // Canonical Multicall3 IS deployed on 4663 (verified via eth_getCode 2026-07-18) —
+  // registering it lets wagmi/viem batch the useReadContracts fans into one aggregate3 call.
+  contracts: {
+    multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" },
+  },
 });
 
 // --- Testnet (chain id 46630) -------------------------------------------------

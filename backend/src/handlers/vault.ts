@@ -69,10 +69,12 @@ ponder.on("FeraVault:Deposit", async ({ event, context }) => {
       lastUpdated: ts,
     }));
 
-  // pool-level rollup (Σ across tranches)
+  // pool-level rollup (Σ across tranches). token0/token1 are required on insert (the lazy-create
+  // path when this event lands before PoolRegistered) — env registry fallback, ZERO if unknown.
+  const tk = tokensFor(poolId);
   await context.db
     .insert(schema.pool)
-    .values({ id: poolId, totalShares: sharesMinted, reserve0: amount0, reserve1: amount1 })
+    .values({ id: poolId, token0: tk.token0, token1: tk.token1, totalShares: sharesMinted, reserve0: amount0, reserve1: amount1 })
     .onConflictDoUpdate((row) => ({
       totalShares: row.totalShares + sharesMinted,
       reserve0: row.reserve0 + amount0,
@@ -122,9 +124,10 @@ ponder.on("FeraVault:Withdraw", async ({ event, context }) => {
       lastUpdated: ts,
     }));
 
+  const tk = tokensFor(poolId);
   await context.db
     .insert(schema.pool)
-    .values({ id: poolId })
+    .values({ id: poolId, token0: tk.token0, token1: tk.token1 })
     .onConflictDoUpdate((row) => ({
       totalShares: row.totalShares > sharesBurned ? row.totalShares - sharesBurned : 0n,
       reserve0: row.reserve0 > amount0 ? row.reserve0 - amount0 : 0n,
@@ -185,7 +188,7 @@ ponder.on("FeraVault:FeesCollected", async ({ event, context }) => {
 
   await context.db
     .insert(schema.pool)
-    .values({ id: poolId, cumRevenueUsdE6: revenueUsdE6 })
+    .values({ id: poolId, token0: tk.token0, token1: tk.token1, cumRevenueUsdE6: revenueUsdE6 })
     .onConflictDoUpdate((row) => ({ cumRevenueUsdE6: row.cumRevenueUsdE6 + revenueUsdE6 }));
 
   await context.db
@@ -203,6 +206,7 @@ ponder.on("FeraVault:StrategyAction", async ({ event, context }) => {
   //       6 bandConsolidate (F-8 — D-17 fee-band merge; like 5 it does not move principal)
   const { poolId, kind, tickLower, tickUpper, oraclePrice, justificationHash } = event.args;
   const ts = Number(event.block.timestamp);
+  const tk = tokensFor(poolId); // lazy-create fallback metadata for the pool upserts below
 
   await context.db
     .insert(schema.strategyAction)
@@ -228,6 +232,8 @@ ponder.on("FeraVault:StrategyAction", async ({ event, context }) => {
       .insert(schema.pool)
       .values({
         id: poolId,
+        token0: tk.token0,
+        token1: tk.token1,
         tickLower: Number(tickLower),
         tickUpper: Number(tickUpper),
         lastOraclePrice: oraclePrice,
@@ -240,7 +246,7 @@ ponder.on("FeraVault:StrategyAction", async ({ event, context }) => {
   } else {
     await context.db
       .insert(schema.pool)
-      .values({ id: poolId, lastOraclePrice: oraclePrice })
+      .values({ id: poolId, token0: tk.token0, token1: tk.token1, lastOraclePrice: oraclePrice })
       .onConflictDoUpdate(() => ({ lastOraclePrice: oraclePrice }));
   }
 });
@@ -272,9 +278,10 @@ ponder.on("FeraVault:SharePriceCheckpoint", async ({ event, context }) => {
 
   // pool-level headline mirrors the CORE tranche (0) so INV-4 monitoring keys off one series.
   if (tr === 0) {
+    const tk = tokensFor(poolId);
     await context.db
       .insert(schema.pool)
-      .values({ id: poolId, lastSharePriceX96: sharePriceX96 })
+      .values({ id: poolId, token0: tk.token0, token1: tk.token1, lastSharePriceX96: sharePriceX96 })
       .onConflictDoUpdate(() => ({ lastSharePriceX96: sharePriceX96 }));
   }
 });

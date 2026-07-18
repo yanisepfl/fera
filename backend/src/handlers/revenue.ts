@@ -5,7 +5,7 @@
 
 import { ponder } from "ponder:registry";
 import schema from "ponder:schema";
-import { eventId } from "../lib/ids";
+import { eventId, lowerHex } from "../lib/ids";
 
 ponder.on("RevenueDistributor:RevenueReceived", async ({ event, context }) => {
   const { token, amount } = event.args;
@@ -25,7 +25,7 @@ ponder.on("RevenueDistributor:RevenueReceived", async ({ event, context }) => {
 
   await context.db
     .insert(schema.revenueByToken)
-    .values({ id: token.toLowerCase(), token, cumReceived: amount })
+    .values({ id: lowerHex(token), token, cumReceived: amount })
     .onConflictDoUpdate((row: { cumReceived: bigint }) => ({ cumReceived: row.cumReceived + amount }));
 });
 
@@ -49,7 +49,7 @@ ponder.on("RevenueDistributor:RevenueSplit", async ({ event, context }) => {
 
   await context.db
     .insert(schema.revenueByToken)
-    .values({ id: token.toLowerCase(), token, cumToStakers: toStakers, cumToTreasury: toTreasury, cumToOps: toOps })
+    .values({ id: lowerHex(token), token, cumToStakers: toStakers, cumToTreasury: toTreasury, cumToOps: toOps })
     .onConflictDoUpdate((row: { cumToStakers: bigint; cumToTreasury: bigint; cumToOps: bigint }) => ({
       cumToStakers: row.cumToStakers + toStakers,
       cumToTreasury: row.cumToTreasury + toTreasury,

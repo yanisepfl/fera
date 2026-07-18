@@ -11,21 +11,19 @@
  * Every function's return type is imported from lib/types.ts, which mirrors §8
  * field names verbatim. Swap the source; the types don't move.
  */
-import type {
-  PoolSummary,
-  PoolDetail,
-  DepthComparison,
-  Position,
-  CurrentEpoch,
-  ClaimProof,
-  StakingSummary,
-  VestingGrant,
-  EmissionsTransparency,
-  RevenueTransparency,
-  PriceCandle,
-  Address,
-  PoolId,
-} from "./types";
+import type { PriceCandle, Address, PoolId } from "./types";
+import {
+  normalizeClaimProof,
+  normalizeDepth,
+  normalizeEmissions,
+  normalizeEpoch,
+  normalizePoolDetail,
+  normalizePools,
+  normalizePositions,
+  normalizeRevenue,
+  normalizeStaking,
+  normalizeVesting,
+} from "./normalize";
 import * as fx from "@/mocks/fixtures";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
@@ -58,46 +56,62 @@ export class ApiError extends Error {
 }
 
 // ---- §8 endpoints -----------------------------------------------------------
+//
+// Every response passes through lib/normalize.ts: the Ponder indexer speaks the
+// "§8 conventions v0.2" dialect (decimal strings, numeric regime, `timestamp`),
+// while the UI types (lib/types.ts) are the fixtures/devServer dialect. The
+// normalizers are tolerant — FE-dialect payloads (fixtures, MSW, devServer) pass
+// through unchanged, so every source funnels into one shape.
 
 export const api = {
   /** GET /pools */
-  pools: () => get<PoolSummary[]>("/pools", () => fx.POOLS),
+  pools: () => get<unknown>("/pools", () => fx.POOLS).then(normalizePools),
 
   /** GET /pools/:poolId */
   pool: (poolId: PoolId) =>
-    get<PoolDetail>(`/pools/${poolId}`, () => {
+    get<unknown>(`/pools/${poolId}`, () => {
       const d = fx.POOL_DETAILS[poolId];
       if (!d) throw new ApiError(404, `/pools/${poolId}`);
       return d;
-    }),
+    }).then(normalizePoolDetail),
 
   /** GET /pools/:poolId/depth */
   depth: (poolId: PoolId) =>
-    get<DepthComparison>(`/pools/${poolId}/depth`, () => {
+    get<unknown>(`/pools/${poolId}/depth`, () => {
       const d = fx.DEPTH[poolId];
       if (!d) throw new ApiError(404, `/pools/${poolId}/depth`);
       return d;
-    }),
+    }).then(normalizeDepth),
 
   /** GET /positions/:account */
   positions: (account: Address) =>
-    get<Position[]>(`/positions/${account}`, () => fx.POSITIONS),
+    get<unknown>(`/positions/${account}`, () => fx.POSITIONS).then(
+      normalizePositions
+    ),
 
   /** GET /epochs/current */
   currentEpoch: () =>
-    get<CurrentEpoch>("/epochs/current", () => fx.CURRENT_EPOCH),
+    get<unknown>("/epochs/current", () => fx.CURRENT_EPOCH).then(
+      normalizeEpoch
+    ),
 
   /** GET /epochs/:id/proof/:account */
   claimProof: (epochId: number, account: Address) =>
-    get<ClaimProof>(`/epochs/${epochId}/proof/${account}`, () => fx.CLAIM_PROOF),
+    get<unknown>(`/epochs/${epochId}/proof/${account}`, () => fx.CLAIM_PROOF).then(
+      normalizeClaimProof
+    ),
 
   /** GET /staking/:account */
   staking: (account: Address) =>
-    get<StakingSummary>(`/staking/${account}`, () => fx.STAKING),
+    get<unknown>(`/staking/${account}`, () => fx.STAKING).then(
+      normalizeStaking
+    ),
 
   /** GET /vesting/:account (added v0.2, OD-6/FE-6) - esFERA grants, string amounts. */
   vesting: (account: Address) =>
-    get<VestingGrant[]>(`/vesting/${account}`, () => fx.VESTING),
+    get<unknown>(`/vesting/${account}`, () => fx.VESTING).then(
+      normalizeVesting
+    ),
 
   /**
    * GET /pools/:poolId/ohlcv - REAL venue price candles (pre-launch live mode).
@@ -109,11 +123,15 @@ export const api = {
 
   /** GET /transparency/emissions */
   emissions: () =>
-    get<EmissionsTransparency>("/transparency/emissions", () => fx.EMISSIONS),
+    get<unknown>("/transparency/emissions", () => fx.EMISSIONS).then(
+      normalizeEmissions
+    ),
 
   /** GET /transparency/revenue */
   revenue: () =>
-    get<RevenueTransparency>("/transparency/revenue", () => fx.REVENUE),
+    get<unknown>("/transparency/revenue", () => fx.REVENUE).then(
+      normalizeRevenue
+    ),
 };
 
 export type Api = typeof api;

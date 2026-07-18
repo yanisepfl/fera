@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useLiveFee } from "@/lib/hooks/useLiveFee";
 import { feePipsToPct } from "@/lib/format";
 import type { Regime } from "@/lib/types";
@@ -11,21 +12,44 @@ import { cn } from "@/lib/cn";
  *
  * `live={false}` (pre-launch live mode, `vaultLive:false`): the vault fee does not
  * exist yet, so we render a static "—" — no number, no simulated movement.
+ *
+ * `simulate={false}` (REAL on-chain fee, `pool.chain.feeLive`): `seedPips` IS the
+ * hook's actual fee (refetched every few seconds by useLivePools) — render it
+ * verbatim; the mock random walk stays off and the arrow tracks real refetch moves.
  */
 export function LiveFee({
   seedPips,
   regime,
   size = "row",
   live = true,
+  simulate = true,
   className,
 }: {
   seedPips: number;
   regime: Regime;
   size?: "hero" | "row";
   live?: boolean;
+  simulate?: boolean;
   className?: string;
 }) {
-  const { pips, direction, tick } = useLiveFee(seedPips, regime, 1600, live);
+  const walk = useLiveFee(seedPips, regime, 1600, live && simulate);
+
+  // Real mode: derive direction/flash from consecutive REAL values.
+  const prevRef = useRef(seedPips);
+  const realPrev = prevRef.current;
+  useEffect(() => {
+    prevRef.current = seedPips;
+  }, [seedPips]);
+
+  const pips = simulate ? walk.pips : seedPips;
+  const direction: -1 | 0 | 1 = simulate
+    ? walk.direction
+    : seedPips > realPrev
+    ? 1
+    : seedPips < realPrev
+    ? -1
+    : 0;
+  const tick = simulate ? walk.tick : seedPips;
 
   if (!live) {
     return (

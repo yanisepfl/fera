@@ -1,0 +1,5 @@
+{
+  "//": "Handler typecheck config: same as tsconfig.json but WITH src/handlers included. Used by `npm run typecheck:ponder` after `ponder codegen` has produced ponder-env.d.ts (virtual module types for ponder:registry / ponder:schema / ponder:api).",
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", ".ponder", "generated"]
+}

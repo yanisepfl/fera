@@ -10,7 +10,7 @@ import { TokenPair } from "@/components/ui/TokenPair";
 import { Button } from "@/components/ui/Button";
 import { useLiveFee } from "@/lib/hooks/useLiveFee";
 import { feeReason, TONE_COLOR } from "@/lib/feeReason";
-import { apr, usdCompact, usdPrice, signedPct, multiple, num } from "@/lib/format";
+import { apr, usdCompact, usdPrice, signedPct, multiple, num, tokenAmt } from "@/lib/format";
 
 /**
  * Earn-home centerpiece: one flagship pool with its LIVE dynamic fee as the hero
@@ -32,8 +32,17 @@ export function LiveFeeHero({
   depthLabel: string;
 }) {
   const vaultLive = pool.vaultLive !== false;
+  // REAL on-chain fee (pool.chain.feeLive): print it verbatim — the mock walk stays off.
+  const feeLive = pool.chain?.feeLive === true;
+  const statsPending = pool.chain?.statsPending === true;
   // Read the same live value the hero prints so the "why" tracks the number.
-  const { pips } = useLiveFee(pool.currentFeePips, pool.regime, 1600, vaultLive);
+  const { pips: walkPips } = useLiveFee(
+    pool.currentFeePips,
+    pool.regime,
+    1600,
+    vaultLive && !feeLive
+  );
+  const pips = feeLive ? pool.currentFeePips : walkPips;
   const reason = feeReason(pool.regime, pips, marketState);
 
   if (!vaultLive) return <MarketHero pool={pool} />;
@@ -55,11 +64,16 @@ export function LiveFeeHero({
           <div className="mb-1 flex items-center gap-2">
             <LiveDot label="LIVE FEE" />
             <span className="text-caption text-mute">
-              dynamic · updates every ~1s
+              {feeLive ? "read on-chain · updates ~8s" : "dynamic · updates every ~1s"}
             </span>
           </div>
 
-          <LiveFee seedPips={pool.currentFeePips} regime={pool.regime} size="hero" />
+          <LiveFee
+            seedPips={pool.currentFeePips}
+            regime={pool.regime}
+            size="hero"
+            simulate={!feeLive}
+          />
 
           <div className="mt-4 flex items-start gap-2">
             <span
@@ -86,29 +100,51 @@ export function LiveFeeHero({
             <div>
               <div className="overline mb-1">Fee-yield APR</div>
               <div className="font-mono tnum text-title font-semibold text-pos">
-                {apr(pool.feeApr)}
+                {statsPending ? <span className="text-mute">—</span> : apr(pool.feeApr)}
               </div>
-              <div className="text-caption text-mute">after fees</div>
+              <div className="text-caption text-mute">
+                {statsPending ? "arrives with the indexer" : "after fees"}
+              </div>
             </div>
             <div>
               <div className="overline mb-1">Emissions APR</div>
               <div className="font-mono tnum text-title font-semibold text-accent">
-                {apr(pool.emissionsApr)}
+                {statsPending ? <span className="text-mute">—</span> : apr(pool.emissionsApr)}
               </div>
-              <div className="text-caption text-mute">esFERA · vests 6mo</div>
+              <div className="text-caption text-mute">
+                {statsPending ? "arrives with the indexer" : "esFERA · vests 6mo"}
+              </div>
             </div>
             <div>
-              <div className="overline mb-1">TVL</div>
+              <div className="overline mb-1">{statsPending ? "Vault NAV" : "TVL"}</div>
               <div className="font-mono tnum text-heading font-semibold text-text">
-                {usdCompact(pool.tvlUsd)}
+                {statsPending ? (
+                  pool.chain?.navQuote !== undefined ? (
+                    <>
+                      {tokenAmt(pool.chain.navQuote, 4)}{" "}
+                      <span className="text-caption text-dim">
+                        {pool.chain.quoteSymbol}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-mute">—</span>
+                  )
+                ) : (
+                  usdCompact(pool.tvlUsd)
+                )}
               </div>
+              {statsPending ? (
+                <div className="text-caption text-mute">read on-chain</div>
+              ) : null}
             </div>
             <div>
               <div className="overline mb-1">Depth vs best</div>
               <div className="font-mono tnum text-heading font-semibold text-text">
-                {multiple(pool.depthVsBest)}
+                {statsPending ? <span className="text-mute">—</span> : multiple(pool.depthVsBest)}
               </div>
-              <div className="text-caption text-pos">{depthLabel}</div>
+              {statsPending ? null : (
+                <div className="text-caption text-pos">{depthLabel}</div>
+              )}
             </div>
           </div>
 

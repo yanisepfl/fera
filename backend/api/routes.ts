@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import type { Store } from "./store";
 import type { LiveFeeReader } from "./liveFee";
 import { proofsFor } from "./proofs";
+import { ohlcv } from "./marketData";
 import { bigintReplacer } from "./serialize";
 import type { Address, Hex } from "./shapes";
 
@@ -23,7 +24,9 @@ export function mountRoutes(app: Hono, deps: RouteDeps): Hono {
   const json = (c: any, body: unknown, status = 200) =>
     c.newResponse(JSON.stringify(body, bigintReplacer), status, { "content-type": "application/json" });
 
-  app.get("/health", (c) => c.json({ ok: true }));
+  // NOTE: no custom /health here — Ponder 0.9 reserves /health (+ /metrics, /status, /ready)
+  // for internal use and fails the build if an API function registers it. Ponder itself serves
+  // GET /health (200 once the app is live). The pre-deployment devServer keeps its own /health.
 
   // GET /pools — list w/ LIVE fee overlay (read-through cached).
   app.get("/pools", async (c) => {
@@ -48,6 +51,32 @@ export function mountRoutes(app: Hono, deps: RouteDeps): Hono {
     detail.currentFeePips = live.feePips;
     detail.currentFeeSource = live.source;
     return json(c, detail);
+  });
+
+  // GET /pools/:poolId/ohlcv?timeframe=minute|hour|day&aggregate=1&limit=168 — REAL venue
+  // price candles (GeckoTerminal pass-through; v4 poolIds are first-class GT pool ids on the
+  // robinhood network). Cached ~2min in marketData. On upstream miss/error we serve [] —
+  // the frontend simply hides the price-history card (never fabricated candles).
+  app.get("/pools/:poolId/ohlcv", async (c) => {
+    const poolId = c.req.param("poolId");
+    if (!isHex32(poolId)) return json(c, { error: "poolId must be a bytes32 hex" }, 400);
+    const timeframe = c.req.query("timeframe") ?? "hour";
+    if (!["minute", "hour", "day"].includes(timeframe)) {
+      return json(c, { error: "timeframe must be minute|hour|day" }, 400);
+    }
+    const aggregate = Number(c.req.query("aggregate") ?? 1);
+    const limit = Number(c.req.query("limit") ?? 168);
+    if (!Number.isInteger(aggregate) || aggregate < 1 || aggregate > 60) {
+      return json(c, { error: "aggregate must be an integer in [1,60]" }, 400);
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) {
+      return json(c, { error: "limit must be an integer in [1,1000]" }, 400);
+    }
+    try {
+      return json(c, await ohlcv(poolId, timeframe, aggregate, limit));
+    } catch {
+      return json(c, []);
+    }
   });
 
   // GET /pools/:poolId/depth
@@ -82,7 +111,15 @@ export function mountRoutes(app: Hono, deps: RouteDeps): Hono {
     const kindStr = c.req.query("kind");
     const kind = kindStr === undefined ? undefined : Number(kindStr);
     if (kind !== undefined && kind !== 0 && kind !== 1) return json(c, { error: "kind must be 0 or 1" }, 400);
-    return json(c, proofsFor(id, account as Address, kind));
+    const res = proofsFor(id, account as Address, kind);
+    // HONESTY GUARD: only serve a bundle whose root is actually POSTED on-chain (indexed from
+    // Distributor:RootPosted) and matches byte-for-byte. Otherwise (dry-run bundle, not yet
+    // posted, or drift) answer the §8 "no proofs" shape — never a fabricated/unclaimable proof.
+    const posted = await store.epochPostedRoot(BigInt(id));
+    if (!posted || !res.root || posted.toLowerCase() !== res.root.toLowerCase()) {
+      return json(c, { epochId: id, account, root: null, claims: [] });
+    }
+    return json(c, res);
   });
 
   // GET /staking/:account

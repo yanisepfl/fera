@@ -15,7 +15,7 @@
     "codegen": "ponder codegen",
     "db": "ponder db",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "typecheck:ponder": "ponder typecheck",
+    "typecheck:ponder": "ponder codegen && tsc --noEmit -p tsconfig.ponder.json",
     "lint": "tsc --noEmit -p tsconfig.json",
     "pipeline:dryrun": "tsx pipeline/dryrun.ts",
     "reconcile": "tsx ops/reconcile.ts",
