@@ -12,6 +12,7 @@ import { JitPenaltyNotice } from "./JitPenaltyNotice";
 import { AmountField } from "./AmountField";
 import { useGeoFence, type GeoFenceResult } from "@/lib/hooks/useGeoFence";
 import { useVaultDeposit, txBusy } from "@/lib/hooks/useVaultTx";
+import { useDepositGate } from "@/lib/hooks/useDepositGate";
 import { parseAmount } from "@/lib/amount";
 import { livePoolById, type LivePool } from "@/config/pools";
 import { EXPLORER_TX } from "@/config/chains";
@@ -290,6 +291,7 @@ function LiveDepositBody({
   const { isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
   const dep = useVaultDeposit(live);
+  const gate = useDepositGate(live.poolId);
   const [amtMeme, setAmtMeme] = useState("");
   const [amtQuote, setAmtQuote] = useState("");
 
@@ -315,6 +317,10 @@ function LiveDepositBody({
   const tranche = RISK_CLASS_META[riskClass].tranche;
   const busy = txBusy(dep.phase);
   const paused = dep.depositsPaused === true;
+  // Anti-manipulation price gate (see useDepositGate). Only a *known* closed state blocks;
+  // admin-pause has its own banner below, so don't double up when both are true.
+  const gateClosed = !paused && gate.open === false;
+  const gateOpen = !paused && gate.open === true;
 
   const canConfirm =
     isConnected &&
@@ -324,6 +330,7 @@ function LiveDepositBody({
     !overMeme &&
     !overQuote &&
     !paused &&
+    !gateClosed &&
     !busy &&
     !geo.blocked &&
     (!geo.needsAck || acked);
@@ -352,6 +359,7 @@ function LiveDepositBody({
       case "error":
         return "Try again";
       default:
+        if (gateClosed) return "Paused for a moment";
         if (overMeme) return `Not enough ${live.symbol}`;
         if (overQuote) return `Not enough ${live.quoteSymbol}`;
         if (paused) return "Deposits paused";
@@ -394,6 +402,28 @@ function LiveDepositBody({
 
   return (
     <>
+      {/* Proactive deposit-gate status — surfaced before anything is filled in. A closed
+          gate reopens on its own (useDepositGate re-probes every ~20s), which flips the
+          button back on automatically; the post-submit error mapping is the backstop. */}
+      {gateClosed ? (
+        <div className="rounded-lg border border-warn-wash bg-warn-wash p-3 text-body-sm text-text">
+          <div className="flex items-center gap-1.5">
+            <span aria-hidden className="text-warn">⏳</span>
+            <span className="font-semibold">Deposits are paused for a moment</span>
+          </div>
+          <p className="mt-1 text-caption text-dim">
+            {live.symbol} is moving fast right now. This is a safety pause that protects the
+            price you enter at — it reopens automatically, usually within a minute. Nothing to
+            do; withdrawals are unaffected.
+          </p>
+        </div>
+      ) : gateOpen ? (
+        <div className="flex items-center gap-1.5 text-caption text-mute">
+          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-pos" />
+          Deposits open
+        </div>
+      ) : null}
+
       {/* two-sided amounts — either side may be zero */}
       <AmountField
         label={`${live.symbol} amount`}

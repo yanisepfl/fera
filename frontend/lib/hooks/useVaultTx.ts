@@ -76,7 +76,7 @@ export function txErrorMessage(e: unknown): string {
   if (/CooldownActive/.test(all))
     return "These shares are still inside the one-time 1-hour post-deposit hold. Try again once it lapses.";
   if (/TwapGateExceeded/.test(all))
-    return "Deposits are briefly gated - the pool price has moved too far from its short-window average. Try again in a minute.";
+    return "Deposits are paused for a moment — the price is moving fast right now. This is a safety pause that protects the price you enter at; it reopens on its own, usually within a minute.";
   if (/DepositsPaused/.test(all)) return "Deposits for this pool are paused right now.";
   if (/ZeroDeposit/.test(all)) return "Enter an amount on at least one side.";
   if (/Slippage/.test(all))
