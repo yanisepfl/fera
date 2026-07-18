@@ -8,7 +8,7 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { waitForTransactionReceipt } from "wagmi/actions";
+import { simulateContract, waitForTransactionReceipt } from "wagmi/actions";
 import { useQueryClient } from "@tanstack/react-query";
 import { BaseError, erc20Abi } from "viem";
 import { activeChain } from "@/config/chains";
@@ -30,6 +30,20 @@ import { feraVaultAbi } from "@/lib/abi/feraVault";
  */
 
 const CHAIN_ID = activeChain.id;
+
+/**
+ * Slippage tolerance between the pre-send on-chain quote and inclusion, in bps.
+ * Both vault calls are SIMULATED with min=0 right before signing — the contract's own
+ * math prices the outcome at the current state — then sent with
+ * `min = quoted × (1 − tolerance)`. 1% absorbs a memecoin moving between quote and
+ * inclusion; a bigger move reverts with `Slippage` ("try again"), never a silent
+ * short-change. The simulation also surfaces reverts (TWAP gate, cooldown, paused)
+ * BEFORE any gas is spent.
+ */
+const SLIPPAGE_TOLERANCE_BPS = 100n;
+
+const withTolerance = (quoted: bigint): bigint =>
+  quoted - (quoted * SLIPPAGE_TOLERANCE_BPS) / 10_000n;
 
 /** UI-facing lifecycle of a (multi-step) vault transaction. */
 export type VaultTxPhase =
@@ -183,15 +197,26 @@ export function useVaultDeposit(live: LivePool | undefined) {
         }
 
         setPhase({ step: "wallet" });
-        // TODO(slippage): minShares defaults to 0 for now. Before real size flows through,
-        // quote expected shares off quoteNav()/share totalSupply() at submit time and pass
-        // minShares = expected × (1 − tolerance) so NAV moves between quote and inclusion
-        // can't short-change the mint (the contract enforces sharesMinted ≥ minShares > 0).
+        // Slippage floor: simulate the deposit (allowances are in place now) to get the
+        // contract's own sharesMinted quote at the current state, then send with
+        // minShares = quoted × (1 − SLIPPAGE_TOLERANCE_BPS). See the constant's docs.
+        let minShares = args.minShares;
+        if (minShares === undefined) {
+          const sim = await simulateContract(config, {
+            address: VAULT,
+            abi: feraVaultAbi,
+            functionName: "deposit",
+            args: [live.poolId, args.tranche, args.amount0, args.amount1, 0n],
+            chainId: CHAIN_ID,
+            account: address,
+          });
+          minShares = withTolerance(sim.result);
+        }
         const hash = await writeContractAsync({
           address: VAULT,
           abi: feraVaultAbi,
           functionName: "deposit",
-          args: [live.poolId, args.tranche, args.amount0, args.amount1, args.minShares ?? 0n],
+          args: [live.poolId, args.tranche, args.amount0, args.amount1, minShares],
           chainId: CHAIN_ID,
         });
         setVaultHash(hash);
@@ -200,7 +225,7 @@ export function useVaultDeposit(live: LivePool | undefined) {
         setPhase({ step: "error", message: txErrorMessage(e) });
       }
     },
-    [live, pair, allowance0, allowance1, config, writeContractAsync],
+    [live, pair, allowance0, allowance1, config, writeContractAsync, address],
   );
 
   const reset = useCallback(() => {
@@ -232,6 +257,7 @@ export function useVaultDeposit(live: LivePool | undefined) {
  */
 export function useVaultWithdraw(live: LivePool | undefined, tranche = 0) {
   const { address } = useAccount();
+  const config = useConfig();
   const { writeContractAsync } = useWriteContract();
   const [phase, setPhase] = useState<VaultTxPhase>({ step: "idle" });
   const [vaultHash, setVaultHash] = useState<`0x${string}` | undefined>();
@@ -264,15 +290,24 @@ export function useVaultWithdraw(live: LivePool | undefined, tranche = 0) {
       try {
         setVaultHash(undefined);
         setPhase({ step: "wallet" });
-        // TODO(slippage): minAmount0/minAmount1 are 0 for now. A proportional in-kind
-        // withdraw prices nothing, but v4 burn amounts can still drift a hair between
-        // quote and inclusion — before real size, preview the pro-rata amounts and pass
-        // mins with a small tolerance.
-        const hash = await writeContractAsync({
+        // Slippage floor: a proportional in-kind withdraw prices nothing, but v4 burn
+        // amounts can drift a hair between quote and inclusion (swaps landing in the
+        // same block). Simulate to get the contract's own (amount0, amount1) quote,
+        // then send with mins = quoted × (1 − SLIPPAGE_TOLERANCE_BPS).
+        const sim = await simulateContract(config, {
           address: VAULT,
           abi: feraVaultAbi,
           functionName: "withdraw",
           args: [live.poolId, tranche, shares, 0n, 0n],
+          chainId: CHAIN_ID,
+          account: address,
+        });
+        const [quoted0, quoted1] = sim.result as readonly [bigint, bigint];
+        const hash = await writeContractAsync({
+          address: VAULT,
+          abi: feraVaultAbi,
+          functionName: "withdraw",
+          args: [live.poolId, tranche, shares, withTolerance(quoted0), withTolerance(quoted1)],
           chainId: CHAIN_ID,
         });
         setVaultHash(hash);
@@ -281,7 +316,7 @@ export function useVaultWithdraw(live: LivePool | undefined, tranche = 0) {
         setPhase({ step: "error", message: txErrorMessage(e) });
       }
     },
-    [live, tranche, writeContractAsync],
+    [live, tranche, writeContractAsync, config, address],
   );
 
   const reset = useCallback(() => {

@@ -1,0 +1,40 @@
+# Daily FERA pool digest → Telegram. Free (GitHub Actions cron), zero infra.
+#
+# Setup (one-time):
+#   1. Telegram: talk to @BotFather → /newbot → copy the token.
+#   2. Send your new bot any message, then open
+#      https://api.telegram.org/bot<TOKEN>/getUpdates and copy chat.id.
+#   3. Repo → Settings → Secrets and variables → Actions → add:
+#        TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID   (optionally RPC_URL = Alchemy)
+#   4. Actions tab → "FERA pool digest" → Run workflow (manual test), then it runs daily.
+name: FERA pool digest
+
+on:
+  schedule:
+    - cron: "0 18 * * *" # daily 18:00 UTC
+  workflow_dispatch:
+    inputs:
+      lookback_hours:
+        description: "Hours to cover"
+        default: "24"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Send digest
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RPC_URL: ${{ secrets.RPC_URL }}
+          LOOKBACK_HOURS: ${{ github.event.inputs.lookback_hours || '24' }}
+        run: node ops/tracker.mjs
