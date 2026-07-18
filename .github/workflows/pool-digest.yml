@@ -56,4 +56,11 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           RPC_URL: ${{ steps.rpc.outputs.url }}
           LOOKBACK_HOURS: ${{ github.event.inputs.lookback_hours || '24' }}
-        run: node ops/tracker.mjs
+        # Read-only + idempotent — retry transient public-RPC hiccups.
+        run: |
+          for i in 1 2 3; do
+            node ops/tracker.mjs && exit 0
+            echo "::warning::digest attempt $i failed — retrying in 15s"
+            sleep 15
+          done
+          exit 1

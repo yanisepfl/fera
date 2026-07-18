@@ -69,4 +69,12 @@ jobs:
           KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
           # live mode only when the key is present; otherwise stays dry-run
           KEEPER_DRY_RUN: ${{ secrets.KEEPER_PRIVATE_KEY != '' && 'false' || 'true' }}
-        run: npm run keeper:vault
+        # The tick is idempotent (simulate-first, fail-static), so retrying the whole run
+        # on a transient RPC failure is safe — the public RPC drops connections sometimes.
+        run: |
+          for i in 1 2 3; do
+            npm run keeper:vault && exit 0
+            echo "::warning::keeper tick attempt $i failed — retrying in 20s (flaky RPC?)"
+            sleep 20
+          done
+          exit 1
