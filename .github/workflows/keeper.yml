@@ -40,9 +40,30 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      # The keeper needs WIDE address-scoped eth_getLogs (pool discovery + band
+      # reconstruction). Free-tier RPC plans often cap getLogs at tiny block ranges, so
+      # probe the secret endpoint's capability and fall back to the public RPC if it fails.
+      - name: Resolve RPC
+        id: rpc
+        working-directory: .
+        env:
+          CANDIDATE: ${{ secrets.RPC_URL }}
+        run: |
+          PUB=https://rpc.mainnet.chain.robinhood.com
+          CAND="$(printf %s "${CANDIDATE:-}" | tr -d '[:space:]')"
+          URL="$PUB"
+          if [ -n "$CAND" ]; then
+            BODY='{"jsonrpc":"2.0","id":1,"method":"eth_getLogs","params":[{"address":"0x8366a39cc670b4001a1121b8f6a443a643e40951","fromBlock":"0xbc6b30","toBlock":"0xbd2f30"}]}'
+            if curl -sf -m 15 -X POST -H 'content-type: application/json' --data "$BODY" "$CAND" | grep -q '"result"'; then
+              URL="$CAND"
+            else
+              echo "::warning::RPC_URL secret failed the wide eth_getLogs capability probe (free-tier range cap?) — using the public RPC"
+            fi
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
       - name: Vault strategy tick
         env:
-          PONDER_RPC_URL_RH: ${{ secrets.RPC_URL || 'https://rpc.mainnet.chain.robinhood.com' }}
+          PONDER_RPC_URL_RH: ${{ steps.rpc.outputs.url }}
           PONDER_CHAIN_ID: "4663"
           FERA_START_BLOCK: "12347590"
           KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
