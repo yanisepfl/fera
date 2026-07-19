@@ -5,8 +5,8 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 const VARIANTS: Record<Variant, string> = {
-  // Actions are GREEN (accent2). Gold (accent) is reserved for brand: titles,
-  // eyebrows, glows - never buttons.
+  // Actions are GREEN (accent2). The brand green (accent) is reserved for brand:
+  // titles, eyebrows, glows - never buttons. Gold is a rare reward/earn spark only.
   primary:
     "bg-accent2 text-accent2-fg hover:bg-accent2-strong active:bg-accent2-dim shadow-glow-accent2",
   secondary:

@@ -4,7 +4,7 @@ import { Logo } from "@/components/ui/Logo";
 /**
  * SiteHeader - the ONE header shell shared by the marketing landing ("/") and the
  * app ("/app/*"), so both wear the same chrome: sticky h-16 bar, hairline border,
- * blurred well surface, and the gold BrandLockup on the left. Each surface fills
+ * blurred well surface, and the green BrandLockup on the left. Each surface fills
  * the slots with its own links/actions:
  *
  *   - `nav`    - centered links (desktop only; each surface handles mobile).
@@ -37,7 +37,7 @@ export function SiteHeader({
   );
 }
 
-/** Shared nav-link treatment: quiet text with a gold underline that wipes in on
+/** Shared nav-link treatment: quiet text with a green underline that wipes in on
  *  hover (reduced-motion: appears instantly). `navLinkActive` pins it on. */
 export const navLinkClass =
   "relative px-1 py-1 text-body-sm font-medium text-mute transition-colors hover:text-text " +
@@ -46,8 +46,8 @@ export const navLinkClass =
   "after:ease-out hover:after:scale-x-100 focus-visible:after:scale-x-100";
 export const navLinkActiveClass = "text-text after:scale-x-100";
 
-/** Logo + FERA wordmark: the mark in a soft gold-wash tile, the wordmark in the
- *  warm gold gradient - the brand signature, identical on every surface. */
+/** Logo + FERA wordmark: the claw mark in a soft green-wash tile, the wordmark in
+ *  the green brand gradient - the brand signature, identical on every surface. */
 export function BrandLockup({ href = "/" }: { href?: string }) {
   return (
     <Link href={href} className="group flex shrink-0 items-center gap-2.5">
@@ -59,14 +59,14 @@ export function BrandLockup({ href = "/" }: { href?: string }) {
   );
 }
 
-/** FERA wordmark with the warm gold gradient (brand signature). */
+/** FERA wordmark with the green brand gradient (brand signature). */
 export function Wordmark() {
   return (
     <span
       className="text-heading font-semibold tracking-tight"
       style={{
         backgroundImage:
-          "linear-gradient(180deg, #f3d488 0%, #e7b84b 55%, #cd9f33 100%)",
+          "linear-gradient(180deg, #5cefad 0%, #2fe08a 55%, #159a5c 100%)",
         WebkitBackgroundClip: "text",
         backgroundClip: "text",
         WebkitTextFillColor: "transparent",

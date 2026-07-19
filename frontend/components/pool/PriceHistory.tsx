@@ -24,8 +24,8 @@ export function PriceHistory({ poolId, symbol }: { poolId: PoolId; symbol: strin
         type: "area",
         data,
         color: "var(--accent2)",
-        topColor: "rgba(46,207,136,0.18)",
-        bottomColor: "rgba(46,207,136,0.00)",
+        topColor: "rgba(47,224,138,0.18)",
+        bottomColor: "rgba(47,224,138,0.00)",
         title: `${symbol} $`,
       },
     ];

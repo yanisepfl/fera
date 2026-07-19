@@ -8,7 +8,7 @@ import { robinhoodChain, robinhoodTestnet } from "@/config/chains";
  * Wallet UX is RainbowKit (the alphix-family idiom is a WalletConnect-based modal - 
  * alphix's own frontend uses Reown AppKit; we use RainbowKit, the family standard, so
  * the modal layers *additively* on top of the existing wagmi v2 config, degrades to
- * injected-only with zero env, and themes cleanly to the Fera-Gold dark surface. See
+ * injected-only with zero env, and themes cleanly to the Fera-Green dark surface. See
  * app/providers.tsx for the theme wiring and components/layout/ConnectButton.tsx for
  * the in-aesthetic trigger).
  *

@@ -13,9 +13,10 @@ import {
  * that nonstop movement into a yield on the coins you already hold. Lead with the outcome
  * (the volatility works for you); the fee mechanic is the plain "how", never the pitch.
  *
- * COLOR SYSTEM: gold (--accent) is the brand accent: titles and title highlights, eyebrows,
- * card glows, the mark/motif. Green (--accent2) is reserved for ACTIONS (CTAs) and
- * live/positive signals; positive numbers use --pos. No blue, anywhere.
+ * COLOR SYSTEM: green (--accent) is the brand accent: titles and title highlights, eyebrows,
+ * card glows, the mark/motif. The deeper green (--accent2) carries ACTIONS (CTAs) and
+ * live/positive signals; positive numbers use --pos. Gold (--gold) survives only as a rare
+ * reward/earn spark. No blue, anywhere.
  *
  * HONESTY (load-bearing): the vault is sold as managed and simple, NEVER as higher-yield than
  * a skilled self-managed LP. No "guaranteed" / "risk-free" / fixed yield. Risk levels are
@@ -32,7 +33,7 @@ const DOCS_URL = "https://fera-3.gitbook.io/fera/";
 const GITHUB_URL = "https://github.com/yanisepfl/fera";
 
 // Anchor-styled links that reuse the Button visual language without a client handler.
-// Actions are green (accent2); gold is never a button.
+// Actions are green (accent2); the brand green (accent) and the gold spark are never buttons.
 const btnBase =
   "inline-flex items-center justify-center font-medium whitespace-nowrap select-none transition-[background,color,border,box-shadow] duration-fast ease-out rounded-lg h-12 px-6 text-body gap-2";
 const btnPrimary = `${btnBase} bg-accent2 text-accent2-fg hover:bg-accent2-strong active:bg-accent2-dim shadow-glow-accent2`;
@@ -112,13 +113,13 @@ function MarketingHeader() {
 function Hero() {
   return (
     <section className="relative overflow-hidden border-b border-line">
-      {/* soft top-crown glow (gold), the lifted premium-dark trait, reduced-motion-safe */}
+      {/* soft top-crown glow (green), the lifted premium-dark trait, reduced-motion-safe */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
         style={{
           background:
-            "radial-gradient(60% 100% at 50% -10%, rgba(231,184,75,0.10) 0%, rgba(231,184,75,0) 60%)",
+            "radial-gradient(60% 100% at 50% -10%, rgba(47,224,138,0.10) 0%, rgba(47,224,138,0) 60%)",
         }}
       />
       {/* feather motif, subtle hero accent. xl-only: below that there's no free corner. */}
@@ -130,7 +131,7 @@ function Hero() {
             <div className="mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-accent2-line bg-accent2-wash px-3 py-1">
               <span
                 className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent2"
-                style={{ boxShadow: "0 0 8px rgba(46,207,136,0.75)" }}
+                style={{ boxShadow: "0 0 8px rgba(47,224,138,0.75)" }}
               />
               <span className="min-w-0 text-micro uppercase tracking-[0.08em] text-accent2">
                 Launching on Robinhood Chain
@@ -138,15 +139,14 @@ function Hero() {
             </div>
 
             <h1 className="text-[clamp(2.125rem,1.1rem+3.4vw,3.5rem)] font-semibold leading-[1.05] tracking-[-0.02em] text-text">
-              Meme coins never sit still.{" "}
-              <span className="text-accent">Now the movement pays you.</span>
+              Degen energy.{" "}
+              <span className="text-accent">Grown-up returns.</span>
             </h1>
 
             <p className="mt-6 max-w-xl text-body text-dim md:text-heading md:leading-8">
-              Every meme coin trade pays a fee, and there are a lot of trades. Drop your
-              coins in a FERA vault and that flow becomes your yield, automatically, climbing
-              when the market runs hot. You still hold what you believe in. The volatility
-              just starts working for you.
+              Meme coins never sit still, and now the movement pays you. A managed-liquidity
+              vault turns the volatility that wrecks most LPs into your fee income. You still
+              hold the coins you believe in, and the swings finally work for you.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -160,7 +160,8 @@ function Hero() {
             </div>
 
             <p className="mt-6 text-caption text-mute">
-              On-chain and verifiable. Meme coins now, tokenized stocks soon.
+              Not a launchpad. The layer that makes the launches liquid. On-chain and
+              verifiable, meme coins now, tokenized stocks soon.
             </p>
           </div>
 
@@ -398,7 +399,7 @@ function Faq() {
         className="pointer-events-none absolute inset-x-0 top-0 h-[340px]"
         style={{
           background:
-            "radial-gradient(55% 100% at 50% -10%, rgba(231,184,75,0.06) 0%, rgba(231,184,75,0) 62%)",
+            "radial-gradient(55% 100% at 50% -10%, rgba(47,224,138,0.06) 0%, rgba(47,224,138,0) 62%)",
         }}
       />
       <div className="relative mx-auto max-w-app px-4 py-16 md:px-6 md:py-24">

@@ -58,7 +58,7 @@ export function PoolDetailView({ poolId }: { poolId: PoolId }) {
 
   return (
     <div className="space-y-6">
-      {/* header - marketing-style heading treatment (gold eyebrow + display title) */}
+      {/* header - marketing-style heading treatment (green eyebrow + display title) */}
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0 max-w-2xl">
           <Link href="/app" className="text-body-sm text-mute hover:text-dim">

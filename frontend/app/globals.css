@@ -12,59 +12,68 @@
 :root {
   color-scheme: dark;
 
-  /* ===== Ink scale (surfaces): near-black, whisper-warm neutral ===== */
-  --ink-950: #0a0a0b; /* app canvas / page background */
-  --ink-900: #0e0e10; /* recessed wells, nav bar */
-  --ink-875: #121215; /* base card / container */
-  --ink-850: #161619; /* elevated card, row-hover base */
-  --ink-800: #1b1b1f; /* surface: inputs, selectors */
-  --ink-750: #212127; /* raised surface, popovers, dialogs */
-  --ink-700: #292930; /* hover state */
+  /* ===== Ink scale (surfaces): near-black with a faint GREEN bias ===== */
+  --ink-950: #080b0a; /* app canvas / page background */
+  --ink-900: #0b0f0e; /* recessed wells, nav bar */
+  --ink-875: #0d1210; /* base card / container */
+  --ink-850: #101614; /* elevated card, row-hover base */
+  --ink-800: #131a17; /* surface: inputs, selectors */
+  --ink-750: #18211d; /* raised surface, popovers, dialogs */
+  --ink-700: #1e2a25; /* hover state */
 
   /* ===== Borders ===== */
-  --line: #23232a; /* hairline border (primary) */
-  --line-strong: #34343d; /* elevated / secondary border */
+  --line: #1f2a25; /* hairline border (primary) */
+  --line-strong: #2b3a33; /* elevated / secondary border */
 
   /* ===== Text ===== */
-  --text: #f4f4f6; /* primary foreground */
-  --text-dim: #a9a9b4; /* secondary */
-  --text-mute: #6e6e79; /* tertiary / captions / disabled */
+  --text: #ecf3ef; /* primary foreground */
+  --text-dim: #9aa8a1; /* secondary */
+  --text-mute: #616f68; /* tertiary / captions / disabled */
 
-  /* ===== Accent - "Fera Gold" (the single restrained BRAND accent) =====
-   * Gold carries the brand: titles and title highlights, eyebrows, card glows,
-   * the mark/wordmark, the primary chart series. Actions live on --accent2. */
-  --accent: #e7b84b;
-  --accent-strong: #f0c766; /* hover / bright */
-  --accent-dim: #b98f2e; /* pressed / muted */
-  --accent-wash: rgba(231, 184, 75, 0.1); /* tint fills, badges, selection */
-  --accent-line: rgba(231, 184, 75, 0.28); /* tinted borders / focus rings */
-  --on-accent: #17130a; /* text on solid accent (near-black warm) */
+  /* ===== Accent - "Fera Green" (the single restrained BRAND + ACTION accent) =====
+   * Green now carries the brand AND the actions: titles and title highlights,
+   * eyebrows, card glows, the mark/wordmark, the primary chart series, and the
+   * primary CTAs. Gold (below) survives only as a rare reward/earn spark. */
+  --accent: #2fe08a;
+  --accent-strong: #5cefad; /* hover / bright */
+  --accent-dim: #159a5c; /* pressed / muted */
+  --accent-wash: rgba(47, 224, 138, 0.1); /* tint fills, badges, selection */
+  --accent-line: rgba(47, 224, 138, 0.3); /* tinted borders / focus rings */
+  --on-accent: #04140c; /* text on solid accent (near-black green) */
 
-  /* ===== Secondary accent - "Signal" green (actions + data) =====
-   * Green is the ACTION color (primary buttons / CTAs) and the cool secondary
-   * chart series. It stays in the family of the positive-green (--pos) so the
-   * palette reads gold + black + white + green. No blue, anywhere. */
-  --accent2: #2ecf88; /* CTAs, live signals, secondary/data chart series */
-  --accent2-strong: #57e0a4; /* hover / bright / chart endpoint */
+  /* ===== Secondary accent - deeper "Signal" green (actions + data) =====
+   * Also green: the CTA/action green and the secondary/data chart series. Held a
+   * touch deeper than --accent so it's distinguishable as a secondary series. The
+   * whole palette now reads green + black + white, with gold as a rare spark. */
+  --accent2: #34d98a; /* CTAs, live signals, secondary/data chart series */
+  --accent2-strong: #5cefad; /* hover / bright / chart endpoint */
   --accent2-dim: #1f9b64; /* pressed / muted reference line */
-  --accent2-wash: rgba(46, 207, 136, 0.1); /* tint fills, badges, selection */
-  --accent2-line: rgba(46, 207, 136, 0.28); /* tinted borders / focus rings / glow ring */
+  --accent2-wash: rgba(47, 224, 138, 0.1); /* tint fills, badges, selection */
+  --accent2-line: rgba(47, 224, 138, 0.28); /* tinted borders / focus rings / glow ring */
   --on-accent2: #04140c; /* text on solid green (buttons) */
 
+  /* ===== Spark - "Fera Gold" (rare reward/earn/APR highlight ONLY) =====
+   * The old brand gold, demoted to a spark: use SPARINGLY on reward/earn/APR
+   * moments so it reads as "this is where you get paid". Never a brand title,
+   * eyebrow, CTA, or the primary chart series - those are all green now. */
+  --gold: #ecc45a;
+  --gold-wash: rgba(236, 196, 90, 0.12); /* tint fills, reward badges */
+  --gold-line: rgba(236, 196, 90, 0.28); /* tinted borders on reward surfaces */
+
   /* ===== Named chart series (so both illustrative charts read as one system) ===== */
-  --series-fera: var(--accent); /* the FERA / primary line - always gold */
+  --series-fera: var(--accent); /* the FERA / primary line - now green */
   --series-ref: #9a9aa4; /* neutral benchmark line (= chart-3) */
-  --series-cove: var(--accent2); /* the cool secondary line */
+  --series-cove: var(--accent2); /* the deeper secondary green line */
 
   /* ===== Card-hover glow presets (used by .card-glow; mirror boxShadow tokens) ===== */
-  --card-hover: 0 0 0 1px var(--accent-line), 0 12px 40px rgba(231, 184, 75, 0.1);
-  --card-hover-cove: 0 0 0 1px var(--accent2-line), 0 12px 40px rgba(46, 207, 136, 0.1);
+  --card-hover: 0 0 0 1px var(--accent-line), 0 12px 40px rgba(47, 224, 138, 0.1);
+  --card-hover-cove: 0 0 0 1px var(--accent2-line), 0 12px 40px rgba(47, 224, 138, 0.1);
 
   /* ===== Semantic ===== */
   --pos: #46c08a; /* gain / up / market-open */
   --pos-wash: rgba(70, 192, 138, 0.12);
-  --neg: #e5675c; /* loss / down */
-  --neg-wash: rgba(229, 103, 92, 0.12);
+  --neg: #ff6b81; /* loss / down (coral - reads clean on the green-biased ground) */
+  --neg-wash: rgba(255, 107, 129, 0.12);
   --warn: #e0873a; /* caution / off-hours widen (amber-orange, distinct from gold) */
   --warn-wash: rgba(224, 135, 58, 0.12);
   --danger: #ff5c4d; /* LOUD - esFERA forfeiture / haircut only */
@@ -79,9 +88,9 @@
   --regime-event: #a98be0; /* violet, reserved - never rendered in v1 */
 
   /* ===== Charts (greyscale-forward; accent reserved for the live/primary series) ===== */
-  --chart-grid: #1e1e24;
-  --chart-axis: #56565f;
-  --chart-1: #e7b84b; /* accent - primary/live series (gold) */
+  --chart-grid: #18211d; /* green-biased hairline grid, sits on the new ink */
+  --chart-axis: #55625a; /* muted green-biased axis labels */
+  --chart-1: #2fe08a; /* accent - primary/live series (green) */
   --chart-2: #c9c9d1;
   --chart-3: #9a9aa4;
   --chart-4: #74747e;
@@ -124,8 +133,8 @@
      * on macOS. Anchored to the top of the page, it reads as the same top vignette. */
     background-image: radial-gradient(
       120% 80% at 50% -10%,
-      rgba(231, 184, 75, 0.035) 0%,
-      rgba(231, 184, 75, 0) 42%
+      rgba(47, 224, 138, 0.04) 0%,
+      rgba(47, 224, 138, 0) 42%
     );
     background-repeat: no-repeat;
     color: var(--text);
@@ -183,8 +192,11 @@
   }
 
   /* Colored eyebrow tones - assigned by section intent (REDESIGN_PLAN.md §1).
-   * brand / "how it works" → gold; anything wrapping a chart/number → cove;
-   * the honesty section keeps the default quiet grey .overline (its calm is the point). */
+   * Both tones are green now (brand = --accent, data = --accent2). Class names are
+   * kept (`overline-gold` / `overline-cove`) so existing markup recolors with no
+   * churn; `overline-gold` is the brand-green eyebrow, `overline-cove` the deeper
+   * data green. The honesty section keeps the quiet grey .overline (its calm is the
+   * point). NB: `overline-gold` no longer means gold - gold is a rare spark only. */
   .overline-gold {
     color: var(--accent);
   }
@@ -196,7 +208,7 @@
    * Border brighten + soft accent glow + slight lift, applied site-wide to existing
    * cards by the surface agents. Add it alongside a card's own border/bg classes; it
    * only styles hover/focus. Pair with `.group`-less native :hover. The `--cove`
-   * variant re-tints the glow cyan for data / chart cards. Also lights on
+   * variant re-tints the glow to the deeper data-green for data / chart cards. Also lights on
    * :focus-within so keyboard users get the same emphasis. */
   .card-glow {
     transition:

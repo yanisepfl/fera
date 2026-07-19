@@ -5,8 +5,9 @@
  *
  * The story, left to right: YOU deposit -> the VAULT holds the adaptive range
  * (the band motif: tight at the ends, wide through the volatile middle) while
- * traders swap through it -> the FEES arc back to you in the green action/positive
- * color. Gold stays the brand/mechanism color; green is money coming back.
+ * traders swap through it -> the FEES arc back to you in the deeper action green
+ * (--accent2). The brand green (--accent) draws the mechanism; the deeper green is
+ * money coming back.
  *
  * Meaningful (not decorative), so it ships role="img" + a plain-language label.
  */

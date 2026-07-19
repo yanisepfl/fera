@@ -10,7 +10,7 @@ const ROLE_META: Record<
   LadderBand["role"],
   { label: string; color: string; wash: string }
 > = {
-  core: { label: "Core", color: "var(--accent)", wash: "rgba(231,184,75,0.22)" },
+  core: { label: "Core", color: "var(--accent)", wash: "rgba(47,224,138,0.22)" },
   mid: { label: "Mid", color: "var(--regime-rwa)", wash: "rgba(134,167,155,0.20)" },
   tail: { label: "Tail", color: "var(--text-mute)", wash: "rgba(110,110,121,0.22)" },
   fee: { label: "Fees", color: "var(--pos)", wash: "rgba(70,192,138,0.20)" },

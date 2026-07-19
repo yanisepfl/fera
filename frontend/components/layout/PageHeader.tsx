@@ -1,7 +1,7 @@
 /**
- * App page header, styled to match the marketing page's heading system: gold
+ * App page header, styled to match the marketing page's heading system: brand-green
  * eyebrow (overline-gold), display-size semibold title (drop a
- * `<span className="text-accent">` in the title for the gold highlight, exactly
+ * `<span className="text-accent">` in the title for the green highlight, exactly
  * like the marketing hero), quiet one-line subtitle.
  */
 export function PageHeader({

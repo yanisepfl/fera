@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
  *     className directly - this is the primary path, no import needed; or
  *  - use <GlowCard> for new cards to get the base surface + treatment in one.
  *
- * `tone="cove"` re-tints the glow cyan for data / chart cards.
+ * `tone="cove"` re-tints the glow to the deeper data-green for data / chart cards.
  */
 export function GlowCard({
   className,
@@ -22,7 +22,9 @@ export function GlowCard({
   ...props
 }: React.HTMLAttributes<HTMLElement> & {
   as?: React.ElementType;
-  /** "gold" = brand default; "cove" = data / chart cards glow cyan. */
+  /** "gold" = brand default (brand-green glow); "cove" = data / chart cards, deeper
+   *  green glow. NB: the "gold" token name is kept for markup stability; the glow is
+   *  green now (brand accent). */
   tone?: "gold" | "cove";
 }) {
   return (

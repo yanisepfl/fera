@@ -12,8 +12,8 @@ import { ConnectButton } from "./ConnectButton";
 
 /**
  * App top nav, built on the shared SiteHeader shell so it wears the exact same
- * chrome as the marketing header: h-16 bar, gold BrandLockup, centered links with
- * the gold underline treatment (pinned on for the active route), actions right.
+ * chrome as the marketing header: h-16 bar, green BrandLockup, centered links with
+ * the green underline treatment (pinned on for the active route), actions right.
  *
  * Flagship pool the "Pool" tab lands on. Pool detail is inherently per-pool
  * (/pool/[poolId]); there is no pools-index route (Earn is the list), so the nav

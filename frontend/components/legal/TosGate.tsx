@@ -10,7 +10,7 @@ import { useAccount } from "wagmi";
  * The Terms-of-Service acceptance gate — a blocking, non-dismissible overlay shown after
  * the first wallet connect until the user signs (or disconnects). It is intentionally NOT
  * closable by Escape or backdrop click: the only ways out are "Accept" (which triggers the
- * wallet signature) or "Disconnect". Gold-accented to match the FERA brand; the accept
+ * wallet signature) or "Disconnect". Green-accented to match the FERA brand; the accept
  * action carries the green action accent per the design system.
  */
 export function TosGate({
@@ -57,13 +57,13 @@ export function TosGate({
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" aria-hidden />
 
       <div className="relative z-10 w-full sm:max-w-lg overflow-hidden rounded-t-lg sm:rounded-lg border border-line-strong bg-raised shadow-pop animate-fade-up">
-        {/* gold top hairline — brand signature */}
+        {/* green top hairline — brand signature */}
         <div
           aria-hidden
           className="h-1 w-full"
           style={{
             backgroundImage:
-              "linear-gradient(90deg, #cd9f33 0%, #e7b84b 50%, #f3d488 100%)",
+              "linear-gradient(90deg, #159a5c 0%, #2fe08a 50%, #5cefad 100%)",
           }}
         />
 

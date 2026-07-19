@@ -61,21 +61,21 @@ export function Chart({
         height,
         layout: {
           background: { type: lc.ColorType.Solid, color: "transparent" },
-          textColor: "#6e6e79",
+          textColor: "#616f68", // --text-mute
           fontFamily:
             "var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace",
           fontSize: 11,
           attributionLogo: false,
         },
         grid: {
-          vertLines: { color: "#1e1e24" },
-          horzLines: { color: "#1e1e24" },
+          vertLines: { color: "#18211d" }, // --chart-grid
+          horzLines: { color: "#18211d" },
         },
-        rightPriceScale: { borderColor: "#23232a" },
-        timeScale: { borderColor: "#23232a", timeVisible: true, secondsVisible: false },
+        rightPriceScale: { borderColor: "#1f2a25" }, // --line
+        timeScale: { borderColor: "#1f2a25", timeVisible: true, secondsVisible: false },
         crosshair: {
-          vertLine: { color: "#34343d", labelBackgroundColor: "#212127" },
-          horzLine: { color: "#34343d", labelBackgroundColor: "#212127" },
+          vertLine: { color: "#2b3a33", labelBackgroundColor: "#18211d" }, // --line-strong / --ink-750
+          horzLine: { color: "#2b3a33", labelBackgroundColor: "#18211d" },
         },
         handleScale: false,
         handleScroll: false,

@@ -1,13 +1,14 @@
 import { cn } from "@/lib/cn";
 
 /**
- * FERA brand mark - a single geometric F, condensed and forward-leaning
- * (see /BRAND.md and public/brand/mark.svg for the reference source).
+ * FERA brand mark - a CLAW: three tapering slashes sweeping up and to the right
+ * (Fera = Latin/Portuguese for "wild beast / feral"). See public/brand/mark.svg
+ * for the reference source.
  *
- * Path geometry is copied verbatim from public/brand/mark.svg (5 flat shapes,
- * skewX(-8) group) so it stays crisp at any size. The group fill is
- * `currentColor`, and `color` defaults to `--accent` (Fera Gold), the brand
- * accent. Pass `color` to override (e.g. on a solid accent background).
+ * Path geometry is copied verbatim from public/brand/mark.svg (3 claw strokes) so
+ * it stays crisp at any size. The group fill is `currentColor`, and `color`
+ * defaults to `--accent` (Fera Green), the brand accent. Pass `color` to override
+ * (e.g. on a solid accent background).
  */
 export function Logo({
   className,
@@ -29,12 +30,10 @@ export function Logo({
       className={cn("shrink-0", className)}
       style={{ color }}
     >
-      <g transform="skewX(-8)" fill="currentColor">
-        <rect x="25" y="14" width="13" height="74" />
-        <rect x="38" y="14" width="32" height="13" />
-        <polygon points="70,14 70,27 86,20.5" />
-        <rect x="38" y="42" width="22" height="12" />
-        <polygon points="60,42 60,54 72,48" />
+      <g fill="currentColor">
+        <path d="M20 80 C24 62 30 47 38 36 C35 51 31 67 28 84 Z" />
+        <path d="M39 83 C44 61 51 43 61 28 C56 47 50 67 46 87 Z" />
+        <path d="M59 85 C65 59 73 39 85 20 C78 44 70 67 66 89 Z" />
       </g>
     </svg>
   );

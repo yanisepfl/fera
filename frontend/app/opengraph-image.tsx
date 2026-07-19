@@ -20,9 +20,9 @@ export default function OpengraphImage() {
           flexDirection: "column",
           justifyContent: "space-between",
           padding: 80,
-          backgroundColor: "#0a0a0b",
+          backgroundColor: "#080b0a",
           backgroundImage:
-            "linear-gradient(150deg, rgba(231,184,75,0.12) 0%, rgba(231,184,75,0) 48%)",
+            "linear-gradient(150deg, rgba(47,224,138,0.12) 0%, rgba(47,224,138,0) 48%)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
@@ -34,14 +34,15 @@ export default function OpengraphImage() {
               width: 56,
               height: 56,
               borderRadius: 14,
-              border: "1px solid rgba(231,184,75,0.35)",
-              backgroundColor: "rgba(231,184,75,0.12)",
-              color: "#e7b84b",
-              fontSize: 34,
-              fontWeight: 700,
+              border: "1px solid rgba(47,224,138,0.35)",
+              backgroundColor: "rgba(47,224,138,0.12)",
             }}
           >
-            F
+            <svg width={34} height={34} viewBox="0 0 100 100" fill="#2fe08a">
+              <path d="M20 80 C24 62 30 47 38 36 C35 51 31 67 28 84 Z" />
+              <path d="M39 83 C44 61 51 43 61 28 C56 47 50 67 46 87 Z" />
+              <path d="M59 85 C65 59 73 39 85 20 C78 44 70 67 66 89 Z" />
+            </svg>
           </div>
           <div
             style={{
@@ -49,7 +50,7 @@ export default function OpengraphImage() {
               fontSize: 40,
               fontWeight: 700,
               letterSpacing: -1,
-              color: "#e7b84b",
+              color: "#2fe08a",
             }}
           >
             FERA
@@ -64,7 +65,7 @@ export default function OpengraphImage() {
               fontWeight: 700,
               lineHeight: 1.05,
               letterSpacing: -2,
-              color: "#f4f4f6",
+              color: "#ecf3ef",
               maxWidth: 900,
             }}
           >
@@ -75,7 +76,7 @@ Put your meme coins to work.
               display: "flex",
               fontSize: 30,
               lineHeight: 1.35,
-              color: "#a9a9b4",
+              color: "#9aa8a1",
               maxWidth: 940,
             }}
           >
@@ -90,7 +91,7 @@ Deposit your coins in a vault that earns the trading fees from all their
             fontSize: 22,
             letterSpacing: 1,
             textTransform: "uppercase",
-            color: "#6e6e79",
+            color: "#616f68",
           }}
         >
           Built on Robinhood Chain · Meme coins now · Stocks soon

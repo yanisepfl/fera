@@ -19,22 +19,22 @@ import { TosGateProvider } from "@/lib/hooks/useTosGate";
  *
  * RainbowKit is themed onto the FERA dark surface (DESIGN.md tokens) so the modal
  * reads as part of the app, not a bolted-on default. Wallet connect is an ACTION,
- * so it carries the green action accent (--accent2), not the gold brand accent.
+ * so it carries the deeper action green (--accent2), distinct from the brand green (--accent).
  * `modalSize="compact"` keeps the calm, data-dense register.
  */
 const feraWalletTheme: Theme = darkTheme({
-  accentColor: "#2ecf88", // --accent2 (action green)
+  accentColor: "#34d98a", // --accent2 (action green)
   accentColorForeground: "#04140c", // --on-accent2
   borderRadius: "medium",
   fontStack: "system",
   overlayBlur: "small",
 });
 // Nudge the modal chrome onto the ink scale (near-black surfaces + hairline borders).
-feraWalletTheme.colors.modalBackground = "#121215"; // --ink-875 (card)
-feraWalletTheme.colors.modalBorder = "#23232a"; // --line
-feraWalletTheme.colors.profileForeground = "#161619"; // --ink-850 (elevated)
-feraWalletTheme.colors.connectButtonBackground = "#1b1b1f"; // --ink-800 (surface)
-feraWalletTheme.colors.menuItemBackground = "#161619"; // --ink-850
+feraWalletTheme.colors.modalBackground = "#0d1210"; // --ink-875 (card)
+feraWalletTheme.colors.modalBorder = "#1f2a25"; // --line
+feraWalletTheme.colors.profileForeground = "#101614"; // --ink-850 (elevated)
+feraWalletTheme.colors.connectButtonBackground = "#131a17"; // --ink-800 (surface)
+feraWalletTheme.colors.menuItemBackground = "#101614"; // --ink-850
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(

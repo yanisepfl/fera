@@ -130,7 +130,7 @@ export function LpOutcomeChart({ className }: { className?: string }) {
           style={{ transition: "opacity 900ms var(--ease-out)" }}
         />
 
-        {/* FERA - gold, emphasized, draws in */}
+        {/* FERA - green, emphasized, draws in */}
         <path
           d={feraLine}
           fill="none"

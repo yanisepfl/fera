@@ -18,8 +18,8 @@ import {
  * The LP fee rises with realized volatility (cushioning LP loss in the worst
  * periods) and stays low in calm markets (to pull volume). ILLUSTRATIVE shape on
  * relative, unlabeled axes - the exact curve is set on-chain per pool, so nothing
- * here is a specific rate. Cove volatility area is the driver; the gold line is the
- * fee tracking it above a floor.
+ * here is a specific rate. The deeper-green volatility area is the driver; the brand-green
+ * line is the fee tracking it above a floor.
  * ========================================================================== */
 
 /** Realized volatility across calm → storm → calm. Arbitrary relative scale. */
@@ -158,7 +158,7 @@ export function FeeResponseChart({ className }: { className?: string }) {
           fee floor
         </text>
 
-        {/* fee line - gold, draws in */}
+        {/* fee line - brand green, draws in */}
         <path
           d={feeLine}
           fill="none"
@@ -194,7 +194,7 @@ export function FeeResponseChart({ className }: { className?: string }) {
           </text>
         </g>
 
-        {/* fee endpoint - pulsing gold marker (no invented rate) */}
+        {/* fee endpoint - pulsing green marker (no invented rate) */}
         <g style={fade(900, 500)}>
           <PrimaryEndpoint
             x={feeEnd[0]}

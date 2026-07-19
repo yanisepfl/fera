@@ -4,8 +4,9 @@ import type { Config } from "tailwindcss";
  * FERA design tokens - see frontend/DESIGN.md for the full rationale.
  * Colors are wired to CSS variables in app/globals.css so the theme is themeable
  * from one place and stays consistent across Tailwind classes + raw CSS.
- * Aesthetic family: alphix.fi / Canary / Alma / Alps - dark-first, typography-led,
- * greyscale-forward with a single restrained accent (Fera Gold).
+ * Aesthetic family: dark-first, typography-led, greyscale-forward with a single
+ * restrained accent - now Fera Green (green carries brand + action); gold is
+ * demoted to a rare reward/earn spark (`text-gold` / `bg-gold-wash`).
  */
 const config: Config = {
   darkMode: "class",
@@ -36,7 +37,7 @@ const config: Config = {
         dim: "var(--text-dim)",
         mute: "var(--text-mute)",
 
-        // --- Accent (brand accent: Fera Gold - titles, glows, eyebrows, mark) ---
+        // --- Accent (brand + action: Fera Green - titles, glows, eyebrows, mark, CTAs) ---
         accent: {
           DEFAULT: "var(--accent)",
           strong: "var(--accent-strong)",
@@ -46,7 +47,7 @@ const config: Config = {
           fg: "var(--on-accent)",
         },
 
-        // --- Secondary accent (Signal green: actions/CTAs + data series) ---
+        // --- Secondary accent (deeper Signal green: actions/CTAs + data series) ---
         accent2: {
           DEFAULT: "var(--accent2)",
           strong: "var(--accent2-strong)",
@@ -54,6 +55,13 @@ const config: Config = {
           wash: "var(--accent2-wash)",
           line: "var(--accent2-line)",
           fg: "var(--on-accent2)",
+        },
+
+        // --- Spark (Fera Gold: rare reward/earn/APR highlight only) ---
+        gold: {
+          DEFAULT: "var(--gold)",
+          wash: "var(--gold-wash)",
+          line: "var(--gold-line)",
         },
 
         // --- Named chart series (both illustrative charts read as one system) ---
@@ -117,15 +125,15 @@ const config: Config = {
         card: "0 1px 2px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02)",
         pop: "0 8px 30px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.4)",
         "glow-accent":
-          "0 0 0 1px var(--accent-line), 0 10px 34px rgba(231,184,75,0.07)",
+          "0 0 0 1px var(--accent-line), 0 10px 34px rgba(47,224,138,0.07)",
         "glow-accent2":
-          "0 0 0 1px var(--accent2-line), 0 10px 34px rgba(46,207,136,0.08)",
+          "0 0 0 1px var(--accent2-line), 0 10px 34px rgba(47,224,138,0.08)",
         "glow-danger":
           "0 0 0 1px var(--danger-line), 0 10px 34px rgba(255,92,77,0.09)",
         "card-hover":
-          "0 0 0 1px var(--accent-line), 0 12px 40px rgba(231,184,75,0.10)",
+          "0 0 0 1px var(--accent-line), 0 12px 40px rgba(47,224,138,0.10)",
         "card-hover-cove":
-          "0 0 0 1px var(--accent2-line), 0 12px 40px rgba(46,207,136,0.10)",
+          "0 0 0 1px var(--accent2-line), 0 12px 40px rgba(47,224,138,0.10)",
       },
       transitionTimingFunction: {
         out: "cubic-bezier(0.22, 1, 0.36, 1)",
