@@ -45,14 +45,40 @@ const KIND = {
   9: "self-swap", 10: "venue swap", 11: "idle skim", 12: "partial recenter",
 };
 
-// symbol, poolId, quoteIsToken0 (true = wWETH is token0)
-const POOLS = [
-  ["TENDIES", "0x781f4bd64678be81a559f58bb124c570fb86abc04831f1c41212984340df9a12", true],
-  ["VIRTUAL", "0x4412b3443d6f50184af006e8e0fa2573ef0b7ef7ddb675738971311a27236ef7", true],
-  ["GME", "0x848c3b7e44feed741b097eecba7846dd96414e8b1fc21488c71c8b9bcb115cb5", true],
-  ["WALLET", "0x877c04e865fffdfb450a86e5d1c3e5892ea56d5e33e3d56733249330a5b234b3", false],
-  ["PONS", "0x4f382e3ceda365063d6824280583f2c485fe4f5c21178c39901c45f11a47e44d", true],
-];
+// Pools are AUTO-DISCOVERED from the hook's PoolRegistered events (like the keeper) — no
+// hardcoded list, so every current + future FERA pool shows up automatically. wWETH-quoted
+// only for now (the USD valuation below assumes an 18-dec wWETH quote); a USDG pool is skipped
+// with a note until the valuation is generalized.
+const USDG = "0x5fc5360d0400a0fd4f2af552add042d716f1d168";
+const T_POOLREG = "0x930e5e70e36a1d1f498056bca8b1abee09011ba44e9cdf44243b3d3cda0865fb"; // PoolRegistered(bytes32,address,address,uint8)
+
+/** ERC-20 symbol() via eth_call, decoded from the string return; falls back to a short address. */
+async function tokenSymbol(addr) {
+  try {
+    const d = (await call(addr, "0x95d89b41")).slice(2); // symbol()
+    const len = parseInt(d.slice(64, 128), 16);
+    const s = Buffer.from(d.slice(128, 128 + len * 2), "hex").toString("utf8").replace(/\0/g, "");
+    return s || addr.slice(0, 8);
+  } catch { return addr.slice(0, 8); }
+}
+
+/** [symbol, poolId, quoteIsToken0] for every wWETH-quoted FERA pool, from PoolRegistered logs. */
+async function discoverPools() {
+  const logs = await rpc("eth_getLogs", [{
+    address: HOOK, fromBlock: "0x" + EARLIEST.toString(16), toBlock: "latest", topics: [T_POOLREG],
+  }]);
+  const out = [];
+  for (const l of logs) {
+    const poolId = l.topics[1];
+    const d = l.data.slice(2);
+    const token0 = ("0x" + d.slice(24, 64)).toLowerCase();
+    const token1 = ("0x" + d.slice(88, 128)).toLowerCase();
+    if (token0 === WWETH) out.push([await tokenSymbol(token1), poolId, true]);
+    else if (token1 === WWETH) out.push([await tokenSymbol(token0), poolId, false]);
+    else console.error(`skip non-wWETH pool ${poolId.slice(0, 10)} (${token0}/${token1})`);
+  }
+  return out;
+}
 
 let rpcId = 0;
 async function rpc(method, params) {
@@ -77,6 +103,8 @@ const hexInt = (h) => Number(BigInt(h));
 const f18 = (x) => Number(x) / 1e18;
 
 async function main() {
+  const POOLS = await discoverPools();
+  if (!POOLS.length) { console.log("no FERA pools discovered on-chain"); return; }
   // block window from the chain's own block rate
   const latest = await rpc("eth_getBlockByNumber", ["latest", false]);
   const latestNum = hexInt(latest.number);
