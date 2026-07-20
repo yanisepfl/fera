@@ -118,7 +118,14 @@ export async function tick(env: KeeperEnv): Promise<void> {
   const pools = await env.publicClient.getLogs({
     address: HOOK, event: poolRegisteredEvent, fromBlock: START_BLOCK, toBlock: "latest",
   });
-  log("vault-strategy", "info", `discovered ${pools.length} pools`);
+  // Idle-skim + limit-(re)deploy are LOW-URGENCY and gas-heavy across many pools — at bootstrap
+  // TVL the per-tick churn (100+/day) outran the fees it captured and drained the keeper. Throttle
+  // them to a ~4h cadence off the block clock (stateless — GitHub Actions runs are ephemeral); the
+  // base recenter + dwell-clock still run EVERY tick because those are the position-holding safety
+  // actions. When real TVL makes frequent limit redeploys worth their gas, widen this.
+  const { timestamp } = await env.publicClient.getBlock();
+  const doSkimLimit = Number(timestamp / 3600n) % 4 === 0;
+  log("vault-strategy", "info", `discovered ${pools.length} pools; skim/limit ${doSkimLimit ? "ON" : "throttled"} this tick`);
 
   for (const p of pools) {
     const poolId = (p.args as { poolId: `0x${string}` }).poolId;
@@ -135,10 +142,12 @@ export async function tick(env: KeeperEnv): Promise<void> {
         .catch(() => 0n);
       if (supply === 0n) continue;
 
-      await syncDwellClock(env, poolId, t);                            // 1. dwell clock
-      await simulateThenSend(env, poolId, "rebalanceBase", [poolId, t, true]); // 2. recenter base if due
-      await simulateThenSend(env, poolId, "skimIdle", [poolId, t]);           // 3. top idle reserve
-      await simulateThenSend(env, poolId, "rebalanceLimit", [poolId, t]);     // 4. (re)deploy limit
+      await syncDwellClock(env, poolId, t);                            // 1. dwell clock — every tick
+      await simulateThenSend(env, poolId, "rebalanceBase", [poolId, t, true]); // 2. recenter base if due — every tick
+      if (doSkimLimit) {                                                       // 3+4. throttled ~4h
+        await simulateThenSend(env, poolId, "skimIdle", [poolId, t]);
+        await simulateThenSend(env, poolId, "rebalanceLimit", [poolId, t]);
+      }
     }
   }
 }

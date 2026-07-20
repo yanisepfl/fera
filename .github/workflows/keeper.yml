@@ -15,7 +15,8 @@ name: FERA keeper
 
 on:
   schedule:
-    - cron: "*/30 * * * *" # every 30 min (best-effort scheduling is fine — fail-static)
+    - cron: "0 * * * *" # hourly (best-effort scheduling is fine — fail-static). Base recenter +
+      # dwell clock run every tick; the gas-heavy idle-skim/limit-redeploy self-throttle to ~4h.
   workflow_dispatch: {}
 
 permissions:
