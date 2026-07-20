@@ -49,6 +49,66 @@ const erc20SupplyAbi = [
   { type: "function", name: "totalSupply", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
 ] as const;
 
+const WWETH = (process.env.FERA_WWETH ?? "0x0bd7d308f8e1639fab988df18a8011f41eacad73").toLowerCase();
+const STATE_VIEW = (process.env.UNIV4_STATE_VIEW ?? "0xf3334192d15450cdd385c8b70e03f9a6bd9e673b") as `0x${string}`;
+const stateViewAbi = [
+  { type: "function", name: "getSlot0", stateMutability: "view", inputs: [{ name: "poolId", type: "bytes32" }],
+    outputs: [{ type: "uint160" }, { type: "int24" }, { type: "uint24" }, { type: "uint24" }] },
+] as const;
+
+// --- Cross-venue price guard (option A) ---------------------------------------------------------
+// Before acting on a pool, sanity-check its on-chain price against the DEEP external market
+// (GeckoTerminal aggregate). If they diverge past a threshold the pool is either being manipulated
+// to game a rebalance, or simply mispriced — either way, do NOT recenter/redeploy at that price;
+// external arbers will correct it (they pay our fee to do so) and the keeper acts on the next tick.
+//
+// FAIL-OPEN by construction so the keeper is NEVER stuck skipping: the guard returns "clear"
+// (proceed) whenever it can't get BOTH prices, when the divergence is within threshold, or when
+// disabled (KEEPER_ARB_CHECK_BPS=0). It only blocks on a *confirmed* large divergence with both
+// prices in hand. On top of that, the vault's own spot-vs-TWAP gate is the on-chain backstop.
+// Assumes an 18-dec memecoin vs 18-dec wWETH (all current pools) — skips the check otherwise.
+const ARB_CHECK_BPS = Number(process.env.KEEPER_ARB_CHECK_BPS ?? 300); // default ±3%
+
+async function marketPriceWeth(memecoin: string): Promise<number | null> {
+  try {
+    const gt = (a: string) =>
+      fetch(`https://api.geckoterminal.com/api/v2/networks/robinhood/tokens/${a}`, {
+        headers: { accept: "application/json" },
+      }).then((r) => r.json() as Promise<{ data?: { attributes?: { price_usd?: string } } }>);
+    const [m, w] = await Promise.all([gt(memecoin), gt(WWETH)]);
+    const mp = Number(m?.data?.attributes?.price_usd);
+    const wp = Number(w?.data?.attributes?.price_usd);
+    if (!(mp > 0) || !(wp > 0)) return null;
+    return mp / wp; // memecoin price denominated in wWETH
+  } catch {
+    return null;
+  }
+}
+
+async function poolPriceWeth(env: KeeperEnv, poolId: `0x${string}`, q0: boolean): Promise<number | null> {
+  try {
+    const slot = (await env.publicClient.readContract({
+      address: STATE_VIEW, abi: stateViewAbi, functionName: "getSlot0", args: [poolId],
+    })) as readonly [bigint, number, number, number];
+    const p = (Number(slot[0]) / 2 ** 96) ** 2; // raw token1/token0 (18/18 dec cancel)
+    if (!(p > 0)) return null;
+    return q0 ? 1 / p : p; // q0: token0=wWETH => p is meme/wWETH => meme price = 1/p; else p already meme-priced
+  } catch {
+    return null;
+  }
+}
+
+/** null = clear to act; otherwise the divergence detail (skip acting on the pool this tick). */
+async function priceGuard(
+  env: KeeperEnv, poolId: `0x${string}`, memecoin: string, q0: boolean,
+): Promise<{ ours: number; ref: number; divBps: number } | null> {
+  if (ARB_CHECK_BPS <= 0) return null; // disabled
+  const [ref, ours] = await Promise.all([marketPriceWeth(memecoin), poolPriceWeth(env, poolId, q0)]);
+  if (ref == null || ours == null) return null; // fail-open: can't compare => let the vault's TWAP gate decide
+  const divBps = Math.round((Math.abs(ours - ref) / ref) * 10_000);
+  return divBps > ARB_CHECK_BPS ? { ours, ref, divBps } : null;
+}
+
 /** simulate as the keeper; send only when the simulation succeeds (zero wasted gas). */
 async function simulateThenSend(
   env: KeeperEnv,
@@ -133,7 +193,20 @@ export async function tick(env: KeeperEnv): Promise<void> {
   log("vault-strategy", "info", `discovered ${pools.length} pools; skim/limit ${doSkimLimit ? "ON" : "throttled"} this tick`);
 
   for (const p of pools) {
-    const poolId = (p.args as { poolId: `0x${string}` }).poolId;
+    const args = p.args as { poolId: `0x${string}`; token0: string; token1: string };
+    const poolId = args.poolId;
+    // Cross-venue price guard (per pool): if our price is far from the deep market, don't ACT on
+    // the pool this tick (recenter/skim/redeploy) — but ALWAYS keep the dwell clock in sync so the
+    // moment it reprices we're ready. Fail-open (see priceGuard) so this never permanently stalls.
+    const q0 = args.token0.toLowerCase() === WWETH;
+    const memecoin = q0 ? args.token1 : args.token0;
+    const diverged = await priceGuard(env, poolId, memecoin, q0);
+    if (diverged) {
+      log("vault-strategy", "warn", "price diverges from market — holding off rebalance (arb/manipulation guard)", {
+        poolId, ourWeth: diverged.ours.toPrecision(4), mktWeth: diverged.ref.toPrecision(4), divBps: diverged.divBps,
+      });
+    }
+
     for (const t of [0, 1] as const) {
       // active tranche only (tranche 1 exists on-chain but may be unseeded)
       let share: `0x${string}`;
@@ -147,9 +220,10 @@ export async function tick(env: KeeperEnv): Promise<void> {
         .catch(() => 0n);
       if (supply === 0n) continue;
 
-      await syncDwellClock(env, poolId, t);                            // 1. dwell clock — every tick
-      await simulateThenSend(env, poolId, "rebalanceBase", [poolId, t, true]); // 2. recenter base if due — every tick
-      if (doSkimLimit) {                                                       // 3+4. throttled ~4h
+      await syncDwellClock(env, poolId, t); // 1. dwell clock — ALWAYS (even when diverged)
+      if (diverged) continue;               // hold off recenter/skim/limit while mispriced
+      await simulateThenSend(env, poolId, "rebalanceBase", [poolId, t, true]); // 2. recenter base if due
+      if (doSkimLimit) {                                                       // 3+4. throttled ~daily
         await simulateThenSend(env, poolId, "skimIdle", [poolId, t]);
         await simulateThenSend(env, poolId, "rebalanceLimit", [poolId, t]);
       }
