@@ -524,27 +524,43 @@ function MarketingFooter() {
   );
 }
 
-/** Follow us / contact. The X + Telegram handles are being created by the principal.
- *  Until they exist we render them as clearly not-yet-live rather than as dead links
- *  to "#" (a dead social link is a classic unfinished/scam tell). Swap each span for
- *  a real anchor the moment the handle is live. */
+const X_URL = "https://x.com/feradotfun";
+const TELEGRAM_URL = "https://t.me/feradotfun";
+
+/** Follow us / contact. X + Telegram are live (@feradotfun); Discord exists but isn't
+ *  ready to send people to yet, so it stays in the same "clearly not-yet-live" span
+ *  treatment the other two used before their handles existed — never a dead "#" link
+ *  (a classic unfinished/scam tell). Swap the span for a real anchor once it's ready. */
 function FollowUs() {
   return (
     <div>
       <div className="overline mb-3">Follow us</div>
       <ul className="space-y-2">
         <li>
-          <span className="inline-flex items-center gap-2 text-body-sm text-mute">
+          <a
+            href={X_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 text-body-sm text-dim transition-colors hover:text-text"
+          >
             <XIcon />X (Twitter)
-            <span className="rounded-full bg-well px-1.5 py-0.5 text-micro uppercase tracking-[0.08em] text-mute">
-              soon
-            </span>
-          </span>
+          </a>
+        </li>
+        <li>
+          <a
+            href={TELEGRAM_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 text-body-sm text-dim transition-colors hover:text-text"
+          >
+            <TelegramIcon />
+            Telegram
+          </a>
         </li>
         <li>
           <span className="inline-flex items-center gap-2 text-body-sm text-mute">
-            <TelegramIcon />
-            Telegram
+            <DiscordIcon />
+            Discord
             <span className="rounded-full bg-well px-1.5 py-0.5 text-micro uppercase tracking-[0.08em] text-mute">
               soon
             </span>
@@ -581,6 +597,21 @@ function TelegramIcon() {
       className="shrink-0"
     >
       <path d="M21.94 4.9 18.6 20.64c-.25 1.11-.91 1.38-1.85.86l-5.11-3.77-2.47 2.37c-.27.27-.5.5-1.03.5l.37-5.2 9.47-8.56c.41-.36-.09-.57-.64-.23L5.94 13.62l-5.04-1.58c-1.1-.34-1.12-1.1.23-1.63l19.68-7.59c.91-.34 1.71.2 1.13 1.7z" />
+    </svg>
+  );
+}
+
+function DiscordIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={14}
+      height={14}
+      fill="currentColor"
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      <path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.07.07 0 0 0-.075.035c-.211.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.075-.035A19.74 19.74 0 0 0 3.68 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.2 14.2 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128q.189-.142.365-.29a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.073.073 0 0 1 .078.01q.176.148.365.29a.077.077 0 0 1-.006.129 12.3 12.3 0 0 1-1.873.891.076.076 0 0 0-.04.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.029 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.055c.5-5.177-.838-9.673-3.549-13.66a.06.06 0 0 0-.031-.028M8.02 15.33c-1.183 0-2.157-1.086-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.211 0 2.176 1.096 2.157 2.42 0 1.332-.955 2.418-2.157 2.418m7.975 0c-1.183 0-2.157-1.086-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.332-.946 2.418-2.157 2.418" />
     </svg>
   );
 }
