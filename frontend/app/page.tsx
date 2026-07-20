@@ -22,8 +22,8 @@ import {
  * a skilled self-managed LP. No "guaranteed" / "risk-free" / fixed yield. Risk levels are
  * Steady / Active (never "tranche"). Any figure that isn't live on-chain data is visibly
  * illustrative (the two viz cards carry their own honest framing). No internal jargon (no
- * "toxic flow", "regime", "TWAP", "LVR") in rendered copy. The app itself lives under /app;
- * nothing is live yet (see the "Launching on Robinhood Chain" badge).
+ * "toxic flow", "regime", "TWAP", "LVR") in rendered copy. The app itself lives under /app
+ * (see the "Live on Robinhood Chain" badge).
  *
  * STYLE: no em-dashes in rendered copy (the principal finds them AI-tell). Use periods,
  * commas, or parentheses.
@@ -134,7 +134,7 @@ function Hero() {
                 style={{ boxShadow: "0 0 8px rgba(47,224,138,0.75)" }}
               />
               <span className="min-w-0 text-micro uppercase tracking-[0.08em] text-accent2">
-                Launching on Robinhood Chain
+                Live on Robinhood Chain
               </span>
             </div>
 
@@ -144,9 +144,10 @@ function Hero() {
             </h1>
 
             <p className="mt-6 max-w-xl text-body text-dim md:text-heading md:leading-8">
-              Meme coins never sit still, and now the movement pays you. A managed-liquidity
-              vault turns the volatility that wrecks most LPs into your fee income. You still
-              hold the coins you believe in, and the swings finally work for you.
+              Meme coins never sit still. FERA turns that volatility into fee income: a dynamic
+              fee that rises when it gets wild, managed by a vault that repositions your
+              liquidity to capture it. You still carry the coin&apos;s price risk, same as any
+              LP position. Now the fee works for you too.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -160,8 +161,8 @@ function Hero() {
             </div>
 
             <p className="mt-6 text-caption text-mute">
-              Not a launchpad. The layer that makes the launches liquid. On-chain and
-              verifiable, meme coins now, tokenized stocks soon.
+              Liquidity infrastructure for meme coins, on-chain and verifiable. Meme coins now,
+              tokenized stocks soon.
             </p>
           </div>
 
@@ -251,11 +252,11 @@ const REASONS = [
       "Illustrative shape, not a promise. Quiet markets earn little, and a violent move still carries real risk.",
   },
   {
-    tag: "Your coins, plus yield",
-    t: "Keep the coins. Earn on the trading.",
-    d: "You still hold what you deposited, with all of its upside. FERA adds a second stream on top: the fee from every swap that trades against your liquidity. The coins you already believe in, now doing two jobs at once.",
+    tag: "No new token to buy",
+    t: "The coins you already trade, now paying fees too.",
+    d: "Deposit a pair you're already exposed to. You still carry that pair's price risk, exactly like any liquidity position (impermanent loss doesn't go away), but every swap against your liquidity now pays you a fee on top.",
     honest:
-      "Fees are real income, but variable and never guaranteed. And when prices move hard, providing liquidity carries its own risk.",
+      "Fees are real income, but variable and never guaranteed. A hard move can still cost more in IL than the fees earn back.",
   },
 ];
 
@@ -371,8 +372,12 @@ const FAQS = [
     a: "Everything is on-chain and in the open. Anyone can recompute the fees a pool earned from public data, and the rules that manage your money are fixed. Transparent and immutable, by construction.",
   },
   {
+    q: "Can I lose money? What about impermanent loss?",
+    a: "Yes, the same as any liquidity position. When a token's price moves a lot, the value of your deposit can fall even counting fees earned; that's impermanent loss (IL), and providing liquidity doesn't remove it. What FERA does is aim IL down and fees up: the dynamic fee rises exactly when volatility (and IL risk) is highest, and the vault actively manages your range instead of leaving it static. That narrows the gap. It doesn't close it. Only deposit what you're fine holding through a hard move.",
+  },
+  {
     q: "Does FERA beat managing my own liquidity?",
-    a: "We don't claim to. You get an actively managed position, two risk levels, and one-tap simplicity. A skilled hands-on provider can still do better. What FERA gives you is that no one has to run it. We'd rather be straight with you.",
+    a: "We don't claim to. You get an actively managed position, two risk levels, and one-tap simplicity. A skilled hands-on provider can still do better. What FERA gives you is that no one has to run it.",
   },
   {
     q: "Is the yield fixed or guaranteed?",
@@ -445,8 +450,9 @@ function CtaBand() {
           Put the volatility to work.
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-body text-dim">
-          Deposit the meme coins you already hold into a vault that earns the trading fees for
-          you. The movement does the rest.
+          Deposit into a pool for a meme coin you&apos;re already trading, and let the vault
+          manage the range. The fee is built to rise exactly when the swings are hardest to sit
+          through.
         </p>
         <div className="mt-8 flex justify-center">
           <Link href="/app" className={btnPrimary}>
