@@ -7,6 +7,7 @@ import {
   RISK_CLASS_GROUP_LABEL,
   availableRiskClasses,
 } from "@/lib/riskClass";
+import { livePoolById } from "@/config/pools";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { apr } from "@/lib/format";
@@ -32,8 +33,13 @@ export function RiskClassSelector({
   onChange: (rc: RiskClass) => void;
   variant?: "cards" | "compact";
 }) {
-  const classes =
-    pool.tranches && pool.tranches.length
+  // REGISTRY pools always have both tranches live on-chain (see availableRiskClasses'
+  // docs) — that wins over the indexer's `tranches[]`, which may not have caught up on
+  // a newer class yet (its APR still renders "—" below, never a fabricated number).
+  const live = livePoolById(pool.poolId);
+  const classes = live
+    ? availableRiskClasses(pool.regime, true)
+    : pool.tranches && pool.tranches.length
       ? (pool.tranches.map((t) => t.riskClass) as RiskClass[])
       : availableRiskClasses(pool.regime);
   const ordered = RISK_CLASS_ORDER.filter((rc) => classes.includes(rc));
@@ -81,11 +87,9 @@ export function RiskClassSelector({
                     ) : null}
                   </div>
                   <div className="mt-0.5 text-caption text-mute">{m.tagline}</div>
-                  {t ? (
-                    <div className="mt-2 font-mono tnum text-caption text-dim">
-                      {apr(t.feeApr + t.emissionsApr)} total APR
-                    </div>
-                  ) : null}
+                  <div className="mt-2 font-mono tnum text-caption text-dim">
+                    {t ? `${apr(t.feeApr + t.emissionsApr)} total APR` : "— total APR"}
+                  </div>
                 </button>
               );
             })}
@@ -131,16 +135,14 @@ export function RiskClassSelector({
                   <span className="text-heading font-semibold" style={{ color: m.color }}>
                     {m.label}
                   </span>
-                  {t ? (
-                    <span className="text-right">
-                      <span className="block font-mono tnum text-body font-semibold text-text">
-                        {apr(t.feeApr + t.emissionsApr)}
-                      </span>
-                      <span className="text-micro uppercase tracking-wide text-mute">
-                        total APR
-                      </span>
+                  <span className="text-right">
+                    <span className="block font-mono tnum text-body font-semibold text-text">
+                      {t ? apr(t.feeApr + t.emissionsApr) : "—"}
                     </span>
-                  ) : null}
+                    <span className="text-micro uppercase tracking-wide text-mute">
+                      total APR
+                    </span>
+                  </span>
                 </div>
                 <p className="mt-1 text-body-sm text-dim">{m.tagline}</p>
 

@@ -15,7 +15,8 @@ import { livePoolById, type LivePool } from "@/config/pools";
 import { EXPLORER_TX } from "@/config/chains";
 import { holdState, windowCountdown, HOLD_LABEL } from "@/lib/jit";
 import { usd, esFera, tokenAmt } from "@/lib/format";
-import type { PoolSummary, Position } from "@/lib/types";
+import { RISK_CLASS_META } from "@/lib/riskClass";
+import { RISK_CLASS_BY_TRANCHE, type PoolSummary, type Position } from "@/lib/types";
 
 /**
  * Withdraw dialog. Withdrawals are in-kind and pro-rata — you get your share of the actual
@@ -26,6 +27,10 @@ import type { PoolSummary, Position } from "@/lib/types";
  * minAmount0, minAmount1) on Robinhood Chain: the share balance, the hold (the vault's
  * on-chain lastDepositTs + 1h cooldown) and the pro-rata value estimate are all read
  * from the contracts. Other pools keep the original mocked preview.
+ *
+ * `position.tranche` (0 = Core/"Active", 1 = Anchor/"Steady" — lib/riskClass.ts) picks
+ * which risk class's shares this withdraws; absent ⇒ tranche 0, matching Position's own
+ * "0 = Core" default (lib/types.ts).
  */
 export function WithdrawDialog({
   pool,
@@ -38,6 +43,7 @@ export function WithdrawDialog({
 }) {
   const [open, setOpen] = useState(false);
   const live = livePoolById(pool.poolId);
+  const tranche = position.tranche ?? 0;
 
   function reset() {
     setOpen(false);
@@ -54,7 +60,7 @@ export function WithdrawDialog({
           </div>
           {live ? (
             /* REAL on-chain withdraw (Modal unmounts on close, so tx state resets). */
-            <LiveWithdrawBody live={live} onClose={reset} />
+            <LiveWithdrawBody live={live} tranche={tranche} onClose={reset} />
           ) : (
             <MockWithdrawBody pool={pool} position={position} onClose={reset} />
           )}
@@ -64,10 +70,18 @@ export function WithdrawDialog({
   );
 }
 
-/** Proportional in-kind withdraw against the live vault (tranche 0 — see useVaultTx). */
-function LiveWithdrawBody({ live, onClose }: { live: LivePool; onClose: () => void }) {
+/** Proportional in-kind withdraw against the live vault, for the position's own tranche. */
+function LiveWithdrawBody({
+  live,
+  tranche,
+  onClose,
+}: {
+  live: LivePool;
+  tranche: number;
+  onClose: () => void;
+}) {
   const { isConnected } = useAccount();
-  const w = useVaultWithdraw(live, 0);
+  const w = useVaultWithdraw(live, tranche);
   const [amt, setAmt] = useState("");
 
   // Tick while open so the live hold countdown / disabled state stays honest.
@@ -131,8 +145,11 @@ function LiveWithdrawBody({ live, onClose }: { live: LivePool; onClose: () => vo
           ✓
         </div>
         <p className="text-body text-text">
-          Withdrawn from {live.symbol}/{live.quoteSymbol} — in-kind, straight from the
-          pool.
+          Withdrawn from {live.symbol}/{live.quoteSymbol} ·{" "}
+          <span style={{ color: RISK_CLASS_META[RISK_CLASS_BY_TRANCHE[tranche] ?? "CORE"].color }}>
+            {RISK_CLASS_META[RISK_CLASS_BY_TRANCHE[tranche] ?? "CORE"].label}
+          </span>{" "}
+          — in-kind, straight from the pool.
         </p>
         <a
           href={EXPLORER_TX(w.phase.hash)}

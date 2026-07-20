@@ -83,4 +83,17 @@ export const feraVaultAbi = [
     outputs: [{ name: "", type: "uint64", internalType: "uint64" }],
     stateMutability: "view",
   },
+  {
+    // General share-token getter for ANY (pool, tranche) — createBaseLimitPool initializes
+    // both tranches' FeraShare clones at pool creation, so this resolves tranche 1's address
+    // live instead of requiring every pool's tranche-1 clone hardcoded in config/pools.ts.
+    type: "function",
+    name: "shareToken",
+    inputs: [
+      { name: "id", type: "bytes32", internalType: "PoolId" },
+      { name: "t", type: "uint8", internalType: "uint8" },
+    ],
+    outputs: [{ name: "", type: "address", internalType: "address" }],
+    stateMutability: "view",
+  },
 ] as const;

@@ -37,7 +37,10 @@ export const REGIME_BY_ID: Record<number, Regime> = { 0: "MEME", 1: "RWA" };
  * user-facing labels. RWA pools ship both classes; MEME defaults to Core only (D-16).
  */
 export type RiskClass = "CORE" | "ANCHOR";
-export const RISK_CLASS_BY_TRANCHE: Record<number, RiskClass> = { 0: "CORE", 1: "ANCHOR" };
+// 0 = ANCHOR/"Steady" (TIER_STEADY, ±100% wide base), 1 = CORE/"Active" (TIER_ACTIVE, ±30%
+// narrow base) — verified against FeraConstants.sol/FeraVault.sol; must mirror
+// lib/riskClass.ts#RISK_CLASS_META's `tranche` fields exactly (that file is the source of truth).
+export const RISK_CLASS_BY_TRANCHE: Record<number, RiskClass> = { 0: "ANCHOR", 1: "CORE" };
 
 /**
  * Additive §8 field (F-8 batch): each pool exposes up to two share classes, each an ERC-20

@@ -2,8 +2,15 @@
  * FERA live pools — Robinhood Chain (4663). Seeded 2026-07-17/18 from POOL_CREATOR.
  * This is the canonical on-chain registry the UI + tracker read from.
  *
- * Each pool has TWO tranches on-chain (0 = Steady / "Core", 1 = Active / "Anchor");
- * only tranche 0 is seeded so far. `share` below is the tranche-0 FeraShare clone.
+ * Each pool has TWO tranches on-chain (0 = "Steady"/Anchor, 1 = "Active"/Core — verified
+ * against FeraConstants.sol's TIER_STEADY=0/TIER_ACTIVE=1; see lib/riskClass.ts's
+ * RISK_CLASS_META for the canonical label↔tranche mapping, the single source of truth —
+ * don't infer it from prose elsewhere). `createBaseLimitPool` initializes BOTH tranches'
+ * FeraShare clones at pool creation, but only tranche 0 has real deposits so far.
+ * `share` below is the tranche-0 clone (confirmed for every pool here); tranche 1's
+ * clone address is deliberately NOT hardcoded per pool — it's resolved live via
+ * FeraVault.shareToken(poolId, 1) (lib/hooks/useVaultTx.ts#useShareAddress) so every
+ * pool works correctly without needing each tranche-1 address confirmed by hand.
  * quoteIsToken0 = true iff the quote (wWETH) sorts BELOW the memecoin address.
  */
 export const VAULT = "0xa8cF82797ecBC8C5cD5F83D60e189dbDc88D959a" as const;
@@ -14,7 +21,7 @@ export const USDG = "0x5fc5360d0400a0fd4f2af552add042d716f1d168" as const;
 export interface LivePool {
   symbol: string;
   poolId: `0x${string}`;
-  share: `0x${string}`; // tranche 0 (Steady) FeraShare
+  share: `0x${string}`; // tranche 0 ("Steady"/Anchor) FeraShare — see header comment
   memecoin: `0x${string}`;
   memecoinDecimals: number;
   quote: `0x${string}`;

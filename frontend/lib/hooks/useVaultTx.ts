@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useAccount,
   useConfig,
+  useReadContract,
   useReadContracts,
   useWaitForTransactionReceipt,
   useWriteContract,
@@ -247,13 +248,48 @@ export function useVaultDeposit(live: LivePool | undefined) {
 }
 
 // ---------------------------------------------------------------------------
+// Share-address resolution (any tranche, any registry pool)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a tranche's FeraShare ERC-20 address for a registry pool.
+ *
+ * Tranche 0 is always `live.share` (config/pools.ts — confirmed for every live pool,
+ * no chain read needed). Every OTHER tranche's clone address is deliberately not
+ * hardcoded per pool (only one has been confirmed by hand so far) — it's resolved
+ * live via the vault's general `FeraVault.shareToken(poolId, tranche)` getter, which
+ * works for any pool since `createBaseLimitPool` initializes every tranche's clone at
+ * pool creation. The read is cheap (one `eth_call`, cached indefinitely — a tranche's
+ * share address never changes once set) and always correct, so it's preferred over
+ * maintaining a second hardcoded address per pool in the registry.
+ */
+function useShareAddress(
+  live: LivePool | undefined,
+  tranche: number,
+): { address: `0x${string}` | undefined; isLoading: boolean } {
+  const needsRead = !!live && tranche !== 0;
+  const read = useReadContract({
+    address: VAULT,
+    abi: feraVaultAbi,
+    functionName: "shareToken",
+    args: live ? [live.poolId, tranche] : undefined,
+    chainId: CHAIN_ID,
+    query: { enabled: needsRead, staleTime: Infinity },
+  });
+  if (!live) return { address: undefined, isLoading: false };
+  if (tranche === 0) return { address: live.share, isLoading: false };
+  return { address: read.data, isLoading: read.isLoading };
+}
+
+// ---------------------------------------------------------------------------
 // Withdraw (proportional, in-kind — FeraVault.withdraw)
 // ---------------------------------------------------------------------------
 
 /**
- * NOTE: wired for tranche 0 ("Steady"/Core is tranche 0 on-chain) — config/pools.ts only
- * carries the tranche-0 FeraShare clone addresses (only tranche 0 is seeded). When Anchor
- * (tranche 1) shares go live, add their share addresses to the registry and pass tranche 1.
+ * `tranche` selects which risk class's shares this withdraws (0 = Core/"Active",
+ * 1 = Anchor/"Steady" — lib/riskClass.ts#RISK_CLASS_META has the canonical mapping).
+ * The tranche's share address is resolved via `useShareAddress` above, so every
+ * registry pool works for both tranches without a second hardcoded address each.
  */
 export function useVaultWithdraw(live: LivePool | undefined, tranche = 0) {
   const { address } = useAccount();
@@ -262,19 +298,22 @@ export function useVaultWithdraw(live: LivePool | undefined, tranche = 0) {
   const [phase, setPhase] = useState<VaultTxPhase>({ step: "idle" });
   const [vaultHash, setVaultHash] = useState<`0x${string}` | undefined>();
 
+  const { address: shareAddress, isLoading: shareAddressLoading } = useShareAddress(live, tranche);
+  const ready = !!(live && address && shareAddress);
+
   const reads = useReadContracts({
     allowFailure: true,
     contracts:
-      live && address
+      ready
         ? [
-            { address: live.share, abi: erc20Abi, functionName: "balanceOf", args: [address], chainId: CHAIN_ID },
-            { address: live.share, abi: erc20Abi, functionName: "totalSupply", chainId: CHAIN_ID },
-            { address: VAULT, abi: feraVaultAbi, functionName: "quoteNav", args: [live.poolId, tranche], chainId: CHAIN_ID },
+            { address: shareAddress, abi: erc20Abi, functionName: "balanceOf", args: [address], chainId: CHAIN_ID },
+            { address: shareAddress, abi: erc20Abi, functionName: "totalSupply", chainId: CHAIN_ID },
+            { address: VAULT, abi: feraVaultAbi, functionName: "quoteNav", args: [live!.poolId, tranche], chainId: CHAIN_ID },
             // real on-chain hold: lastDepositTs + 1h gates withdraw (CooldownActive)
-            { address: VAULT, abi: feraVaultAbi, functionName: "lastDepositTs", args: [live.poolId, BigInt(tranche), address], chainId: CHAIN_ID },
+            { address: VAULT, abi: feraVaultAbi, functionName: "lastDepositTs", args: [live!.poolId, BigInt(tranche), address!], chainId: CHAIN_ID },
           ]
         : [],
-    query: { enabled: !!(live && address), refetchInterval: 12_000 },
+    query: { enabled: ready, refetchInterval: 12_000 },
   });
 
   const shareBalance = pick<bigint>(reads.data, 0);
@@ -330,8 +369,10 @@ export function useVaultWithdraw(live: LivePool | undefined, tranche = 0) {
     navQuoteWei,
     /** unix seconds of the connected account's last deposit (0n = never). */
     lastDepositTs,
-    /** true while the first chain read round-trip is still in flight. */
-    readsPending: reads.isLoading,
+    /** the tranche's resolved FeraShare address (undefined while tranche 1's is resolving). */
+    shareAddress,
+    /** true while the share address and/or first chain read round-trip is in flight. */
+    readsPending: shareAddressLoading || reads.isLoading,
     phase,
     submit,
     reset,
