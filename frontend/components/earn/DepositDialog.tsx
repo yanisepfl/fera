@@ -11,6 +11,7 @@ import { RiskClassSelector } from "@/components/pool/RiskClassSelector";
 import { JitPenaltyNotice } from "./JitPenaltyNotice";
 import { AmountField } from "./AmountField";
 import { useGeoFence, type GeoFenceResult } from "@/lib/hooks/useGeoFence";
+import { useRwaComplianceGate } from "@/lib/hooks/useRwaComplianceGate";
 import { useVaultDeposit, txBusy } from "@/lib/hooks/useVaultTx";
 import { useDepositGate } from "@/lib/hooks/useDepositGate";
 import { parseAmount } from "@/lib/amount";
@@ -33,6 +34,12 @@ import type { PoolSummary, RiskClass } from "@/lib/types";
  * RWA pools pass through the config-driven geo-fence (config/geo.ts): blocked
  * regions can't deposit; ack regions must tick a risk box first. Swaps are never
  * gated by this (INV-2); only the LP affordance is.
+ *
+ * That geo-fence is only the fast, Tier-1 pass (see config/geo.ts). Right before an
+ * RWA deposit actually executes, `confirm()` also fires the Tier-2 server-side gate
+ * (lib/hooks/useRwaComplianceGate.ts → lib/compliance/decision.ts): VPN/Tor detection
+ * and wallet-sanctions screening on top of the country check. This never runs for MEME
+ * pools (guarded by `pool.regime === "RWA"` below) — MEME deposits are unaffected.
  */
 export function DepositDialog({
   pool,
@@ -50,9 +57,11 @@ export function DepositDialog({
   const [riskClass, setRiskClass] = useState<RiskClass>(defaultRiskClass);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
-  const { isConnected } = useAccount();
+  const [complianceBlock, setComplianceBlock] = useState<string | null>(null);
+  const { isConnected, address } = useAccount();
   const { openConnectModal } = useConnectModal();
   const geo = useGeoFence(pool.regime);
+  const rwaGate = useRwaComplianceGate();
   const live = livePoolById(pool.poolId);
 
   // Per-class APR when the pool carries risk-class data; else the whole-pool blend.
@@ -74,10 +83,22 @@ export function DepositDialog({
     !!amount &&
     Number(amount) > 0 &&
     !geo.blocked &&
-    (!geo.needsAck || acked);
+    (!geo.needsAck || acked) &&
+    !rwaGate.checking;
 
-  function confirm() {
+  async function confirm() {
+    setComplianceBlock(null);
     setSubmitting(true);
+    // Tier-2 authoritative gate — RWA only (see file header). MEME pools skip this
+    // branch entirely: zero added network calls / logic for them.
+    if (pool.regime === "RWA") {
+      const verdict = await rwaGate.run(address ?? "");
+      if (verdict.decision === "block") {
+        setComplianceBlock(verdict.reason);
+        setSubmitting(false);
+        return;
+      }
+    }
     // Mocked tx (non-registry pools only — registry pools go through LiveDepositBody).
     setTimeout(() => {
       setSubmitting(false);
@@ -92,6 +113,7 @@ export function DepositDialog({
       setAcked(false);
       setRiskClass(defaultRiskClass);
       setDone(false);
+      setComplianceBlock(null);
     }, 200);
   }
 
@@ -237,6 +259,15 @@ export function DepositDialog({
                 </label>
               ) : null}
 
+              {/* Tier-2 gate verdict (RWA only — see confirm()). Distinct from the geo
+                  banner above: this fires only at confirm time, from checks a country
+                  code alone can't make (VPN/Tor, wallet sanctions). */}
+              {complianceBlock ? (
+                <div className="rounded-lg border border-danger-line bg-danger-wash p-3 text-body-sm text-text">
+                  {complianceBlock}
+                </div>
+              ) : null}
+
               {!isConnected ? (
                 <Button
                   className="w-full"
@@ -252,7 +283,11 @@ export function DepositDialog({
                   disabled={!canConfirm || submitting}
                   onClick={confirm}
                 >
-                  {submitting ? "Confirming…" : "Confirm deposit"}
+                  {rwaGate.checking
+                    ? "Checking eligibility…"
+                    : submitting
+                      ? "Confirming…"
+                      : "Confirm deposit"}
                 </Button>
               )}
             </>
@@ -288,12 +323,14 @@ function LiveDepositBody({
   setAcked: (b: boolean) => void;
   onClose: () => void;
 }) {
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const { openConnectModal } = useConnectModal();
   const dep = useVaultDeposit(live);
   const gate = useDepositGate(live.poolId);
+  const rwaGate = useRwaComplianceGate();
   const [amtMeme, setAmtMeme] = useState("");
   const [amtQuote, setAmtQuote] = useState("");
+  const [complianceBlock, setComplianceBlock] = useState<string | null>(null);
 
   // Registry sides ↔ the pool's true token0/token1 order (what deposit() expects).
   const memeIs0 = !live.quoteIsToken0;
@@ -333,10 +370,23 @@ function LiveDepositBody({
     !gateClosed &&
     !busy &&
     !geo.blocked &&
-    (!geo.needsAck || acked);
+    (!geo.needsAck || acked) &&
+    !rwaGate.checking;
 
-  function confirm() {
+  async function confirm() {
     if (memeWei === null || quoteWei === null) return;
+    setComplianceBlock(null);
+    // Tier-2 authoritative gate — RWA only. No registry pool is RWA-regime today (all
+    // live on-chain pools are MEME), but this keeps the real deposit path correct for
+    // whenever an RWA vault goes live: MEME pools skip this branch entirely, so no
+    // added network call / logic for them.
+    if (pool.regime === "RWA") {
+      const verdict = await rwaGate.run(address ?? "");
+      if (verdict.decision === "block") {
+        setComplianceBlock(verdict.reason);
+        return;
+      }
+    }
     void dep.submit({
       amount0: memeIs0 ? memeWei : quoteWei,
       amount1: memeIs0 ? quoteWei : memeWei,
@@ -347,6 +397,7 @@ function LiveDepositBody({
   }
 
   const buttonLabel = () => {
+    if (rwaGate.checking) return "Checking eligibility…";
     switch (dep.phase.step) {
       case "approve":
         return `Approve ${dep.phase.symbol} in wallet…`;
@@ -528,6 +579,15 @@ function LiveDepositBody({
             confirm eligibility.
           </span>
         </label>
+      ) : null}
+
+      {/* Tier-2 gate verdict (RWA only — see confirm()). Distinct from the geo banner
+          above: this fires only at confirm time, from checks a country code alone
+          can't make (VPN/Tor, wallet sanctions). */}
+      {complianceBlock ? (
+        <div className="rounded-lg border border-danger-line bg-danger-wash p-3 text-body-sm text-text">
+          {complianceBlock}
+        </div>
       ) : null}
 
       {dep.phase.step === "error" ? (
