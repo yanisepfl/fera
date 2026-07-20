@@ -124,7 +124,12 @@ export async function tick(env: KeeperEnv): Promise<void> {
   // base recenter + dwell-clock still run EVERY tick because those are the position-holding safety
   // actions. When real TVL makes frequent limit redeploys worth their gas, widen this.
   const { timestamp } = await env.publicClient.getBlock();
-  const doSkimLimit = Number(timestamp / 3600n) % 4 === 0;
+  // Run the gas-heavy skim/limit maintenance at most ONCE PER DAY (the hourly tick at ~03:00 UTC).
+  // That's ~48x fewer runs than the original every-tick behaviour that drained the keeper. At
+  // bootstrap TVL a limit band earns cents/day — nowhere near its per-redeploy gas — so daily is
+  // already generous; set KEEPER_SKIMLIMIT_HOUR=-1 to pause it entirely, or widen at real TVL.
+  const skimHour = Number(process.env.KEEPER_SKIMLIMIT_HOUR ?? 3);
+  const doSkimLimit = skimHour >= 0 && Math.floor(Number(timestamp % 86400n) / 3600) === skimHour;
   log("vault-strategy", "info", `discovered ${pools.length} pools; skim/limit ${doSkimLimit ? "ON" : "throttled"} this tick`);
 
   for (const p of pools) {
