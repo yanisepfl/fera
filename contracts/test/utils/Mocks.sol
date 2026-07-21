@@ -8,6 +8,14 @@ import {IAggregatorV3} from "../../src/interfaces/IAggregatorV3.sol";
 import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol";
 import {IRebalanceVenue} from "../../src/interfaces/IRebalanceVenue.sol";
 
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
+import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import {CurrencySettler} from "@uniswap/v4-core/test/utils/CurrencySettler.sol";
+
 /// @title Test mocks for the FERA suite.
 /// @notice Kept in one file so unit tests share a consistent, minimal set of "weird ERC-20"
 ///         and interface stubs used to probe the money-path policy (SafeERC20, CEI, INV-8).
@@ -314,5 +322,71 @@ contract HostileNativeERC20 is ERC20 {
             return super.transfer(to, amount - fee);
         }
         return super.transfer(to, amount);
+    }
+}
+
+/// @dev CROSS-CONTRACT REENTRANCY token (v3.5 Finding-1 PoC): its `transfer()` reenters
+///      `PoolManager.swap()` DIRECTLY, riding the Vault's own already-open `unlock()` session — v4's
+///      `PoolManager` uses a SINGLE GLOBAL unlock flag (not keyed by caller, see v4-core `Lock.sol`),
+///      so once the Vault's `unlockCallback` has opened it (e.g. inside `cbRebalanceLimit`'s
+///      close-band `_modifyBand`/`_resolveDelta`, which calls THIS token's `transfer()` to pay the
+///      Vault its removed liquidity), ANY contract may call `swap()`/`modifyLiquidity()` on ANY pool
+///      without opening a lock of its own. This models the exact surface `keeperActive`/the
+///      TWAP-deviation post-check (FeraVault v3.5) close. One-shot (the `armed` flag clears itself
+///      before the reentrant swap, since that swap's own settlement recurses through this SAME
+///      `transfer()` override) — self-settles its OWN resulting deltas via `CurrencySettler`,
+///      mirroring `VaultOps._doSelfSwap`'s exact settle/take pattern, so the OUTER unlock() session
+///      still closes with all currencies netted to zero.
+contract ReentrantNativeERC20 is ERC20 {
+    using CurrencySettler for Currency;
+
+    IPoolManager public immutable pm;
+    PoolKey internal _key;
+    bool public zeroForOne;
+    int256 public amountSpecified;
+    bool public armed;
+    bool public reentryAttempted;
+    bool public reentryReverted;
+
+    constructor(string memory n, string memory s, IPoolManager pm_) ERC20(n, s) {
+        pm = pm_;
+    }
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    /// @param k the pool to reenter into (may be the SAME pool the transfer is paying out of, or a
+    ///        different one — the lock is global, so both are reachable).
+    function arm(PoolKey calldata k, bool zeroForOne_, int256 amountSpecified_) external {
+        _key = k;
+        zeroForOne = zeroForOne_;
+        amountSpecified = amountSpecified_;
+        armed = true;
+    }
+
+    function transfer(address to, uint256 amount) public override returns (bool) {
+        if (armed) {
+            armed = false; // one-shot: the reentrant swap's own settle() recurses into this transfer()
+            reentryAttempted = true;
+            uint160 limit = zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1;
+            try pm.swap(_key, SwapParams({zeroForOne: zeroForOne, amountSpecified: amountSpecified, sqrtPriceLimitX96: limit}), "")
+            returns (BalanceDelta d) {
+                _settle(_key.currency0, d.amount0());
+                _settle(_key.currency1, d.amount1());
+                reentryReverted = false;
+            } catch {
+                reentryReverted = true;
+            }
+        }
+        return super.transfer(to, amount);
+    }
+
+    function _settle(Currency cur, int128 amt) internal {
+        if (amt < 0) {
+            cur.settle(pm, address(this), uint256(uint128(-amt)), false);
+        } else if (amt > 0) {
+            cur.take(pm, address(this), uint256(uint128(amt)), false);
+        }
     }
 }

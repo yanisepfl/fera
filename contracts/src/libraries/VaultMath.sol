@@ -262,7 +262,10 @@ library VaultMath {
             if (answer <= 0) return (0, false);
             if (block.timestamp - updatedAt > FeraConstants.ORACLE_STALENESS_MAX) return (0, false);
             uint8 dec = IAggregatorV3(feed).decimals();
-            price = uint256(answer) * (10 ** (18 - dec));
+            // v3.5 FIX (audit finding, low): a feed with >18 decimals underflowed `18 - dec` and
+            // panicked, contradicting this function's "never reverts" contract. Mirrors FeraHook's
+            // `_oraclePriceX96` normalization exactly.
+            price = dec <= 18 ? uint256(answer) * (10 ** (18 - dec)) : uint256(answer) / (10 ** (dec - 18));
             ok = true;
         } catch {
             return (0, false);

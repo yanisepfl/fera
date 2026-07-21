@@ -591,9 +591,17 @@ contract FeraHook is BaseHook, IFeraHook {
     ///        target = r²
     ///        λ = target > EWMA(r²) ? LAMBDA_UP(fast attack) : LAMBDA_DOWN(slow release)  — the ratchet
     ///        volEwmaX ← clamp((λ·volEwmaX + (ONE−λ)·(r²<<16)) >> 16, 0, VOL_CLAMP)
-    ///        flowEwmaX ← (LAMBDA_F·flowEwmaX + (ONE−LAMBDA_F)·(r<<16)) >> 16
-    ///      Asymmetric attack/release makes vol spike in ~1–2 swaps but bleed off over tens (defeats the
-    ///      decay-then-dump exploit). Never reverts; all intermediates in uint256/int256, downcast + clamp.
+    ///        λ_f = r < EWMA(r) ? FLOW_ATTACK(unchanged, toward more negative) : FLOW_RELEASE(slow,
+    ///              toward positive) — an asymmetric ratchet applied BY SIGN (not magnitude, unlike
+    ///              vol): the attack side is left at the ORIGINAL pre-fix decay (ordinary selling
+    ///              behaves exactly as before); only the release side is slowed (v3.5 fix: a
+    ///              symmetric flow decay let one priming buy erase accumulated sell pressure as fast
+    ///              as a sell built it — see MEME_FLOW_LAMBDA_ATTACK/_RELEASE).
+    ///        flowEwmaX ← (λ_f·flowEwmaX + (ONE−λ_f)·(r<<16)) >> 16
+    ///      Vol's attack/release makes it spike in ~1–2 swaps but bleed off over tens (defeats the
+    ///      decay-then-dump exploit); flow's asymmetry protects against a cheap priming-buy fee-dodge
+    ///      without changing how it reacts to ordinary selling. Never reverts; all intermediates in
+    ///      uint256/int256, downcast + clamp.
     function _updateEwma(PoolId id, int24 tickNow) internal {
         (uint256 volX, int256 flowX, int24 lastTick,) = _loadMemeState(id);
 
@@ -605,7 +613,11 @@ contract FeraHook is BaseHook, IFeraHook {
         uint256 newVol = (lam * volX + (ONE - lam) * (r2 << 16)) >> 16;
         if (newVol > FeraConstants.MEME_VOL_CLAMP) newVol = FeraConstants.MEME_VOL_CLAMP;
 
-        int256 lamF = int256(FeraConstants.MEME_FLOW_LAMBDA);
+        // Signed arithmetic-shift descale (Solidity 0.8.x rounds `>>` toward -infinity for signed
+        // ints, consistent with the fixed-point convention used throughout this estimator).
+        int256 lamF = (r < (flowX >> 16))
+            ? int256(FeraConstants.MEME_FLOW_LAMBDA_ATTACK)
+            : int256(FeraConstants.MEME_FLOW_LAMBDA_RELEASE);
         int256 newFlow = (lamF * flowX + (int256(ONE) - lamF) * (r << 16)) >> 16;
 
         _memeState[id] = _packMemeState(newVol, _toInt64Sat(newFlow), tickNow, uint32(block.timestamp));

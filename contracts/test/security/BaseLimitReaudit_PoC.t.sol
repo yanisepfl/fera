@@ -19,7 +19,9 @@ import {
     MockRebalanceVenue,
     ReentrantRebalanceVenue,
     ReturnBombRebalanceVenue,
-    LyingRebalanceVenue
+    LyingRebalanceVenue,
+    MintableERC20,
+    ReentrantNativeERC20
 } from "../utils/Mocks.sol";
 
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
@@ -99,6 +101,7 @@ contract BaseLimitReauditPoC is Deployers {
         vault.setAllowedQuoteAsset(Currency.unwrap(currency0), true);
         vault.approveRwaFeed(address(feed), "test RWA feed");
         memeId = vault.createBaseLimitPool(memeKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "MEME-BL", "mBL");
+        vault.setKeeperActive(memeId, true);
 
         MockERC20(Currency.unwrap(currency0)).approve(address(vault), type(uint256).max);
         MockERC20(Currency.unwrap(currency1)).approve(address(vault), type(uint256).max);
@@ -472,6 +475,7 @@ contract BaseLimitReauditPoC is Deployers {
             hooks: IHooks(address(hook))
         });
         PoolId rid = vault.createBaseLimitPool(rk, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, true, "RWA-BL", "rBL");
+        vault.setKeeperActive(rid, true);
         vault.setMarketOpen(rid, true); // in-hours ⇒ 2bp base fee (not the 3% off-hours)
         vault.deposit(rid, 1, 1_000e18, 1_000e18, 0);
 
@@ -610,5 +614,101 @@ contract BaseLimitReauditPoC is Deployers {
 
     function _getA1(uint160 a, uint160 b, uint128 liq) private pure returns (uint256) {
         return FullMath.mulDiv(liq, b - a, 1 << 96);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════════════════════
+    // A7 — cross-contract PoolManager reentrancy (v3.5 hardening: audit Finding 1). v4's `PoolManager`
+    // uses a SINGLE GLOBAL unlock flag (not keyed by caller), so a hostile native token's `transfer()`
+    // hook — fired mid-`cbRebalanceLimit` by the close-band `take()` payout — can call
+    // `PoolManager.swap()` directly and move spot BEFORE the callback's fresh `getSlot0()` read, with
+    // zero re-validation (the bug). Two independent v3.5 defenses now close it: `keeperActive` (the
+    // keeper cannot touch an unreviewed pool at all — proven in VaultAdmin.t.sol) and a TWAP-deviation
+    // POST-check added after `unlock()` returns (proven here) — either one alone would have stopped
+    // this specific PoC; both ship together (defense in depth).
+    // ═════════════════════════════════════════════════════════════════════════════════════════
+    function _createReentrantPool()
+        internal
+        returns (PoolId rid, PoolKey memory rkey, ReentrantNativeERC20 hostile, bool hostileIsToken0)
+    {
+        MintableERC20 quoteToken = new MintableERC20("QUOTE", "Q");
+        hostile = new ReentrantNativeERC20("NATIVE", "N", manager);
+
+        quoteToken.mint(address(this), 20_000_000e18);
+        hostile.mint(address(this), 20_000_000e18);
+        hostile.mint(address(hostile), 20_000_000e18); // self-funded to settle its OWN reentrant swap
+        quoteToken.approve(address(vault), type(uint256).max);
+        hostile.approve(address(vault), type(uint256).max);
+        quoteToken.approve(address(swapRouter), type(uint256).max);
+        hostile.approve(address(swapRouter), type(uint256).max);
+        quoteToken.approve(address(modifyLiquidityRouter), type(uint256).max);
+        hostile.approve(address(modifyLiquidityRouter), type(uint256).max);
+
+        bool quoteIsC0 = address(quoteToken) < address(hostile);
+        hostileIsToken0 = !quoteIsC0;
+        Currency c0 = quoteIsC0 ? Currency.wrap(address(quoteToken)) : Currency.wrap(address(hostile));
+        Currency c1 = quoteIsC0 ? Currency.wrap(address(hostile)) : Currency.wrap(address(quoteToken));
+        rkey = PoolKey({currency0: c0, currency1: c1, fee: LPFeeLibrary.DYNAMIC_FEE_FLAG, tickSpacing: 60, hooks: IHooks(address(hook))});
+        vault.setAllowedQuoteAsset(address(quoteToken), true);
+        rid = vault.createBaseLimitPool(rkey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, quoteIsC0, "REENTRANT", "RE");
+        vault.setKeeperActive(rid, true);
+    }
+
+    /// @dev NOTE on structure: once the OUTER call reverts (Part 2), EVERY state change made during
+    ///      it — including the hostile mock's own `reentryAttempted`/`reentryReverted` bookkeeping —
+    ///      is rolled back by EVM revert semantics, so it can NEVER be inspected afterward no matter
+    ///      how the call is made. Part 1 independently proves the reentrancy mechanism is real (on an
+    ///      UNPROTECTED path, `collectFees`, which only checkpoints — no TWAP post-check — exactly the
+    ///      exposure the audit described in every callback that pays the vault a real token
+    ///      mid-unlock) where the call does NOT revert, so its effects ARE inspectable. Part 2 then
+    ///      proves the SAME mechanism, aimed at the NOW-PROTECTED `rebalanceLimit`, causes the whole
+    ///      transaction to revert instead of completing on a manipulated final state.
+    function test_A7_crossContractReentrancy_duringRebalanceLimit_isBlockedByTwapPostCheck() public {
+        (PoolId rid, PoolKey memory rkey, ReentrantNativeERC20 hostile, bool hostileIsToken0) = _createReentrantPool();
+
+        vault.deposit(rid, 1, 1_000e18, 1_000e18, 0); // Active tranche — narrow band, easy to skew
+        vm.warp(block.timestamp + COOLDOWN + JIT);
+        swap(rkey, true, -1e15, "");
+        swap(rkey, false, -1e15, "");
+
+        // A fresh deposit sits entirely in the BASE band — `rebalanceLimit` deploys from RESERVE, so
+        // skim some idle into reserve first, giving the first call below something to actually mint.
+        vault.skimIdle(rid, 1);
+
+        // First call (unarmed): deploys the initial limit band normally, so later calls have a band
+        // to CLOSE — and hence a `take()` payout of the hostile token to reenter on.
+        vault.rebalanceLimit(rid, 1);
+
+        // ── Part 1: prove the reentrancy is real, on a SECOND skimIdle (no TWAP post-check — it
+        // always has SOME remaining base-band value to skim a fresh idleBps fraction of, unlike
+        // collectFees, whose pending fees were just swept to zero by the rebalanceLimit call above).
+        bool sellHostile = hostileIsToken0;
+        hostile.arm(rkey, sellHostile, -int256(1_000_000e18));
+        vault.skimIdle(rid, 1); // succeeds; the reentrant swap inside fires and moves spot
+        assertTrue(hostile.reentryAttempted(), "hostile transfer() never fired mid-callback");
+        assertFalse(hostile.reentryReverted(), "the reentrant swap itself should succeed");
+        (, int24 tickAfterAttack,,) = manager.getSlot0(rid);
+        assertLt(tickAfterAttack, -10_000, "reentrant swap did not move spot price to the extreme");
+
+        // Undo the manipulation (buy back to ~tick 0, price-limited so it stops there regardless of
+        // the oversized amount) and let the TWAP catch up again — isolating what Part 2 tests to the
+        // v3.5 POST-check specifically, not the pre-existing pre-check.
+        swapRouter.swap(
+            rkey,
+            SwapParams({
+                zeroForOne: !sellHostile,
+                amountSpecified: -int256(5_000_000e18),
+                sqrtPriceLimitX96: TickMath.getSqrtPriceAtTick(0)
+            }),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            ""
+        );
+        vm.warp(block.timestamp + FeraConstants.MEME_MIN_REBALANCE_INTERVAL_SEC + 1);
+        swap(rkey, true, -1e15, "");
+        swap(rkey, false, -1e15, "");
+
+        // ── Part 2: the SAME reentrancy, now aimed at rebalanceLimit's v3.5 TWAP post-check.
+        hostile.arm(rkey, sellHostile, -int256(1_000_000e18));
+        vm.expectRevert(IFeraVault.TwapOutOfBand.selector);
+        vault.rebalanceLimit(rid, 1);
     }
 }

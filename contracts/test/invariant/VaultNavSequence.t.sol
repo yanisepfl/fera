@@ -103,6 +103,7 @@ contract VaultNavSequenceTest is Deployers {
         vault.setAllowedQuoteAsset(Currency.unwrap(currency0), true);
         vault.approveRwaFeed(address(feed), "test RWA feed");
         memeId = vault.createBaseLimitPool(memeKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "MEME", "M");
+        vault.setKeeperActive(memeId, true);
 
         rwaKey = PoolKey({
             currency0: currency0,
@@ -112,6 +113,7 @@ contract VaultNavSequenceTest is Deployers {
             hooks: IHooks(hookAddr)
         });
         rwaId = vault.createBaseLimitPool(rwaKey, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, true, "RWA", "R");
+        vault.setKeeperActive(rwaId, true);
 
         positions[0] = Pos(memeId, 0); // MEME Steady tranche
         positions[1] = Pos(rwaId, 0); // RWA Steady tranche

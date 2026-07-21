@@ -99,6 +99,7 @@ contract ShareAccountingPoCTest is Deployers {
         vault.setAllowedQuoteAsset(Currency.unwrap(currency0), true);
         vault.approveRwaFeed(address(feed), "test RWA feed");
         memeId = vault.createBaseLimitPool(memeKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "MEME", "M");
+        vault.setKeeperActive(memeId, true);
 
         rwaKey = PoolKey({
             currency0: currency0,
@@ -108,6 +109,7 @@ contract ShareAccountingPoCTest is Deployers {
             hooks: IHooks(hookAddr)
         });
         rwaId = vault.createBaseLimitPool(rwaKey, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, true, "RWA", "R");
+        vault.setKeeperActive(rwaId, true);
 
         _fund(honest, 1_000e18);
         _fund(attacker, 1_000e18);

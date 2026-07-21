@@ -1,13 +1,29 @@
 # FERA vault-strategy keeper — free runner (GitHub Actions cron).
 #
-# PAUSED 2026-07-21: the scheduled trigger is disabled pending a fix. An adversarial audit
-# found that `rebalanceLimit` (and related swap-free callbacks) close a band, read spot
-# price, and mint a new band with ZERO TWAP/slippage re-validation — contrary to what this
-# file's header used to claim. Combined with automatic, unvetted pool discovery (this
-# keeper calls rebalanceLimit/rebalanceBase on EVERY pool it finds, including one an
-# attacker could create with a deliberately reentrant native token), this is a live
-# exposure for a fully-automated, unattended trigger. Manual runs (workflow_dispatch)
-# remain available for the already-vetted 8 live pools while the fix lands.
+# STILL PAUSED 2026-07-21 (fix landed in source, NOT yet live on-chain): the adversarial audit's
+# Finding 1 (cross-contract PoolManager reentrancy — a hostile native token's transfer() hook,
+# fired mid-callback by the vault's own take()/settle(), could reenter PoolManager.swap() and move
+# spot before a swap-free callback's fresh getSlot0() read) is FIXED and TEST-PROVEN in source:
+#   1. `keeperActive` (FeraVault.sol) — a new per-pool, owner-only allowlist gating EVERY onlyKeeper
+#      action; defaults FALSE for every pool, including the 8 already-live ones.
+#   2. A TWAP-deviation POST-check (mirroring the pre-existing pre-check) added to rebalanceLimit,
+#      rebalanceBase, rebalanceRwaOracle, defendRwaOffHours — re-verified AFTER the callback returns,
+#      so a mid-callback manipulation reverts the WHOLE transaction instead of completing on a
+#      manipulated final state.
+#   PoC: test/security/BaseLimitReaudit_PoC.t.sol#test_A7_crossContractReentrancy_... (a hostile
+#   reentrant-token mock genuinely reenters PoolManager.swap() and moves price; the protected path
+#   reverts TwapOutOfBand). Full suite: 359/359 passing; slither clean (0 new High/Critical).
+#
+# NONE OF THIS IS LIVE YET — the currently-deployed vault has neither fix. Re-enabling this cron
+# right now would resume calling the OLD, still-vulnerable contract. Sequence before re-enabling:
+#   1. Redeploy the vault (this fix requires new bytecode — cannot be applied in place).
+#   2. Timelock Safe calls `setKeeperActive(id, true)` for each of the 8 live pools on the NEW vault
+#      (only after reviewing each pool's native token isn't a hostile transfer-hook contract).
+#   3. Point backend/keepers/vaultStrategy.ts (and this workflow's target address, if hardcoded
+#      anywhere) at the NEW vault address.
+#   4. Only then uncomment the `schedule:` trigger below.
+# Manual runs (workflow_dispatch) still target whatever vault address the backend is currently
+# configured for — check that config before dispatching manually.
 #
 # Every ~30 min (WHEN ENABLED): discovers the pools on-chain, then per seeded tranche
 #   - recenters the base band ONLY if price has left it (position stopped earning)
@@ -22,9 +38,9 @@
 name: FERA keeper
 
 on:
-  # schedule:                    # PAUSED — see note above. Re-enable once the swap-free
-  #   - cron: "0 * * * *"        # rebalance callbacks have a TWAP/slippage post-check
-  #                              # and/or pool discovery is scoped to vetted native tokens.
+  # schedule:                    # STILL PAUSED — see note above. The fix is code-complete and
+  #   - cron: "0 * * * *"        # test-proven, but only takes effect after the vault is redeployed
+  #                              # and setKeeperActive is called for the live pools (steps above).
   workflow_dispatch: {}
 
 permissions:

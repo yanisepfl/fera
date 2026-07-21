@@ -86,6 +86,12 @@ interface IFeraVault {
     ///         each epoch's Merkle leaves (`EmissionsController`/`Distributor` have no on-chain
     ///         notion of per-pool eligibility) — has NO on-chain effect on fee generation/routing.
     event EmissionsEligibilityChanged(bytes32 indexed poolId, bool eligible);
+    /// @notice The team (timelocked owner) exempted (or un-exempted) `account` from the depositor
+    ///         cooldown check in `withdraw` — see FeraVault.sol's `cooldownExempt` NatSpec for why.
+    event CooldownExemptSet(address indexed account, bool exempt);
+    /// @notice The team (timelocked owner) activated (or deactivated) automated keeper actions for
+    ///         `poolId` — see FeraVault.sol's `keeperActive` NatSpec.
+    event KeeperActiveSet(bytes32 indexed poolId, bool active);
 
     // ── Errors ───────────────────────────────────────────────────────────────────────────
     error ZeroAddress(); // zero-address rejected on keeper setter + immutable ctor wiring
@@ -130,6 +136,10 @@ interface IFeraVault {
     /// @notice v3.3 NEW: an RWA `createBaseLimitPool` call supplied `oracleFeed == address(0)` or a
     ///         feed not on the team-curated `approvedRwaFeeds` registry. Never applies to MEME.
     error RwaFeedNotApproved();
+    /// @notice v3.5 NEW (Finding-1 hardening): an `onlyKeeper` action was attempted on a pool the
+    ///         owner has not (yet) activated via `setKeeperActive` — see FeraVault.sol's
+    ///         `keeperActive` NatSpec. Never applies to deposits/withdrawals/swaps.
+    error PoolNotKeeperActive();
     /// @notice v3.3 FIX (H-1, memo 09): `createBaseLimitPool`'s `key.hooks` is not the Vault's own
     ///         immutable `hook`. With permissionless creation, a pool whose actual v4 hook is
     ///         `address(0)` (static-fee) or an attacker-deployed hook would bypass the real
@@ -286,6 +296,17 @@ interface IFeraVault {
     ///         collection/routing (see the event's NatSpec). onlyOwner (timelocked).
     function setEmissionsEligible(PoolId poolId, bool eligible) external;
 
+    /// @notice Exempt (or un-exempt) `account` from the depositor cooldown check in `withdraw`.
+    ///         onlyOwner (timelocked). See `cooldownExempt`'s NatSpec in FeraVault.sol for exactly
+    ///         what this does and does not bypass.
+    function setCooldownExempt(address account, bool exempt) external;
+
+    /// @notice v3.5 NEW (Finding-1 hardening): activate (or deactivate) automated keeper actions for
+    ///         `poolId`. Defaults FALSE for every pool. Gates ONLY `onlyKeeper` rebalance/skim
+    ///         actions — NEVER deposits, withdrawals, or swaps. onlyOwner (timelocked). See
+    ///         `keeperActive`'s NatSpec in FeraVault.sol.
+    function setKeeperActive(PoolId poolId, bool active) external;
+
     /// @notice v3 NEW: timelocked-owner setter for the vol-adaptive width-multiplier clamp band,
     ///         bounded WITHIN the immutable [VOL_WIDTH_MULT_MIN_LEGAL_BPS,
     ///         VOL_WIDTH_MULT_MAX_LEGAL_BPS] legal range (the Gamma lesson).
@@ -375,4 +396,8 @@ interface IFeraVault {
     /// @notice v3.3 (item 3): whether `poolId` is currently opted into esFERA emissions attribution
     ///         by the team. Defaults FALSE. Has NO effect on fee generation/collection/routing.
     function emissionsEligible(PoolId poolId) external view returns (bool);
+
+    /// @notice v3.5 (Finding-1 hardening): whether the automated keeper may act on `poolId` at all.
+    ///         Defaults FALSE for every pool. See `keeperActive`'s NatSpec in FeraVault.sol.
+    function keeperActive(PoolId poolId) external view returns (bool);
 }

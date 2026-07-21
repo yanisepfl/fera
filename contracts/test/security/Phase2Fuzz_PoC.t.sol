@@ -104,6 +104,7 @@ contract Phase2FuzzTest is Deployers {
         vault.setAllowedQuoteAsset(Currency.unwrap(currency0), true);
         // quoteIsToken0 = true ⇒ quoteNav is denominated in token0 (exercises VaultMath._valueInToken0).
         memeId = vault.createBaseLimitPool(memeKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "MEME-BL", "mBL");
+        vault.setKeeperActive(memeId, true);
 
         MockERC20(Currency.unwrap(currency0)).approve(address(vault), type(uint256).max);
         MockERC20(Currency.unwrap(currency1)).approve(address(vault), type(uint256).max);

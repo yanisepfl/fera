@@ -145,11 +145,26 @@ library FeraConstants {
 
     /// @notice EWMA realized-vol estimator decays, Q16 fixed-point (λ_fp = round(λ·65536)).
     /// MECHANISM_SPEC §1.2 / storage layout §1.3. Asymmetric attack/release ratchet.
-    /// TODO(spec-freeze): PARAMS.md#MEME_VOL_LAMBDA_UP/_DOWN, #MEME_FLOW_LAMBDA — [PROVISIONAL]
-    ///   (DM-6, gated on V3 swap-frequency). NON-ZERO conservative launch values.
+    /// TODO(spec-freeze): PARAMS.md#MEME_VOL_LAMBDA_UP/_DOWN, #MEME_FLOW_LAMBDA_ATTACK/_RELEASE —
+    ///   [PROVISIONAL] (DM-6, gated on V3 swap-frequency). NON-ZERO conservative launch values.
     uint256 internal constant MEME_VOL_LAMBDA_UP = 45_875; // 0.70·2^16 — fast attack (~2-swap half-life)
     uint256 internal constant MEME_VOL_LAMBDA_DOWN = 64_225; // 0.98·2^16 — slow release (~34-swap half-life)
-    uint256 internal constant MEME_FLOW_LAMBDA = 58_982; // 0.90·2^16 — signed-flow EWMA decay
+    /// v3.5 FIX (audit finding, toxic-sell-fee gaming): the signed-flow EWMA now uses an asymmetric
+    /// ratchet instead of one symmetric decay — but UNLIKE vol, only the RELEASE (recovery-via-buying)
+    /// side is slowed; the ATTACK (fresh-selling) side is left at the ORIGINAL, already-tuned decay
+    /// (0.90, unchanged from the pre-fix symmetric constant) so ordinary, non-adversarial selling
+    /// produces exactly the same fee response as before. The bug was specifically that a cheap
+    /// same-tx priming BUY could flip `flowEwmaX` back to ≥0 in one swap (symmetric decay meant a buy
+    /// erased accumulated sell pressure exactly as fast as a sell built it up), letting an attacker
+    /// dodge `_memeFee`'s one-sided-sell surcharge right before dumping. Slowing ONLY the release
+    /// closes exactly that gap — a single offsetting buy can no longer erase built-up sell pressure
+    /// in one shot, sustained real buying still recovers it over the usual longer horizon — without
+    /// also making a single ordinary sell swing the estimator harder than production was already
+    /// tuned for (an earlier draft borrowed vol's fast-attack λ=0.70 for this side too, which made a
+    /// single non-adversarial sell swing flowEwmaX 3× harder than before and spuriously tripped the
+    /// surcharge on the very next unrelated swap, e.g. the vault's own fee-routing self-swap).
+    uint256 internal constant MEME_FLOW_LAMBDA_ATTACK = 58_982; // 0.90·2^16 — UNCHANGED reactivity to fresh selling
+    uint256 internal constant MEME_FLOW_LAMBDA_RELEASE = 64_225; // 0.98·2^16 — slow release toward positive
     /// PARAMS.md#MEME_ONE (immutable). Fixed-point unit for the Q16 λ.
     uint256 internal constant MEME_ONE = 65_536; // 2^16
     /// PARAMS.md#MEME_VOL_CLAMP (immutable). Overflow guard on volEwmaX (σ_max ≈ 131072 ticks ≫ ceil).
@@ -188,6 +203,18 @@ library FeraConstants {
 
     /// PARAMS.md#DEPOSIT_COOLDOWN_SEC (FROZEN v2). Veda-style lock on the depositor's OWN shares.
     uint32 internal constant DEPOSIT_COOLDOWN_SEC = 3_600; // 1h
+    /// v3.5 NEW (Finding-2 hardening): a `cooldownExempt` address is exempt from the FULL
+    /// DEPOSIT_COOLDOWN_SEC (see `cooldownExempt`'s NatSpec — that exists only to avoid a shared
+    /// clock being re-armed by unrelated depositors), but still must wait at least its regime's own
+    /// JIT_PENALTY_WINDOW + this margin past ITS OWN last deposit before withdrawing. Without this
+    /// floor, an exempt address could deposit-then-instantly-withdraw in one transaction, forcing its
+    /// own mandatory fee checkpoint to land INSIDE the JIT-forfeiture window it just armed — donating
+    /// its own accrued fees to whichever in-range LP (including an attacker's own co-located direct
+    /// position) is present. Non-exempt addresses can never do this: DEPOSIT_COOLDOWN_SEC (3600s)
+    /// already exceeds both JIT windows by construction, so their cooldown-gated withdrawal always
+    /// lands after their own JIT window has closed. This margin restores that same guarantee for
+    /// exempt addresses, at a shorter, regime-appropriate distance instead of the full hour.
+    uint32 internal constant EXEMPT_WITHDRAW_MARGIN_SEC = 600; // 10 min buffer past the JIT window
     /// PARAMS.md#DEPOSIT_TWAP_WINDOW_SEC (FROZEN v2). NAV-mint reference TWAP window.
     uint32 internal constant DEPOSIT_TWAP_WINDOW_SEC = 600; // 10 min
 

@@ -106,6 +106,8 @@ contract BaseLimitStrategyTest is Deployers {
         vault.approveRwaFeed(address(feed), "test RWA feed");
         memeId = vault.createBaseLimitPool(memeKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "MEME-BL", "mBL");
         rwaId = vault.createBaseLimitPool(rwaKey, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, true, "RWA-BL", "rBL");
+        vault.setKeeperActive(memeId, true);
+        vault.setKeeperActive(rwaId, true);
 
         MockERC20(Currency.unwrap(currency0)).approve(address(vault), type(uint256).max);
         MockERC20(Currency.unwrap(currency1)).approve(address(vault), type(uint256).max);

@@ -79,6 +79,8 @@ contract VaultAdminTest is Deployers {
         vault.approveRwaFeed(address(feed), "test RWA feed");
         memeId = vault.createBaseLimitPool(memeKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "MEME-LP", "mLP");
         rwaId = vault.createBaseLimitPool(rwaKey, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, true, "NVDA-LP", "nLP");
+        vault.setKeeperActive(memeId, true);
+        vault.setKeeperActive(rwaId, true);
 
         MockERC20(Currency.unwrap(currency0)).approve(address(vault), type(uint256).max);
         MockERC20(Currency.unwrap(currency1)).approve(address(vault), type(uint256).max);
@@ -192,6 +194,62 @@ contract VaultAdminTest is Deployers {
     function test_setKeeper_zeroAddressRejected() public {
         vm.expectRevert(IFeraVault.ZeroAddress.selector);
         vault.setKeeper(address(0));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════════════
+    // v3.5 (Finding-1 hardening): keeperActive pool-level gate — owner-only, unknown-pool rejected,
+    // and (the core PoC) blocks EVERY onlyKeeper pool action until explicitly activated.
+    // ══════════════════════════════════════════════════════════════════════════════════════
+    function test_setKeeperActive_onlyOwner() public {
+        vm.prank(notOwner);
+        vm.expectRevert();
+        vault.setKeeperActive(memeId, true);
+    }
+
+    function test_setKeeperActive_unknownPoolReverts() public {
+        PoolId fake = PoolId.wrap(bytes32(uint256(0xdead)));
+        vm.expectRevert(IFeraVault.UnknownPool.selector);
+        vault.setKeeperActive(fake, true);
+    }
+
+    /// The core Finding-1 PoC: a pool the owner has not activated is untouchable by EVERY
+    /// onlyKeeper action, regardless of how it was created or who calls it — closing the
+    /// cross-contract PoolManager-reentrancy surface a permissionlessly-created pool's unreviewed
+    /// native token could otherwise expose (see `keeperActive` NatSpec, FeraVault.sol). Deposits,
+    /// withdrawals, and swaps are completely unaffected (only onlyKeeper functions consult it).
+    function test_keeperActive_gatesEveryOnlyKeeperPoolAction() public {
+        // setUp() already activated both pools by default — deactivate to test the gated state.
+        vault.setKeeperActive(memeId, false);
+        vault.setKeeperActive(rwaId, false);
+
+        vm.expectRevert(IFeraVault.PoolNotKeeperActive.selector);
+        vault.skimIdle(memeId, 0);
+
+        vm.expectRevert(IFeraVault.PoolNotKeeperActive.selector);
+        vault.rebalanceLimit(memeId, 0);
+
+        vm.expectRevert(IFeraVault.PoolNotKeeperActive.selector);
+        vault.rebalanceBase(memeId, 0, false);
+
+        vm.expectRevert(IFeraVault.PoolNotKeeperActive.selector);
+        vault.selfSwap(memeId, 0, true, 1e18);
+
+        vm.expectRevert(IFeraVault.PoolNotKeeperActive.selector);
+        vault.rebalanceViaVenue(memeId, 0, address(0x1234), true, 1e18);
+
+        vm.expectRevert(IFeraVault.PoolNotKeeperActive.selector);
+        vault.rebalanceRwaOracle(rwaId, 0);
+
+        vm.expectRevert(IFeraVault.PoolNotKeeperActive.selector);
+        vault.defendRwaOffHours(rwaId, 0);
+
+        // Deposits/withdrawals are NEVER gated by keeperActive.
+        vault.deposit(memeId, 0, 10e18, 10e18, 0);
+
+        // Re-activating clears the gate — the SAME call now proceeds to its normal downstream
+        // logic instead (proving this is an ADDITIVE gate, not a replacement for existing bounds).
+        vault.setKeeperActive(memeId, true);
+        vault.skimIdle(memeId, 0); // succeeds
     }
 
     function test_constructor_zeroAddressRejected() public {

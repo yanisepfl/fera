@@ -41,6 +41,9 @@ contract VaultLifecycleTest is Deployers {
     uint256 internal constant MIN_LIQ = 1_000;
     uint256 internal constant T0 = 10_000_000;
     uint256 internal constant COOLDOWN = 3_600;
+    // v3.5 (Finding-2 fix): a cooldownExempt address on a MEME pool now waits JIT_PENALTY_WINDOW_MEME
+    // (1800s) + EXEMPT_WITHDRAW_MARGIN_SEC (600s) instead of the full COOLDOWN — never zero.
+    uint256 internal constant EXEMPT_FLOOR = 2_400;
 
     function setUp() public {
         vm.warp(T0);
@@ -160,6 +163,84 @@ contract VaultLifecycleTest is Deployers {
 
         (uint256 out0,) = vault.withdraw(id, 0, shares, 0, 0); // my cooldown lapsed — must work
         assertGt(out0, 0, "another user's deposit re-armed my cooldown");
+    }
+
+    // ── cooldownExempt: the future-aggregator DoS fix (contracts/INDEX_VAULT_SPEC.md §12) ────
+    // A shared depositor (e.g. an index vault) would otherwise have EVERY unrelated user's deposit
+    // re-arm its cooldown and freeze ITS depositors' withdrawals. The owner-set exemption lifts
+    // ONLY the timing check for that one address; every other guard still applies identically.
+    /// v3.5 (Finding-2 fix): exemption is no longer a full bypass — an exempt address still cannot
+    /// withdraw IMMEDIATELY (that would let it deposit-then-instantly-withdraw in one tx, forcing its
+    /// own mandatory fee checkpoint to land inside the JIT-forfeiture window it just armed and donate
+    /// its own accrued fees away). It only needs to clear a SHORT floor (JIT window + margin), well
+    /// under the full hour-long DEPOSIT_COOLDOWN_SEC a non-exempt address must wait.
+    function test_cooldownExempt_blocksImmediateWithdraw_allowsAfterShortFloor() public {
+        vault.setCooldownExempt(address(this), true);
+        uint256 shares = vault.deposit(id, 0, 10e18, 10e18, 0);
+
+        // No vm.warp — even exempt, this must still revert (closes the atomic self-arm-then-harvest
+        // JIT-donate siphon, memo finding #2).
+        vm.expectRevert(IFeraVault.CooldownActive.selector);
+        vault.withdraw(id, 0, shares, 0, 0);
+
+        // Short of the FULL cooldown, but past the exempt floor — still succeeds unlike a non-exempt
+        // address, which would need to wait the full COOLDOWN (proven in test_cooldown_blocksImmediateWithdraw).
+        vm.warp(block.timestamp + EXEMPT_FLOOR);
+        assertLt(EXEMPT_FLOOR, COOLDOWN, "exempt floor must stay meaningfully shorter than the full cooldown");
+        (uint256 out0,) = vault.withdraw(id, 0, shares, 0, 0);
+        assertGt(out0, 0, "exempt address could not withdraw after clearing its short floor");
+    }
+
+    function test_cooldownExempt_onlyOwner() public {
+        vm.prank(notOwnerForCooldownTest());
+        vm.expectRevert();
+        vault.setCooldownExempt(address(this), true);
+    }
+
+    function test_cooldownExempt_zeroAddressRejected() public {
+        vm.expectRevert(IFeraVault.ZeroAddress.selector);
+        vault.setCooldownExempt(address(0), true);
+    }
+
+    /// Exempting address A must not leak the exemption to address B (no global bypass).
+    function test_cooldownExempt_isPerAddress() public {
+        address alice = address(this);
+        address bob = makeAddr("bobExempt");
+        vault.setCooldownExempt(alice, true); // alice exempt, bob is NOT
+
+        uint256 sharesAlice = vault.deposit(id, 0, 10e18, 10e18, 0);
+        vm.warp(block.timestamp + EXEMPT_FLOOR); // exempt floor, not the full cooldown (v3.5)
+        (uint256 out0,) = vault.withdraw(id, 0, sharesAlice, 0, 0);
+        assertGt(out0, 0, "exempt alice should withdraw after clearing the short floor");
+
+        MockERC20(Currency.unwrap(currency0)).transfer(bob, 10e18);
+        MockERC20(Currency.unwrap(currency1)).transfer(bob, 10e18);
+        vm.startPrank(bob);
+        MockERC20(Currency.unwrap(currency0)).approve(address(vault), type(uint256).max);
+        MockERC20(Currency.unwrap(currency1)).approve(address(vault), type(uint256).max);
+        uint256 sharesBob = vault.deposit(id, 0, 10e18, 10e18, 0);
+        vm.expectRevert(IFeraVault.CooldownActive.selector);
+        vault.withdraw(id, 0, sharesBob, 0, 0);
+        vm.stopPrank();
+    }
+
+    /// The exemption only shortens the timing check (v3.5: to a JIT-window-sized floor, never zero)
+    /// — an exempt address still cannot withdraw more than its real share balance, and the
+    /// minAmount0/minAmount1 slippage bound still reverts.
+    function test_cooldownExempt_stillBoundedByRealAccounting() public {
+        vault.setCooldownExempt(address(this), true);
+        uint256 shares = vault.deposit(id, 0, 10e18, 10e18, 0);
+        vm.warp(block.timestamp + EXEMPT_FLOOR); // clear the exempt floor (v3.5) first
+
+        vm.expectRevert(); // ERC20 underflow burning more than the real balance — no backdoor mint
+        vault.withdraw(id, 0, shares + 1, 0, 0);
+
+        vm.expectRevert(IFeraVault.Slippage.selector);
+        vault.withdraw(id, 0, shares, type(uint256).max, type(uint256).max);
+    }
+
+    function notOwnerForCooldownTest() internal returns (address) {
+        return makeAddr("notOwnerCooldown");
     }
 
     // ── INV-11: deposits pausable, withdrawals never ─────────────────────────────────────────

@@ -94,6 +94,7 @@ contract StrategyNavInvariantCampaign is Deployers {
         });
         vault.setAllowedQuoteAsset(Currency.unwrap(currency0), true);
         blId = vault.createBaseLimitPool(blKey, FeraTypes.Regime.MEME, address(0), SQRT_PRICE_1_1, true, "MEME-BL", "mBL");
+        vault.setKeeperActive(blId, true);
 
         _fund(refHolder, 2_100_000e18);
         foreign[0] = makeAddr("foreignA");

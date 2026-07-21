@@ -176,9 +176,21 @@ library VaultActions {
         uint256 minOut,
         IRevenueDistributor rd,
         IAnchorStaking anchor,
-        mapping(address => uint64) storage depositClock
+        mapping(address => uint64) storage depositClock,
+        mapping(address => bool) storage cooldownExempt
     ) public returns (uint256 amountOut) {
-        if (block.timestamp < depositClock[msg.sender] + FeraConstants.DEPOSIT_COOLDOWN_SEC) {
+        // Same cooldown semantics as FeraVault.withdraw (see `cooldownExempt`'s NatSpec / Finding-2
+        // hardening): an exempt address still waits its regime's JIT window + margin, never zero.
+        uint32 requiredDelay;
+        if (cooldownExempt[msg.sender]) {
+            uint32 jitWindow = p.regime == FeraTypes.Regime.MEME
+                ? FeraConstants.JIT_PENALTY_WINDOW_MEME
+                : FeraConstants.JIT_PENALTY_WINDOW_RWA;
+            requiredDelay = jitWindow + FeraConstants.EXEMPT_WITHDRAW_MARGIN_SEC;
+        } else {
+            requiredDelay = FeraConstants.DEPOSIT_COOLDOWN_SEC;
+        }
+        if (block.timestamp < depositClock[msg.sender] + requiredDelay) {
             revert IFeraVault.CooldownActive();
         }
         bool wantToken0 = tokenOut == Currency.unwrap(p.key.currency0);

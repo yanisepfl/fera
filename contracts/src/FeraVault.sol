@@ -136,6 +136,31 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///      user's own redemption for 1h (narrow — no INV-11 tension).
     mapping(PoolId => mapping(uint256 => mapping(address => uint64))) public lastDepositTs;
 
+    /// @notice Owner-set allowlist exempting an address from the FULL depositor cooldown in `withdraw`
+    ///         and `withdrawSingle` (below), and from having its own `FeraShare.transferLockUntil`
+    ///         armed on deposit. Exists for a SINGLE reason: a future aggregator-style contract (e.g.
+    ///         a diversified index vault) that deposits into this vault as ONE shared address on
+    ///         behalf of many end-users would otherwise have the anti-flash-loan cooldown re-armed by
+    ///         every unrelated user's deposit into it — freezing that aggregator's withdrawals (and,
+    ///         via the transfer lock, its `emergencyRedeemInKind`-style member-share transfers) from
+    ///         ALL its own depositors, a liveness griefing vector, not a fund-safety one (see
+    ///         contracts/INDEX_VAULT_SPEC.md §12). Exemption is narrow and inert by default (empty
+    ///         mapping, opt-in per address, owner/timelock-gated):
+    ///           - `withdraw`/`withdrawSingle`: swaps the full `DEPOSIT_COOLDOWN_SEC` wait for a
+    ///             SHORTER but NON-ZERO floor (`_exemptWithdrawFloorSec` — the address's regime-JIT
+    ///             window + margin) past its OWN last deposit. Finding-2 hardening: a full bypass
+    ///             would let an exempt address deposit-then-instantly-withdraw in one tx, forcing its
+    ///             own mandatory fee checkpoint to land inside the JIT-forfeiture window it just
+    ///             armed and donate its own fees away — this floor closes that while still avoiding
+    ///             the full hour-long shared-clock wait.
+    ///           - `deposit`: skips arming `transferLockUntil` for this address at all (Finding-3
+    ///             hardening — the exemption would otherwise be defeated the moment the Index needs a
+    ///             raw share `transfer`, not `burn`, to move a member's shares).
+    ///         Every OTHER guard on `withdraw`/`withdrawSingle` (share balance, NAV-priced pro-rata
+    ///         redemption, `minAmount0`/`minAmount1`/`minOut` slippage, `nonReentrant`, `notPaused`,
+    ///         `knownTranche`) applies to an exempt address identically to anyone else.
+    mapping(address => bool) public cooldownExempt;
+
     /// @notice v3.3 permissionless pool creation (contracts/VAULT_STRATEGY_V3.md §11): team-set
     ///         allowlist of acceptable QUOTE-side assets (WETH/USDG-like). `createBaseLimitPool` is
     ///         now callable by ANY address, but the pool's designated quote token (per
@@ -159,6 +184,23 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///         non-eligible pool still fully participates in fee generation and the perf-fee
     ///         staker/treasury/ops split exactly like any other pool.
     mapping(PoolId => bool) public emissionsEligible;
+
+    /// @notice v3.5 HARDENING (audit finding, cross-contract PoolManager reentrancy): per-pool
+    ///         allowlist gating whether the AUTOMATED KEEPER may act on it at all. `createBaseLimitPool`
+    ///         is permissionless — anyone can register a pool whose native (non-quote) token has an
+    ///         arbitrary `transfer()` hook. Because v4's `PoolManager` uses a single global unlock flag
+    ///         (not per-pool), a hostile hook firing during one of this vault's own token transfers
+    ///         (inside `_modifyBand`'s settle/take) could reenter `PoolManager.swap()`/`modifyLiquidity()`
+    ///         on ANY pool while the swap-free rebalance callbacks (`cbRebalanceLimit` et al.) are
+    ///         mid-flight, then unwind before the callback's own fresh `getSlot0()` read — defeating the
+    ///         value-conservation checks. `allowedQuoteAssets` already vets the QUOTE side; this vets
+    ///         whether the WHOLE pool (hence both its tokens) is trusted enough for unattended automation
+    ///         — same curation-lever pattern, onlyOwner-gated (`setKeeperActive`). Defaults FALSE for
+    ///         every pool, including ones created before this flag existed: deposits/withdrawals/swaps
+    ///         are completely unaffected either way (only `onlyKeeper` functions consult it) — a pool
+    ///         simply gets no automated rebalancing until the team has reviewed its native token and
+    ///         opted it in.
+    mapping(PoolId => bool) public keeperActive;
 
     // Callback action tags (internal encoding only — never externally exposed).
     uint8 internal constant CB_CHECKPOINT = 0; // poke bands, realize fees to the Vault
@@ -187,6 +229,13 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     modifier knownTranche(PoolId id, uint8 t) {
         if (!pools[id].initialized) revert UnknownPool();
         if (t >= pools[id].trancheCount) revert UnknownTranche();
+        _;
+    }
+
+    /// @dev Finding-1 hardening: blocks EVERY onlyKeeper pool-touching action until the owner has
+    ///      explicitly reviewed and activated this specific pool (see `keeperActive` NatSpec).
+    modifier keeperReady(PoolId id) {
+        if (!keeperActive[id]) revert PoolNotKeeperActive();
         _;
     }
 
@@ -264,7 +313,16 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         // BOTH the withdraw path (below) and, per V2-2 (SEC-3 #4), on outgoing SHARE TRANSFERS so
         // the cooldown cannot be dodged by moving fresh shares to a second wallet.
         lastDepositTs[id][t][msg.sender] = uint64(block.timestamp);
-        IFeraShare(tr.share).setTransferLock(msg.sender, uint64(block.timestamp) + FeraConstants.DEPOSIT_COOLDOWN_SEC);
+        // Finding-3 hardening: an exempt address's OWN shares never need the outgoing-transfer lock
+        // armed in the first place (the whole point of the exemption is that this address's
+        // withdrawals/transfers must not be gated by a clock unrelated depositors keep re-arming) —
+        // this is what lets a future Index's `emergencyRedeemInKind` (raw `FeraShare.transfer`, not
+        // `burn`) actually move member shares once granted the exemption. Any transferLockUntil
+        // armed BEFORE an address became exempt is untouched here and simply expires on its own
+        // (extend-only, bounded by DEPOSIT_COOLDOWN_SEC from that earlier deposit).
+        if (!cooldownExempt[msg.sender]) {
+            IFeraShare(tr.share).setTransferLock(msg.sender, uint64(block.timestamp) + FeraConstants.DEPOSIT_COOLDOWN_SEC);
+        }
 
         IFeraShare(tr.share).mint(msg.sender, sharesMinted);
 
@@ -348,7 +406,13 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         knownTranche(id, t)
         returns (uint256 amount0, uint256 amount1)
     {
-        if (block.timestamp < lastDepositTs[id][t][msg.sender] + FeraConstants.DEPOSIT_COOLDOWN_SEC) {
+        // Finding-2 hardening: an exempt address still waits its regime's JIT window + margin past
+        // its OWN last deposit (see `_exemptWithdrawFloorSec` / EXEMPT_WITHDRAW_MARGIN_SEC NatSpec) —
+        // shorter than the full cooldown, but never zero, so it cannot harvest a JIT window it just
+        // armed itself.
+        uint256 requiredDelay =
+            cooldownExempt[msg.sender] ? _exemptWithdrawFloorSec(id) : FeraConstants.DEPOSIT_COOLDOWN_SEC;
+        if (block.timestamp < lastDepositTs[id][t][msg.sender] + requiredDelay) {
             revert CooldownActive();
         }
 
@@ -465,7 +529,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         bool quoteIsToken0_,
         string calldata name_,
         string calldata symbol_
-    ) external returns (PoolId id) {
+    ) external nonReentrant returns (PoolId id) {
         id = key.toId();
         PoolInfo storage p = pools[id];
         require(!p.initialized, "init");
@@ -486,18 +550,26 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         if (!allowedQuoteAssets[quoteToken]) revert QuoteAssetNotAllowed();
 
         // Curation lever 2 (RWA only): reject a zero/unapproved oracle feed. MEME has no oracle
-        // dependency at all, so no registry check applies (item 2 of the decided spec).
+        // dependency at all, so no registry check applies (item 2 of the decided spec). v3.5 FIX
+        // (audit finding, low): MEME previously stored/forwarded whatever `oracleFeed` the caller
+        // supplied, unvalidated — inert today (MEME's fee/strategy paths never read it), but a latent
+        // surface if a future code path ever consulted it without also re-checking the regime. Force
+        // it to address(0) for MEME so "no oracle dependency" is actually true on-chain, not just
+        // true by convention.
+        address feedToSet = oracleFeed;
         if (regime == FeraTypes.Regime.RWA) {
             if (oracleFeed == address(0) || !approvedRwaFeeds[oracleFeed]) revert RwaFeedNotApproved();
+        } else {
+            feedToSet = address(0);
         }
 
         hook.registerRegime(key, regime);
-        hook.setOracleFeed(id, oracleFeed);
+        hook.setOracleFeed(id, feedToSet);
         poolManager.initialize(key, sqrtPriceX96);
 
         p.key = key;
         p.regime = regime;
-        p.oracleFeed = oracleFeed;
+        p.oracleFeed = feedToSet;
         p.marketOpen = regime == FeraTypes.Regime.MEME;
         p.initialized = true;
         p.trancheCount = 2; // tranche 0 = Steady, tranche 1 = Active (risk choice; INV-15 segregated)
@@ -584,7 +656,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     }
 
     /// @inheritdoc IFeraVault
-    function skimIdle(PoolId id, uint8 t) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) {
+    function skimIdle(PoolId id, uint8 t) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) keeperReady(id) {
         TierConfig storage cfg = _requireBaseLimit(id, t);
         _checkpoint(id, t); // D-18: realize fees before touching the base
         poolManager.unlock(abi.encode(CB_SKIM_IDLE, id, t, abi.encode(uint256(cfg.idleBps))));
@@ -612,7 +684,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///      clock-starvation grief this codebase already patched once — so every position-MOVING
     ///      action is gated; zero grief surface beats bounded grief surface). All on-chain bounds
     ///      (min-interval, TWAP sanity) still verify — they now guard keeper mistakes/compromise.
-    function rebalanceLimit(PoolId id, uint8 t) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) {
+    function rebalanceLimit(PoolId id, uint8 t) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) keeperReady(id) {
         _requireBaseLimit(id, t);
         _requireRebalanceInterval(id, t); // R-15: bounded frequency (MEME shorter than RWA, both > 0)
         // Anti-whipsaw: never (re)deploy a limit onto a spot spike the TWAP disagrees with.
@@ -621,6 +693,16 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         }
         _checkpoint(id, t);
         poolManager.unlock(abi.encode(CB_REBALANCE_LIMIT, id, t, bytes("")));
+        // Finding-1 hardening: re-verify the SAME TWAP-sanity bound AFTER the callback returns. This
+        // is a swap-free path (close -> spot read -> mint) with no other slippage check, so it is the
+        // one place a mid-callback reentrant swap (see `keeperActive` NatSpec) could otherwise leave
+        // spot manipulated at the moment of the fresh `getSlot0()` read inside `cbRebalanceLimit`. By
+        // the time `unlock()` returns, `Lock.sol`'s global flag is closed again — any such manipulation
+        // is already reflected in spot, and reverting here unwinds the ENTIRE transaction, including
+        // whatever the reentrant call attempted to extract.
+        if (_twapDeviationBps(id, FeraConstants.REBALANCE_TWAP_WINDOW_SEC) > FeraConstants.REBALANCE_TWAP_SANITY_BPS) {
+            revert TwapOutOfBand();
+        }
         lastRebalanceTs[id][t] = uint64(block.timestamp);
         emit StrategyAction(PoolId.unwrap(id), uint8(FeraTypes.StrategyKind.LimitDeploy), 0, 0, 0, bytes32(0));
     }
@@ -636,7 +718,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///      impact does); the leftover imbalance is completed by a LATER call once the min-interval
     ///      has re-elapsed (via another `rebalanceBase`, a standalone `selfSwap`, or the swap-free
     ///      `rebalanceLimit`).
-    function rebalanceBase(PoolId id, uint8 t, bool useSelfSwap) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) {
+    function rebalanceBase(PoolId id, uint8 t, bool useSelfSwap) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) keeperReady(id) {
         _requireBaseLimit(id, t);
         // EIP-170 size-split: gate + recenter body in VaultActions (delegatecalled). Every gate,
         // the IL-budget cap, Gate-5 slippage bound, both clocks + StrategyAction are byte-identical.
@@ -651,6 +733,15 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
             lastBaseRecenterTs[id],
             lastRebalanceTs[id]
         );
+        // Finding-1 hardening: Gate 5 inside VaultActions compares spot-vBefore vs spot-vAfter, BOTH
+        // read within the same callback — an attacker who reenters mid-callback controls the very
+        // spot price vAfter is measured against, so a manipulated round-trip could still pass Gate 5.
+        // Anchoring this second, independent check to the TWAP (not spot) closes that gap: it reverts
+        // the whole transaction if the pool's post-recenter spot has drifted from its own TWAP, no
+        // matter what Gate 5 concluded.
+        if (_twapDeviationBps(id, FeraConstants.REBALANCE_TWAP_WINDOW_SEC) > FeraConstants.REBALANCE_TWAP_SANITY_BPS) {
+            revert TwapOutOfBand();
+        }
     }
 
     /// @notice Standalone bounded self-swap against the OWN v4 pool (ratio balancing). Executed output
@@ -667,6 +758,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         nonReentrant
         notPaused(id)
         knownTranche(id, t)
+        keeperReady(id)
         returns (uint256 amountOut)
     {
         _requireBaseLimit(id, t);
@@ -685,6 +777,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         nonReentrant
         notPaused(id)
         knownTranche(id, t)
+        keeperReady(id)
         returns (uint256 amountOut)
     {
         _requireBaseLimit(id, t);
@@ -712,7 +805,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///         price is correct (the OPPOSITE of MEME, where chasing the price loses money). Swap-free
     ///         (close base -> reserve -> re-mint around the oracle tick), so it realises ZERO IL and
     ///         value is conserved (Gate-5-style guard). KEEPER-ONLY (v3.4); every bound is on-chain.
-    function rebalanceRwaOracle(PoolId id, uint8 t) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) {
+    function rebalanceRwaOracle(PoolId id, uint8 t) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) keeperReady(id) {
         // EIP-170 size-split: body in VaultRwa (separate bytecode, delegatecalled). Gates, swap-free
         // value-conservation bound, dedicated base-recenter clock + StrategyAction are byte-identical.
         VaultRwa.rebalanceRwaOracle(
@@ -725,6 +818,12 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
             lastBaseRecenterTs[id],
             lastRebalanceTs[id]
         );
+        // Finding-1 hardening (same rationale as rebalanceBase): re-anchor the post-recenter spot to
+        // the manipulation-resistant TWAP, independent of whatever VaultRwa's own spot-vs-spot check
+        // concluded.
+        if (_twapDeviationBps(id, FeraConstants.REBALANCE_TWAP_WINDOW_SEC) > FeraConstants.REBALANCE_TWAP_SANITY_BPS) {
+            revert TwapOutOfBand();
+        }
     }
 
     /// @notice RWA OFF-HOURS / EVENT-WINDOW defensive posture. When the market is CLOSED (per the
@@ -734,7 +833,7 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///         stale-priced band, and a fraction sits instantly-withdrawable in reserve. Swap-free
     ///         (band<->reserve only), value-conserving. RE-WIRES the previously-vestigial `eventWindow`
     ///         (OD-4). KEEPER-ONLY (v3.4); RWA-only; gated by the dedicated slow base-recenter clock.
-    function defendRwaOffHours(PoolId id, uint8 t) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) {
+    function defendRwaOffHours(PoolId id, uint8 t) external onlyKeeper nonReentrant notPaused(id) knownTranche(id, t) keeperReady(id) {
         // EIP-170 size-split: body in VaultRwa (separate bytecode, delegatecalled). Gates, swap-free
         // value-conservation bound, dedicated base-recenter clock + StrategyAction are byte-identical.
         VaultRwa.defendRwaOffHours(
@@ -747,6 +846,10 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
             lastBaseRecenterTs[id],
             lastRebalanceTs[id]
         );
+        // Finding-1 hardening (same rationale as rebalanceBase).
+        if (_twapDeviationBps(id, FeraConstants.REBALANCE_TWAP_WINDOW_SEC) > FeraConstants.REBALANCE_TWAP_SANITY_BPS) {
+            revert TwapOutOfBand();
+        }
     }
 
     /// @inheritdoc IFeraVault
@@ -818,6 +921,22 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     }
 
     /// @inheritdoc IFeraVault
+    /// @dev Team-curation gate for the AUTOMATED KEEPER (see `keeperActive` NatSpec). Never affects
+    ///      deposits, withdrawals, or swaps — only `onlyKeeper` rebalance/skim actions consult it.
+    function setKeeperActive(PoolId id, bool active) external onlyOwner {
+        if (!pools[id].initialized) revert UnknownPool();
+        keeperActive[id] = active;
+        emit KeeperActiveSet(PoolId.unwrap(id), active);
+    }
+
+    /// @inheritdoc IFeraVault
+    function setCooldownExempt(address account, bool exempt) external onlyOwner {
+        if (account == address(0)) revert ZeroAddress();
+        cooldownExempt[account] = exempt;
+        emit CooldownExemptSet(account, exempt);
+    }
+
+    /// @inheritdoc IFeraVault
     /// @dev NEVER pausable (INV-11). Redeems into ONE token by first taking the pro-rata IN-KIND slice
     ///      (base + limit + idle) and then self-swapping the unwanted leg within the slippage bound. If
     ///      the swap cannot meet `minOut`, this reverts — and the user ALWAYS retains the unblockable
@@ -841,7 +960,8 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
             minOut,
             revenueDistributor,
             anchorStaking,
-            lastDepositTs[id][t]
+            lastDepositTs[id][t],
+            cooldownExempt
         );
     }
 
@@ -859,6 +979,16 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         return pools[id].regime == FeraTypes.Regime.MEME
             ? FeraConstants.MEME_MIN_REBALANCE_INTERVAL_SEC
             : FeraConstants.RWA_MIN_REBALANCE_INTERVAL_SEC;
+    }
+
+    /// @dev Finding-2 hardening: the shortest a `cooldownExempt` address may wait past its OWN last
+    ///      deposit before withdrawing — its regime's JIT-forfeiture window plus a fixed safety
+    ///      margin (see EXEMPT_WITHDRAW_MARGIN_SEC NatSpec), always well under DEPOSIT_COOLDOWN_SEC.
+    function _exemptWithdrawFloorSec(PoolId id) internal view returns (uint32) {
+        uint32 jitWindow = pools[id].regime == FeraTypes.Regime.MEME
+            ? FeraConstants.JIT_PENALTY_WINDOW_MEME
+            : FeraConstants.JIT_PENALTY_WINDOW_RWA;
+        return jitWindow + FeraConstants.EXEMPT_WITHDRAW_MARGIN_SEC;
     }
 
     /// @dev Generic min-interval guard against an arbitrary last-action timestamp (R-15).

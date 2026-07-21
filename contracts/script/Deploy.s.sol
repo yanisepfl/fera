@@ -267,6 +267,10 @@ contract Deploy is Script {
         console2.log("  vault.setAllowedQuoteAsset(USDG, true) ->", c.usdg);
         console2.log("  vault.approveRwaFeed(feed, description) -- once per verified Chainlink feed, RWA pools only");
         console2.log("  vault.setEmissionsEligible(poolId, true) -- per pool, opt-in only, esFERA attribution ONLY");
+        console2.log("== v3.5: the AUTOMATED KEEPER acts on NO pool until explicitly activated (Finding-1 hardening) ==");
+        console2.log("  vault.setKeeperActive(poolId, true) -- per pool, ONLY after reviewing its native token");
+        console2.log("  (a hostile transfer hook could reenter PoolManager during rebalance settlement --");
+        console2.log("   review bytecode/behavior before activating a permissionlessly-created pool's native token)");
         console2.log("  vault:", address(vault), " hook:", address(hook));
     }
 }
