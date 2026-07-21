@@ -1,11 +1,19 @@
 # FERA vault-strategy keeper — free runner (GitHub Actions cron).
 #
-# Every ~30 min: discovers the pools on-chain, then per seeded tranche
+# PAUSED 2026-07-21: the scheduled trigger is disabled pending a fix. An adversarial audit
+# found that `rebalanceLimit` (and related swap-free callbacks) close a band, read spot
+# price, and mint a new band with ZERO TWAP/slippage re-validation — contrary to what this
+# file's header used to claim. Combined with automatic, unvetted pool discovery (this
+# keeper calls rebalanceLimit/rebalanceBase on EVERY pool it finds, including one an
+# attacker could create with a deliberately reentrant native token), this is a live
+# exposure for a fully-automated, unattended trigger. Manual runs (workflow_dispatch)
+# remain available for the already-vetted 8 live pools while the fix lands.
+#
+# Every ~30 min (WHEN ENABLED): discovers the pools on-chain, then per seeded tranche
 #   - recenters the base band ONLY if price has left it (position stopped earning)
 #   - builds the idle reserve + deploys the limit band where one is missing
 # Every action is SIMULATED first and sent only if the simulation succeeds, so a calm
-# tick costs zero gas. All actions are keeper-bounded on-chain (IL/TWAP/slippage clamps
-# + fail-static doctrine): a missed or late run just means positions hold.
+# tick costs zero gas. Fail-static: a missed or late run just means positions hold.
 #
 # Setup (one-time), repo → Settings → Secrets and variables → Actions:
 #   KEEPER_PRIVATE_KEY  = the FERA_VAULT_KEEPER hot key (bounded on-chain by design)
@@ -14,9 +22,9 @@
 name: FERA keeper
 
 on:
-  schedule:
-    - cron: "0 * * * *" # hourly (best-effort scheduling is fine — fail-static). Base recenter +
-      # dwell clock run every tick; the gas-heavy idle-skim/limit-redeploy self-throttle to ~4h.
+  # schedule:                    # PAUSED — see note above. Re-enable once the swap-free
+  #   - cron: "0 * * * *"        # rebalance callbacks have a TWAP/slippage post-check
+  #                              # and/or pool discovery is scoped to vetted native tokens.
   workflow_dispatch: {}
 
 permissions:
