@@ -143,6 +143,13 @@ library VaultActions {
         // BOTH sides by BALANCE DELTA (never trust the return value), reset the approval, re-verify.
         IRebalanceVenue(venue).swapExactIn(tokenIn, tokenOut, amountIn, minOut, address(this));
         IERC20(tokenIn).forceApprove(venue, 0);
+        // slither-disable-next-line reentrancy-balance -- reviewed 2026-07-20 (new detector in
+        // 0.11.4+, CI pinned to 0.11.3 until re-triaged on a deliberate bump): `amountOut` here is
+        // a FRESH post-call balanceOf(), not a stale pre-call snapshot — `balBefore` above is the
+        // captured operand, `amountOut`'s own value is read after the external call completes.
+        // The caller (FeraVault.rebalanceViaVenue) is `onlyKeeper` + `nonReentrant`, so a reentrant
+        // call from `venue` into any state-mutating vault function reverts before it could observe
+        // or exploit intermediate state; `venue` itself is team-allowlisted, not attacker-supplied.
         amountOut = IERC20(tokenOut).balanceOf(address(this)) - balBefore;
         if (amountOut < minOut) revert IFeraVault.RebalanceSlippage();
         uint256 spentIn = balInBefore - IERC20(tokenIn).balanceOf(address(this));

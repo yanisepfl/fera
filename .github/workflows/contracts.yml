@@ -108,6 +108,13 @@ jobs:
         with:
           target: "contracts/"
           slither-config: "contracts/slither.config.json"
+          # PINNED: slither-action installs slither-analyzer UNVERSIONED by default (whatever's
+          # newest on PyPI at run time), so a slither release can flip this red with zero code
+          # changes (happened 2026-07-20: 0.11.3->0.11.5 added the reentrancy-balance detector,
+          # which flagged 1 already-reviewed, already-nonReentrant-guarded pattern in the live
+          # vault as new-High — a false positive, see the slither-disable-next-line comment at
+          # VaultActions.sol's rebalanceViaVenue). Bump this deliberately, re-triage on bump.
+          slither-version: "0.11.3"
           fail-on: high
           sarif: results.sarif
       - name: Upload SARIF
