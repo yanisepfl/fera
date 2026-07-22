@@ -285,6 +285,47 @@ contract UnifiedFeeRoutingTest is Deployers {
         assertEq(_pending(address(staking), _native()), 0, "unexpected native-side stakers credit");
     }
 
+    /// @notice Audit finding (Medium, open-kritt / OPEN_DECISIONS.md#OD-17): a pool younger than
+    ///         REBALANCE_TWAP_WINDOW_SEC has no checkpoint old enough to genuinely span the window —
+    ///         `consultTwapTick`'s `ready` flag would still read true (only requires >0 seconds), so
+    ///         the self-swap's "TWAP-anchored" bound would really be anchored to whatever tick the
+    ///         pool happens to be at right now. Proves the perf-fee router now skips the swap
+    ///         attempt entirely (routing straight to the in-kind fallback) while the pool is this
+    ///         young, instead of trusting a not-yet-meaningful TWAP.
+    function test_youngPool_perfFeeSwapSkipped_routesInKindUntilGenuineTwapHistory() public {
+        staking.addRewardToken(_quote()); // quote allowlisted, native NOT ⇒ would normally force the swap path
+        vault.deposit(feeId, 0, 1_000e18, 1_000e18, 0);
+
+        // Only a few seconds old — far short of REBALANCE_TWAP_WINDOW_SEC (1800s) since pool
+        // creation (`setUp` created `feeId` at T0, same timestamp `deposit` above just used).
+        vm.warp(block.timestamp + 60);
+        _generateNativeFee(2e18);
+
+        vm.recordLogs();
+        (,, uint256 perfFee0, uint256 perfFee1) = vault.collectFees(feeId, 0); // MUST NOT revert
+        assertGt(perfFee1, 0, "expected a nonzero native-side perf fee");
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertFalse(_hasEvent(logs, SWAPPED_SIG), "swap must NOT be attempted against a not-yet-historied TWAP");
+        (bool found, uint256 amount, bool forwarded) = _decodeFallbackEvent(logs);
+        assertTrue(found, "expected PerfFeeInKindFallback instead");
+        assertTrue(forwarded, "the plain native token's in-kind forward should succeed");
+        assertEq(amount, perfFee1, "fallback amount must equal the collected native perf fee");
+
+        // Once the pool is genuinely old enough, the SAME native-fee routing takes the swap path
+        // again (proving this is a readiness gate, not a permanent behavior change).
+        vm.warp(block.timestamp + FeraConstants.REBALANCE_TWAP_WINDOW_SEC);
+        _refreshTwap();
+        _generateNativeFee(2e18);
+        vm.warp(block.timestamp + JIT + 1);
+
+        vm.recordLogs();
+        (,, perfFee0, perfFee1) = vault.collectFees(feeId, 0);
+        assertGt(perfFee1, 0, "expected a nonzero native-side perf fee on the second collection");
+        logs = vm.getRecordedLogs();
+        assertTrue(_hasEvent(logs, SWAPPED_SIG), "expected the swap path once the pool has genuine TWAP history");
+    }
+
     // ═════════════════════════════════════════════════════════════════════════════════════
     // 3) THIN/HOSTILE POOL: the self-swap's TWAP-implied bound is exceeded (same-block huge
     //    price push the 30-min TWAP hasn't caught up with yet — the IDENTICAL on-chain condition
@@ -398,6 +439,57 @@ contract UnifiedFeeRoutingTest is Deployers {
         uint256 delivered = hostile.balanceOf(treasuryAddr) - treasuryBefore;
         assertGt(delivered, 0, "fee-on-transfer fallback delivered nothing");
         assertLt(delivered, nativePerfFee, "fee-on-transfer token should deliver LESS than the nominal amount");
+    }
+
+    /// @notice Audit finding (Medium, open-kritt): the DIRECT (no-swap) route's own transfer used to
+    ///         be a bare `safeTransfer` with no failure containment — unlike the swap branch above
+    ///         (already covered by `test_hostileRevertingNativeToken_collectFeesNeverBricks`), which
+    ///         has always fail-static-forwarded on failure. A hostile native token that happens to be
+    ///         reward-token-allowlisted (or reached whenever `anchorStaking` is unset) took THIS
+    ///         direct path, and a reverting transfer used to propagate straight through
+    ///         `checkpoint`/`collectFees`, permanently bricking fee collection for that pool.
+    function test_hostileNativeToken_directRoute_collectFeesNeverBricks() public {
+        (PoolId hid, PoolKey memory hkey, HostileNativeERC20 hostile, address quote, bool hostileIsToken0) =
+            _createHostilePool();
+
+        vault.deposit(hid, 0, 1_000e18, 1_000e18, 0);
+        vm.warp(block.timestamp + COOLDOWN + JIT);
+        swap(hkey, true, -1e15, "");
+        swap(hkey, false, -1e15, "");
+
+        // BOTH sides reward-token-allowlisted ⇒ the DIRECT (no-swap) route, not the swap branch.
+        staking.addRewardToken(quote);
+        staking.addRewardToken(address(hostile));
+
+        swap(hkey, hostileIsToken0, -2e18, "");
+        vm.warp(block.timestamp + JIT + 1);
+
+        hostile.setBlockedSender(address(vault)); // arm the hostility AFTER funding is already in
+
+        uint256 treasuryBefore = hostile.balanceOf(treasuryAddr);
+        uint256 vaultBefore = hostile.balanceOf(address(vault));
+
+        vm.recordLogs();
+        (,, uint256 perfFee0, uint256 perfFee1) = vault.collectFees(hid, 0); // MUST NOT revert
+        uint256 nativePerfFee = hostileIsToken0 ? perfFee0 : perfFee1;
+        assertGt(nativePerfFee, 0, "expected a nonzero hostile native-side perf fee");
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (bool found, uint256 amount, bool forwarded) = _decodeFallbackEvent(logs);
+        assertTrue(found, "expected PerfFeeInKindFallback from the direct route's own failure");
+        assertFalse(forwarded, "the hostile token's own fallback transfer should itself fail too");
+        assertEq(amount, nativePerfFee, "reported fallback amount mismatch");
+
+        assertEq(hostile.balanceOf(treasuryAddr), treasuryBefore, "treasury should NOT have received the hostile token");
+        assertGe(
+            hostile.balanceOf(address(vault)),
+            vaultBefore + nativePerfFee,
+            "hostile native perf fee should remain stranded in the vault, not lost"
+        );
+
+        // The QUOTE-side leg (a well-behaved, curated token) still routes normally in the same call.
+        uint256 quotePerfFee = hostileIsToken0 ? perfFee1 : perfFee0;
+        assertGt(quotePerfFee, 0, "expected a nonzero quote-side perf fee too");
     }
 
     function _createHostilePool()

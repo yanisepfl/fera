@@ -34,6 +34,16 @@ import {Band, TierConfig, TrancheState, PoolInfo} from "./VaultTypes.sol";
 ///         vault's runtime size. NO logic/math/rounding/revert change: this is a mechanical move.
 /// @dev    `address(this)` inside these functions resolves to the VAULT (delegatecall preserves it),
 ///         so every settle/take/transfer moves the vault's own tokens exactly as before.
+/// @dev    AUDIT NOTE (Informational, v3.5): these `public` functions are DELEGATECALL-ONLY by
+///         design (invoked only via FeraVault's linked reference), bypassing every FeraVault
+///         modifier (onlyOwner/onlyKeeper/nonReentrant/notPaused/knownTranche/keeperReady) if
+///         reached any other way. EMPIRICALLY VERIFIED (test/unit/LibraryDirectCall_PoC.t.sol)
+///         narrower than "inert but callable": for a representative `storage`-struct-parameter
+///         signature, the library's OWN deployed dispatcher does not even recognize the function's
+///         documented selector via a plain external `CALL` — solc's codegen only wires up the
+///         delegatecall-style entry point FeraVault's linked reference actually uses, not a live
+///         case in the library's own standalone dispatch table. Documented (with the verifying
+///         test) so a future auditor doesn't have to rediscover or re-derive this.
 library VaultOps {
     using StateLibrary for IPoolManager;
     using CurrencySettler for Currency;
@@ -325,6 +335,21 @@ library VaultOps {
 
     /// @dev Single-coin redemption: remove the pro-rata band slice into the Vault, add the pre-debited
     ///      held slice, then self-swap the unwanted leg into `tokenOut` (bounded). Reserve untouched.
+    /// @dev Audit finding (High, open-kritt): the two internal conversion swaps below used to pass
+    ///      `enforceTwapBound=false` — unlike EVERY other internal swap path in this codebase
+    ///      (cbSelfSwap, cbRouteFeeSwap, _balanceReserve, rebalance*), which all pass `true` and are
+    ///      capped at MAX_REBALANCE_SLIPPAGE_BPS off a 30-minute TWAP. With `false`, `_doSelfSwap`'s
+    ///      own `minOut` collapses to 0 — an unbounded-price-impact swap whose only guard was the
+    ///      CALLER-supplied external `minOut` (checked once, in VaultActions.withdrawSingle, AFTER
+    ///      this swap already executed against whatever price was current at that instant). Since
+    ///      the caller picks their own `minOut`, this protected the WITHDRAWER, not the VAULT: a
+    ///      withdrawer could sandwich their own withdrawSingle call (push spot the favorable
+    ///      direction, let this conversion execute at the manipulated rate, reverse the push) to
+    ///      convert their unwanted leg at an off-market rate, extracting value from the tranche's
+    ///      remaining band liquidity — i.e. from the OTHER holders — while setting their own minOut
+    ///      low enough to never revert on their own account. Passing `enforceTwapBound=true` closes
+    ///      it exactly like every other internal swap: the conversion itself must clear a
+    ///      TWAP-anchored bound, independent of whatever `minOut` the caller chose.
     function cbWithdrawSingle(TrancheState storage tr, PoolInfo storage p, Ctx memory c, bytes memory payload)
         public
         returns (bytes memory)
@@ -346,13 +371,13 @@ library VaultOps {
         uint256 single;
         if (wantToken0) {
             if (out1 != 0) {
-                (, uint256 got) = _doSelfSwap(p, c, false, out1, false);
+                (, uint256 got) = _doSelfSwap(p, c, false, out1, true);
                 out0 += got;
             }
             single = out0;
         } else {
             if (out0 != 0) {
-                (, uint256 got) = _doSelfSwap(p, c, true, out0, false);
+                (, uint256 got) = _doSelfSwap(p, c, true, out0, true);
                 out1 += got;
             }
             single = out1;

@@ -183,6 +183,26 @@ library FeraConstants {
     /// drift apart: retuning MEME_VOL_LAMBDA_DOWN moves this too; give this its own literal instead if
     /// a future retune should NOT propagate.
     uint256 internal constant MEME_FLOW_LAMBDA_RELEASE = MEME_VOL_LAMBDA_DOWN;
+    /// v3.6 FIX (open-kritt finding: flow-EWMA sign-flip): the v3.5 fix above slows the RELEASE
+    /// weight to ~2% per swap, but that weight is applied to the RAW, un-normalized tick delta `r`
+    /// — `newFlow = (lamF·flowX + (ONE−lamF)·(r<<16)) >> 16` is a proper convex combination of the
+    /// OLD estimate and `r`, so a single swap whose `r` is large enough still dominates the tiny
+    /// (1−lamF) weight and flips `flowEwmaX`'s SIGN in ONE update, regardless of how much genuine
+    /// sell pressure had accumulated (e.g. r ≈ 15,000 ticks flips a flow built from six real sells
+    /// in the reference PoC — a single large-but-flash-loanable swap against a thin MEME pool).
+    /// Since v4 flash accounting lets one `unlock()` chain a cheap priming buy immediately before
+    /// the real toxic sell, this let an attacker dodge `MEME_SELL_ADDER_K_PIPS` entirely. Clamping
+    /// the per-update `r` fed into the RELEASE-branch blend (ONLY — the ATTACK branch is untouched,
+    /// preserving "ordinary selling behaves exactly as before") to this bound restores the actual
+    /// guarantee the v3.5 NatSpec already claimed: for ANY accumulated flow beyond a small
+    /// (ONE−LAMBDA_RELEASE)/LAMBDA_RELEASE · CLAMP ≈ 41-tick threshold, no single release-branch
+    /// swap — however large — can flip its sign; sustained real buying still recovers it over the
+    /// usual ~34-swap horizon (only the worst-case single-swap magnitude is bounded, not the decay
+    /// rate). Chosen well above the ~500–600 tick single-swap moves realistic pool sizes produce in
+    /// this codebase's own MEME test pools (so ordinary healing swaps are unaffected) and far below
+    /// the multi-thousand-tick delta a sign-flip attack needs against any meaningfully accumulated
+    /// flow (see FlowEwmaSignFlip_PoC.t.sol).
+    uint256 internal constant MEME_FLOW_RELEASE_R_CLAMP_TICKS = 2_000;
     /// PARAMS.md#MEME_ONE (immutable). Fixed-point unit for the Q16 λ.
     uint256 internal constant MEME_ONE = 65_536; // 2^16
     /// PARAMS.md#MEME_VOL_CLAMP (immutable). Overflow guard on volEwmaX (σ_max ≈ 131072 ticks ≫ ceil).

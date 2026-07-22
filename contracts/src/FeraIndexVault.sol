@@ -57,7 +57,24 @@ interface IFeraVaultNav {
 ///      deposit (and rebalance, which deposits) therefore re-arms the index's OWN cooldown across
 ///      ALL members, blocking `withdraw` (vault-cooldown) AND `emergencyRedeemInKind` (transfer-lock)
 ///      for `DEPOSIT_COOLDOWN_SEC`. Aged holdings redeem freely (INV-I5); a stream of fresh deposits
-///      is a liveness/griefing vector a v2 vault change (index-exempt cooldown) should close.
+///      is a liveness/griefing vector.
+///
+///      STATUS: `FeraVault.cooldownExempt` (granted to this index's address by the vault owner —
+///      NOT automatic, see the deploy checklist) SHRINKS the window from the full
+///      `DEPOSIT_COOLDOWN_SEC` (1h) to a regime-JIT-window-plus-margin floor, but it does NOT
+///      eliminate the coupling: the floor is still keyed per (member pool, this index's shared
+///      address), so ONE member recently touched by ANY user's `deposit()` or by a keeper
+///      `rebalance()` can still block `withdraw()` for EVERY index holder until that member's floor
+///      elapses — `withdraw()` is all-or-nothing across `memberIds` with `_burn` preceding the loop.
+///      `withdraw()` now pre-flight-checks every member via `FeraVault.withdrawReadyAt` BEFORE
+///      burning, so the failure is fast/predictable/`CooldownActive()`-typed instead of an
+///      accidental bubbled revert from deep inside the loop — this makes the residual risk
+///      observable and avoidable ahead of time (front-ends can poll `withdrawReadyAt` per member
+///      before showing a withdraw button as available), it does NOT remove it. Full elimination
+///      (e.g. per-member skip/partial-fill) is deferred future work — see
+///      contracts/INDEX_VAULT_SPEC.md §12 — and this index MUST NOT receive real deposits until
+///      that (or an equivalent) Index-side hardening lands, per the founder's 2026-07-21
+///      requirement recorded there.
 contract FeraIndexVault is IFeraIndexVault, IUnlockCallback, ERC20, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using CurrencySettler for Currency;
@@ -101,6 +118,13 @@ contract FeraIndexVault is IFeraIndexVault, IUnlockCallback, ERC20, Ownable, Ree
     ///      (spec §6 MAX_ENTRY_VS_DEPTH_BPS). Kept strictly below the vault's 2% deposit TWAP gate so
     ///      a swap the index accepts never trips the subsequent `FeraVault.deposit` gate.
     uint256 internal constant MAX_ENTRY_VS_DEPTH_BPS = 150; // 1.5% [PROVISIONAL]
+    /// @dev v3.5 follow-up (audit finding, medium): post-swap spot-vs-TWAP sanity bound —
+    ///      `_requireDepthOk` alone compares spot-before to spot-after the SAME callback, which a
+    ///      mid-callback reentrancy (the member's native token has never been vetted for this the
+    ///      way `keeperActive` gates FeraVault's automation) fully controls. Mirrors
+    ///      FeraConstants.REBALANCE_TWAP_SANITY_BPS (500 = 5%) — same order of magnitude as the
+    ///      vault's own post-check, not independently re-derived.
+    uint256 internal constant MAX_POST_SWAP_TWAP_DEVIATION_BPS = 500; // 5% [PROVISIONAL]
     /// @dev Conservative upper bound on the MEME sell-side fee adder (mirrors
     ///      FeraConstants.MEME_SELL_ADDER_K_PIPS = 20000 pips = 2%), added to the fee haircut on
     ///      memecoin→wWETH swaps so a legitimate sell never spuriously reverts. Loosens the EXIT
@@ -257,6 +281,25 @@ contract FeraIndexVault is IFeraIndexVault, IUnlockCallback, ERC20, Ownable, Ree
         uint256 supply = totalSupply();
         if (shares == 0 || shares > balanceOf(msg.sender)) revert Slippage();
 
+        // Pre-flight EVERY member's FeraVault cooldown readiness BEFORE burning — mirrors
+        // `emergencyRedeemInKind`'s pre-check below. `withdraw()` is all-or-nothing across
+        // `memberIds` (see this contract's "COOLDOWN COUPLING" header NatSpec): even ONE member
+        // still inside its (`cooldownExempt`-shortened, but never zero) floor for THIS index's
+        // shared address would otherwise surface only as an opaque `CooldownActive` bubbled up from
+        // deep inside the loop below, after `_burn` and any earlier members' withdrawals already
+        // ran (all rolled back by the revert regardless — this check does not change that outcome,
+        // it only fails fast/predictably and saves the wasted gas of the partial run). It does NOT
+        // remove the underlying cross-pool coupling for a multi-pool caller sharing one address —
+        // see `FeraVault.cooldownExempt`'s "RESIDUAL RISK" NatSpec.
+        {
+            uint256 nn = memberIds.length;
+            for (uint256 i; i < nn; ++i) {
+                if (block.timestamp < feraVault.withdrawReadyAt(memberIds[i], TRANCHE, address(this))) {
+                    revert CooldownActive();
+                }
+            }
+        }
+
         // Pro-rata idle wWETH (round DOWN — dust stays with remaining holders, R-17).
         uint256 idleOut = FullMath.mulDiv(shares, IERC20(asset).balanceOf(address(this)), supply);
 
@@ -268,8 +311,10 @@ contract FeraIndexVault is IFeraIndexVault, IUnlockCallback, ERC20, Ownable, Ree
             Member storage m = memberOf[memberIds[i]];
             uint256 shareOut = FullMath.mulDiv(shares, IERC20(m.share).balanceOf(address(this)), supply); // floor
             if (shareOut == 0) continue;
-            // Two tokens out to the index (vault-cooldown-gated — reverts CooldownActive if the index
-            // deposited into this member within DEPOSIT_COOLDOWN_SEC).
+            // Two tokens out to the index. The pre-flight check above already verified every
+            // member's readiness as of the top of this call, at this same `block.timestamp`, with
+            // `nonReentrant` blocking any reentrant deposit from re-arming a clock mid-call — so
+            // this cannot revert CooldownActive; kept un-try/catch'd as defense-in-depth only.
             (uint256 out0, uint256 out1) = feraVault.withdraw(memberIds[i], TRANCHE, shareOut, 0, 0);
             (uint256 quoteOut, uint256 memeOut) = m.quoteIsToken0 ? (out0, out1) : (out1, out0);
             got += quoteOut;
@@ -346,6 +391,14 @@ contract FeraIndexVault is IFeraIndexVault, IUnlockCallback, ERC20, Ownable, Ree
     /// @dev Bound + execute a swap through member `m`'s pool. `minOut` is TWAP-implied and haircut by
     ///      the live dynamic fee (+ sell cushion) and MAX_ENTRY_SLIPPAGE_BPS; the realized spot move
     ///      is additionally capped at MAX_ENTRY_VS_DEPTH_BPS (size-vs-depth). Reverts on either breach.
+    ///      Audit finding (Medium, v3.5 follow-up): this member pool's native token is reachable
+    ///      through the SAME cross-contract-reentrancy primitive Finding 1 fixed on FeraVault — v4's
+    ///      PoolManager unlock flag is global, not keyed by caller, so a hostile token's transfer()
+    ///      hook (fired by `unlockCallback`'s real settle()/take()) could reenter poolManager.swap()
+    ///      mid-callback. `_requireDepthOk` alone is the same defeatable "Gate 5" shape (both spot
+    ///      reads bracket the SAME callback an attacker controls) — the TWAP-anchored post-check
+    ///      below closes it the same way `FeraVault.rebalanceLimit`'s post-check does: re-verified
+    ///      AFTER `unlock()` returns, against a reference a same-callback reentrancy cannot move.
     function _swapThroughPool(Member storage m, PoolId poolId, bool zeroForOne, uint256 amountIn)
         internal
         returns (uint256 amountOut)
@@ -358,6 +411,25 @@ contract FeraIndexVault is IFeraIndexVault, IUnlockCallback, ERC20, Ownable, Ree
 
         (uint160 spotAfter,,,) = poolManager.getSlot0(poolId);
         _requireDepthOk(spotBefore, spotAfter);
+        _requireTwapSaneAfterSwap(poolId);
+    }
+
+    /// @dev Post-check counterpart to `_requireDepthOk`: the post-swap spot must still track the
+    ///      manipulation-resistant TWAP within `MAX_POST_SWAP_TWAP_DEVIATION_BPS`. Uses the SAME
+    ///      `_poolTwapPrice` helper `_minOut` already relies on for `minOut` (including its
+    ///      documented fail-safe spot fallback before a member's TWAP has enough history — a
+    ///      not-yet-warm member degrades this to a spot-vs-spot repeat of `_requireDepthOk` rather
+    ///      than silently skipping the check).
+    function _requireTwapSaneAfterSwap(PoolId poolId) internal view {
+        (uint160 sqrtSpot,,,) = poolManager.getSlot0(poolId);
+        uint256 spotPriceX18 = FullMath.mulDiv(
+            FullMath.mulDiv(uint256(sqrtSpot), uint256(sqrtSpot), 1 << 96), 1e18, 1 << 96
+        );
+        uint256 twapPriceX18 = _poolTwapPrice(poolId);
+        uint256 diff = spotPriceX18 > twapPriceX18 ? spotPriceX18 - twapPriceX18 : twapPriceX18 - spotPriceX18;
+        if (twapPriceX18 == 0 || FullMath.mulDiv(diff, BPS, twapPriceX18) > MAX_POST_SWAP_TWAP_DEVIATION_BPS) {
+            revert EntryExceedsDepth();
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════════

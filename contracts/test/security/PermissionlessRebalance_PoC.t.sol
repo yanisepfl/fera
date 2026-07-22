@@ -183,15 +183,20 @@ contract PermissionlessRebalancePoC is Deployers {
     }
 
     // ══════════════════════════════════════════════════════════════════════════════════════════
-    // FINDING 2 — POKE DWELL RESET VIA MOMENTARY SPOT: the idempotence writeup proves only that
-    // spam is a no-op WHILE STILL OOR. But `pokeOutOfRange` clears `oorSince` whenever `_baseOutOfRange`
-    // reads spot IN-range — and that read is RAW SPOT with NO TWAP gate (unlike rebalanceBase's
-    // TWAP-confirmed ARM path). An attacker momentarily pushes spot back into the base band, pokes
-    // (clock -> 0), then lets spot return OOR; a re-poke re-arms at a LATER timestamp, pushing
-    // rebalanceBase eligibility strictly later than the FIRST genuine breach. Contrast the existing
-    // `test_pokeOutOfRange_idempotent_spamCannotDelayEligibility`, which never leaves the OOR state.
+    // FINDING 2 — CLOSED (OPEN_DECISIONS.md#OD-14, independently re-flagged by open-kritt):
+    // `pokeOutOfRange`'s CLEAR path used to reset `oorSince` on a raw-SPOT in-range read alone, with
+    // NO TWAP gate (asymmetric with rebalanceBase's own TWAP-confirmed Gate 4). A same-block spot
+    // round-trip (push in-range, poke, push back OOR) could reset a genuine dwell clock, delaying
+    // rebalanceBase eligibility strictly past the FIRST genuine breach. The CLEAR transition is now
+    // gated on `VaultMath.twapConfirmsRecovery` — a same-tx flicker cannot move the 30-min TWAP, so
+    // it can no longer forge a clear. The ARM side is UNCHANGED by design (see `pokeOutOfRange`'s own
+    // NatSpec): `rebalanceBase`'s Gate 4 already independently re-confirms TWAP-OOR at execution
+    // time, so a spot-only arm can only start the dwell clock EARLIER, never fire the recenter on an
+    // unconfirmed spike — and gating the arm side too would delay detection of GENUINE breaches by
+    // however long the TWAP takes to catch up, a real regression to the normal (non-adversarial)
+    // "push then poke in the same block" flow this whole test suite (and real keeper bots) use.
     // ══════════════════════════════════════════════════════════════════════════════════════════
-    function test_F2_pokeDwellReset_viaMomentarySpot_delaysEligibility() public {
+    function test_F2_pokeDwellReset_viaMomentarySpot_noLongerDelaysEligibility() public {
         _seedMeme();
         _pushToTick(2_200); // Active(1) base OOR
         assertTrue(vault.pokeOutOfRange(memeId, 1), "expected OOR");
@@ -201,25 +206,27 @@ contract PermissionlessRebalancePoC is Deployers {
         // Advance to ONE SECOND short of dwell expiry — rebalanceBase is about to become eligible.
         vm.warp(uint256(firstArm) + FeraConstants.MEME_OOR_DWELL_SEC - 1);
 
-        // ---- The attack (bundled atomically in a real attack; the price round-trip near the band
-        //      edge is the only cost). Step A: momentarily move spot back INTO the base band.
+        // ---- The FORMER attack (bundled atomically; the price round-trip near the band edge is the
+        //      only cost). Step A: momentarily move spot back INTO the base band, SAME block — the
+        //      30-min TWAP cannot have moved at all, so it still reads OOR.
         _pushToTick(0);
-        // Step B: poke while spot is in-range -> `oorSince` is CLEARED to 0 (no TWAP gate here).
-        assertFalse(vault.pokeOutOfRange(memeId, 1), "in-range poke should report not-OOR");
-        assertEq(vault.outOfRangeSince(memeId, 1), 0, "DWELL CLOCK WAS RESET by a raw-spot in-range poke");
-        // Step C: let spot return OOR (genuine market pressure / attacker un-does the round trip).
+        // Step B: poke while spot is (momentarily) in-range. FIXED: since the TWAP does NOT confirm
+        // this "recovery" (same-block push cannot move a 30-min average), `oorSince` is NOT cleared —
+        // the poke correctly reports the CURRENT spot reading (not-OOR) without discarding real dwell.
+        assertFalse(vault.pokeOutOfRange(memeId, 1), "poke still reports the current (momentary) spot reading");
+        assertEq(vault.outOfRangeSince(memeId, 1), firstArm, "dwell clock preserved -- TWAP never confirmed the flicker as a recovery");
+        // Step C: spot returns OOR (genuine market pressure / attacker un-does the round trip).
         _pushToTick(2_200);
+        assertTrue(vault.pokeOutOfRange(memeId, 1), "still OOR");
+        assertEq(vault.outOfRangeSince(memeId, 1), firstArm, "poking OOR again is idempotent -- clock unchanged");
 
-        // A re-poke now re-arms at the CURRENT (much later) timestamp — eligibility pushed forward.
-        assertTrue(vault.pokeOutOfRange(memeId, 1), "re-armed after spot returned OOR");
-        uint64 reArm = vault.outOfRangeSince(memeId, 1);
-        assertGt(reArm, firstArm, "re-arm is strictly LATER than the first genuine breach (eligibility delayed)");
-
-        // Concretely: even though the FIRST breach was long enough ago to satisfy dwell, the recenter
-        // is now blocked because the clock was reset — the exact property the idempotence claim says
-        // an attacker cannot affect ("cannot change WHEN rebalanceBase's dwell gate is satisfied
-        // relative to the FIRST genuine breach").
-        vm.expectRevert(IFeraVault.OorNotPersistent.selector);
+        // Satisfy the dwell (now measured from the UNCHANGED firstArm) and refresh so the 30-min TWAP
+        // itself confirms the OOR — the honest recenter succeeds, exactly as if the flicker never
+        // happened.
+        vm.warp(uint256(firstArm) + FeraConstants.MEME_OOR_DWELL_SEC + 100);
+        _refreshTwap();
         vault.rebalanceBase(memeId, 1, false);
+        assertEq(vault.outOfRangeSince(memeId, 1), 0, "OOR cleared by a SUCCESSFUL recenter");
     }
+
 }

@@ -10,6 +10,7 @@ import {FeraShare} from "../../src/shares/FeraShare.sol";
 import {RevenueDistributor} from "../../src/RevenueDistributor.sol";
 import {IFeraHook} from "../../src/interfaces/IFeraHook.sol";
 import {IFeraVault} from "../../src/interfaces/IFeraVault.sol";
+import {IFeraShare} from "../../src/interfaces/IFeraShare.sol";
 import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol";
 import {IAnchorStaking} from "../../src/interfaces/IAnchorStaking.sol";
 import {FeraTypes} from "../../src/libraries/FeraTypes.sol";
@@ -256,10 +257,59 @@ contract VaultLifecycleTest is Deployers {
         vm.expectRevert(IFeraVault.CooldownActive.selector);
         vault.withdrawSingle(id, 0, shares, Currency.unwrap(currency0), 0);
 
-        // Clearing the floor by exactly one more second unblocks withdrawSingle too.
+        // Clearing the floor by exactly one more second unblocks withdrawSingle too. A small slice
+        // (not the FULL position) -- converting this pool's entire opposite-side holdings one-sided
+        // would itself trip the internal TWAP-anchored conversion bound (withdrawSingle hardening,
+        // open-kritt High); that is a separate, correctly-enforced protection, not what this
+        // cooldown-boundary test is checking. This pool only holds this ONE 10e18/10e18 deposit (no
+        // extra depth), so even a 5% slice (shares/20) is large enough relative to the pool's own
+        // depth to trip the 1% TWAP-anchored bound on its internal conversion swap -- shares/200 is
+        // small enough to clear it while still proving the cooldown boundary itself.
         vm.warp(block.timestamp + 1);
-        uint256 outAmt = vault.withdrawSingle(id, 0, shares, Currency.unwrap(currency0), 0);
+        uint256 outAmt = vault.withdrawSingle(id, 0, shares / 200, Currency.unwrap(currency0), 0);
         assertGt(outAmt, 0, "exempt address could not withdrawSingle after clearing the shared floor");
+    }
+
+    /// Audit finding (High, open-kritt), corrected fix: an EARLIER attempt at Finding-3's fix left
+    /// `deposit()` skipping FeraShare's `transferLockUntil` entirely for a `cooldownExempt` address,
+    /// so its freshly-minted shares were IMMEDIATELY transferable to a throwaway wallet whose own
+    /// lastDepositTs/depositClock is 0 -- `0 + requiredDelay` is trivially satisfied by any real
+    /// block.timestamp, letting that wallet withdraw shares seconds old with ZERO wait. The CORRECT
+    /// fix closes this at the SOURCE instead: `deposit()` now arms `transferLockUntil` for an exempt
+    /// address too, just at the SAME shorter `_exemptWithdrawFloorSec` used for withdrawals (not the
+    /// full DEPOSIT_COOLDOWN_SEC, and not skipped). This proves the transfer itself is blocked while
+    /// the floor is active, and that once the floor has elapsed and the transfer succeeds, the
+    /// recipient's immediate withdraw is SAFE BY CONSTRUCTION -- the JIT-sensitive window the floor
+    /// exists to cover has already closed by the time any transfer of these shares can happen at all,
+    /// exactly like the pre-existing non-exempt transfer-after-cooldown flow proven by
+    /// `test_V22_cooldownEvasion_viaShareTransfer` (JitAndVault_PoC.t.sol).
+    function test_cooldownExempt_transferToFreshWallet_cannotWithdrawInstantly() public {
+        uint256 t = block.timestamp;
+
+        vault.setCooldownExempt(address(this), true);
+        uint256 shares = vault.deposit(id, 0, 10e18, 10e18, 0);
+        IERC20 share = _share(); // fetch once: an intermediate external call between expectRevert and
+            // the actual reverting call would consume the cheatcode on the WRONG call.
+
+        address freshWallet = makeAddr("freshWallet");
+        vm.expectRevert(IFeraShare.TransferLocked.selector);
+        share.transfer(freshWallet, shares);
+
+        // One second short of the exempt floor -- the transfer lock is still active.
+        t += EXEMPT_FLOOR - 1;
+        vm.warp(t);
+        vm.expectRevert(IFeraShare.TransferLocked.selector);
+        share.transfer(freshWallet, shares);
+
+        // Clearing the floor unblocks the transfer -- by construction, the JIT-sensitive window is
+        // already closed, so freshWallet's immediate withdraw (despite its own zero clock) is safe.
+        t += 1;
+        vm.warp(t);
+        share.transfer(freshWallet, shares);
+
+        vm.prank(freshWallet);
+        (uint256 out0, uint256 out1) = vault.withdraw(id, 0, shares, 0, 0);
+        assertGt(out0 + out1, 0, "freshWallet could not withdraw shares transferred after the exempt floor cleared");
     }
 
     function notOwnerForCooldownTest() internal returns (address) {

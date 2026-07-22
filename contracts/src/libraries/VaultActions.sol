@@ -32,6 +32,11 @@ import {TrancheState, PoolInfo} from "./VaultTypes.sol";
 ///         check) stay on the vault's thin wrappers; the per-(pool,tranche) clocks are passed as the
 ///         inner `mapping(uint256 => uint64)` (`lastX[id]`), indexed by `c.t`; `msg.sender` is
 ///         preserved through the delegatecall so cooldowns/burns/transfers bind the real caller.
+/// @dev    AUDIT NOTE (Informational, v3.5): these `public` functions are DELEGATECALL-ONLY by
+///         design (invoked only via FeraVault's linked reference) — see VaultOps.sol's identical
+///         note (and test/unit/LibraryDirectCall_PoC.t.sol) for the empirically-verified detail:
+///         for this storage-struct-parameter signature shape, the library's OWN dispatcher does not
+///         even recognize the function's documented selector via a plain external `CALL`.
 library VaultActions {
     using StateLibrary for IPoolManager;
     using SafeERC20 for IERC20;

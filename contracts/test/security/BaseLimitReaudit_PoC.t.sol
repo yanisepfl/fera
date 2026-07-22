@@ -380,22 +380,28 @@ contract BaseLimitReauditPoC is Deployers {
         uint256 snap = vm.snapshotState();
 
         // (1) single-token exit. Value the output at the pre-exit spot (the pro-rata NAV reference).
+        // A full-position, one-sided conversion can legitimately trip the internal TWAP-anchored bound
+        // (withdrawSingle hardening, open-kritt High) for a large fuzzed `depAmt` — that revert IS the
+        // invariant holding (zero extracted is trivially never over pro-rata), not a bug to route around.
         vm.prank(alice);
-        uint256 got = vault.withdrawSingle(memeId, 0, aSh, tokenOut, 0);
-        uint256 valSingle = wantToken0 ? _valueT1At(sp0, got, 0) : _valueT1At(sp0, 0, got);
+        try vault.withdrawSingle(memeId, 0, aSh, tokenOut, 0) returns (uint256 got) {
+            uint256 valSingle = wantToken0 ? _valueT1At(sp0, got, 0) : _valueT1At(sp0, 0, got);
 
-        vm.revertToState(snap);
+            vm.revertToState(snap);
 
-        // (2) in-kind exit of the SAME shares — the true pro-rata NAV (spot unchanged, no swap).
-        (uint256 bb0, uint256 bb1) = _bal(alice);
-        vm.prank(alice);
-        vault.withdraw(memeId, 0, aSh, 0, 0);
-        (uint256 ba0, uint256 ba1) = _bal(alice);
-        uint256 valInkind = _valueT1At(sp0, ba0 - bb0, ba1 - bb1);
+            // (2) in-kind exit of the SAME shares — the true pro-rata NAV (spot unchanged, no swap).
+            (uint256 bb0, uint256 bb1) = _bal(alice);
+            vm.prank(alice);
+            vault.withdraw(memeId, 0, aSh, 0, 0);
+            (uint256 ba0, uint256 ba1) = _bal(alice);
+            uint256 valInkind = _valueT1At(sp0, ba0 - bb0, ba1 - bb1);
 
-        // The single-token redemption is never worth MORE than the in-kind pro-rata slice (a few wei
-        // of floor rounding tolerated). Over-payment would be value minted from other holders.
-        assertLe(valSingle, valInkind + 1e12, "withdrawSingle over-paid vs pro-rata NAV");
+            // The single-token redemption is never worth MORE than the in-kind pro-rata slice (a few
+            // wei of floor rounding tolerated). Over-payment would be value minted from other holders.
+            assertLe(valSingle, valInkind + 1e12, "withdrawSingle over-paid vs pro-rata NAV");
+        } catch (bytes memory reason) {
+            assertEq(bytes4(reason), IFeraVault.RebalanceSlippage.selector, "unexpected revert reason");
+        }
     }
 
     /// A4.b The in-kind `withdraw` is UNBLOCKABLE even with deposits paused AND every swap venue down
@@ -415,9 +421,11 @@ contract BaseLimitReauditPoC is Deployers {
         vm.warp(block.timestamp + COOLDOWN + 1);
         _refreshTwap();
 
-        // withdrawSingle with an unmeetable minOut fails (swap can't clear) — but this NEVER blocks...
+        // withdrawSingle of the full position fails (a whole-position, one-sided conversion trips the
+        // internal TWAP-anchored bound — withdrawSingle hardening, open-kritt High — before the
+        // caller's own unmeetable minOut is even reached) — but this NEVER blocks...
         vm.prank(alice);
-        vm.expectRevert(IFeraVault.SingleOutTooLow.selector);
+        vm.expectRevert(IFeraVault.RebalanceSlippage.selector);
         vault.withdrawSingle(memeId, 0, aSh, Currency.unwrap(currency0), type(uint256).max);
 
         // ...the plain in-kind exit, which carries no pause/venue/swap dependency.

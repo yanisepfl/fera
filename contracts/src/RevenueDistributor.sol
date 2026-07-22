@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {IRevenueDistributor} from "./interfaces/IRevenueDistributor.sol";
+import {IAnchorStaking} from "./interfaces/IAnchorStaking.sol";
 import {FeraConstants} from "./libraries/FeraConstants.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -53,8 +54,21 @@ contract RevenueDistributor is IRevenueDistributor {
     ///      the stakers' leg into treasury instead (v3.1 no-staker routing, §9 of
     ///      contracts/VAULT_STRATEGY_V3.md) — the ONLY difference from the historical `notifyRevenue`
     ///      behavior; `notifyRevenue` itself (stakersEligible=true) is byte-for-byte unchanged.
+    /// @dev OD-18 CLOSED (Low, re-flagged by an independent audit tool): `notifyRevenueNoStakers` is
+    ///      permissionless with no caller restriction, so it previously TRUSTED whoever called it
+    ///      (normally VaultFees, which does check `AnchorStaking.totalStaked()==0` on-chain first) —
+    ///      a direct external caller could invoke it whenever the distributor holds unaccounted
+    ///      balance, folding that amount's stakers-50% leg into treasury even while stakers ARE
+    ///      actively staked. Self-correcting fix (the exact one OPEN_DECISIONS.md#OD-18 recommended):
+    ///      re-derive eligibility here, on-chain, instead of trusting the caller's claim. `stakers`
+    ///      is always the real AnchorStaking deployment in production (never zero-address, checked
+    ///      at construction) — the `code.length` guard only matters for a test double with no
+    ///      bytecode, where the call would otherwise revert on ABI-decoding empty returndata.
     function _notify(address token, uint256 amount, bool stakersEligible) internal {
         if (amount == 0) return;
+        if (!stakersEligible && stakers.code.length != 0 && IAnchorStaking(stakers).totalStaked() != 0) {
+            stakersEligible = true;
+        }
 
         // Balance-delta / pull-in guard (R-22). balanceOf ≥ _accounted + amount ⇔ the `amount` was
         // genuinely transferred in on top of everything still owed. Fee-on-transfer under-delivery

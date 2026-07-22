@@ -25,6 +25,14 @@ import {Band, TrancheState, PoolInfo} from "./VaultTypes.sol";
 ///         bytecode and invoked by FeraVault via DELEGATECALL. Behavior is byte-identical to the
 ///         pre-split inline code (no math/rounding/revert change) — a mechanical relocation to shrink
 ///         the vault's runtime size. Reuses `VaultOps.Ctx` as the (immutables + vol-clamp) context.
+/// @dev    AUDIT NOTE (Informational, v3.5): the state-touching functions here (e.g.
+///         `absorbDepositOverage`) are DELEGATECALL-ONLY by design (invoked only via FeraVault's
+///         linked reference). EMPIRICALLY VERIFIED (test/unit/LibraryDirectCall_PoC.t.sol) that a
+///         plain external `CALL` to this library's own deployed address doesn't even reach
+///         `absorbDepositOverage`'s body: solc's codegen for a `storage`-struct parameter on a
+///         `public` library function only wires up the delegatecall-style entry point FeraVault's
+///         linked reference uses, not a live case in the library's own standalone dispatch table —
+///         the call reverts at the dispatcher, before any argument decoding or storage access.
 library VaultMath {
     using StateLibrary for IPoolManager;
 
@@ -196,6 +204,17 @@ library VaultMath {
         if (_twapDeviationBps(c, FeraConstants.REBALANCE_TWAP_WINDOW_SEC) > FeraConstants.REBALANCE_TWAP_SANITY_BPS) {
             revert IFeraVault.TwapOutOfBand();
         }
+    }
+
+    /// @dev Audit finding (OPEN_DECISIONS.md#OD-14): for `pokeOutOfRange`'s CLEAR side — only
+    ///      treat an in-range spot reading as a genuine recovery when the TWAP tick is ALSO back
+    ///      in-range. A same-tx spot flicker cannot move the 30-min TWAP, so it can no longer forge a
+    ///      clear and forfeit real accrued dwell time.
+    function twapConfirmsRecovery(TrancheState storage tr, VaultOps.Ctx memory c) public view returns (bool) {
+        (int24 twapTick, bool ready) = _consultTwap(c, FeraConstants.REBALANCE_TWAP_WINDOW_SEC);
+        if (!ready) return true;
+        Band storage b = tr.bands[_baseIndex(tr)];
+        return twapTick >= b.tickLower && twapTick < b.tickUpper;
     }
 
     // ── TWAP / oracle ───────────────────────────────────────────────────────────────────────

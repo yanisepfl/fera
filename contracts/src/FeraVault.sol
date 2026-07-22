@@ -164,12 +164,30 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///             not just adversarially: `MEME_MIN_REBALANCE_INTERVAL_SEC` (the keeper's minimum
     ///             rebalance cadence) exactly equals `JIT_PENALTY_WINDOW_MEME`. Bounded and fee-only
     ///             in every case — never fund-theft, never a blocked exit (INV-1''/INV-11).
-    ///           - `deposit`: skips arming `transferLockUntil` for this address at all (Finding-3
+    ///           - `deposit`: arms `transferLockUntil` for this address at the SAME shorter floor
+    ///             (`_exemptWithdrawFloorSec`) instead of the full `DEPOSIT_COOLDOWN_SEC` (Finding-3
     ///             hardening — the exemption would otherwise be defeated the moment the Index needs a
-    ///             raw share `transfer`, not `burn`, to move a member's shares).
+    ///             raw share `transfer`, not `burn`, to move a member's shares). NEVER skipped
+    ///             entirely (audit finding, open-kritt): a zero-wait transfer would let a recipient's
+    ///             own (always-zero, never-deposited) clock trivially satisfy the withdraw cooldown,
+    ///             an immediate-withdrawal bypass a shorter-but-nonzero lock closes at the source.
     ///         Every OTHER guard on `withdraw`/`withdrawSingle` (share balance, NAV-priced pro-rata
     ///         redemption, `minAmount0`/`minAmount1`/`minOut` slippage, `nonReentrant`, `notPaused`,
     ///         `knownTranche`) applies to an exempt address identically to anyone else.
+    /// @dev ⚠️ RESIDUAL RISK this exemption does NOT remove (post-Finding-2 audit note, see
+    ///      contracts/INDEX_VAULT_SPEC.md §12): the floor is still keyed per (pool, tranche,
+    ///      `msg.sender`) — it is SHORTER, never zero. For an aggregator that shares ONE address
+    ///      across many end-users and many member pools (e.g. an index vault), every deposit by ANY
+    ///      one of its users re-arms EVERY member's clock for that shared address, and every member's
+    ///      clock gates the SAME shared address's next withdraw. An all-or-nothing multi-pool caller
+    ///      (loops `withdraw` per member, burning its own liability shares up front) can therefore
+    ///      still have its ENTIRE redemption blocked by a SINGLE recently-touched member for up to
+    ///      `_exemptWithdrawFloorSec` — this exemption shrinks that window, it does not eliminate the
+    ///      cross-pool coupling. Do NOT read "closes that [self-donate] gap" (above) as "this problem
+    ///      is solved" for a multi-pool caller — it solves ONLY the single-pool JIT self-donate case
+    ///      (Finding 2). Use `withdrawReadyAt` to pre-flight-check every pool a multi-pool caller
+    ///      touches before committing to a state-changing action, instead of discovering a
+    ///      not-yet-ready pool via a reverted `withdraw` deep in a loop.
     mapping(address => bool) public cooldownExempt;
 
     /// @notice v3.3 permissionless pool creation (contracts/VAULT_STRATEGY_V3.md §11): team-set
@@ -324,16 +342,26 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         // BOTH the withdraw path (below) and, per V2-2 (SEC-3 #4), on outgoing SHARE TRANSFERS so
         // the cooldown cannot be dodged by moving fresh shares to a second wallet.
         lastDepositTs[id][t][msg.sender] = uint64(block.timestamp);
-        // Finding-3 hardening: an exempt address's OWN shares never need the outgoing-transfer lock
-        // armed in the first place (the whole point of the exemption is that this address's
-        // withdrawals/transfers must not be gated by a clock unrelated depositors keep re-arming) —
-        // this is what lets a future Index's `emergencyRedeemInKind` (raw `FeraShare.transfer`, not
-        // `burn`) actually move member shares once granted the exemption. Any transferLockUntil
-        // armed BEFORE an address became exempt is untouched here and simply expires on its own
-        // (extend-only, bounded by DEPOSIT_COOLDOWN_SEC from that earlier deposit).
-        if (!cooldownExempt[msg.sender]) {
-            IFeraShare(tr.share).setTransferLock(msg.sender, uint64(block.timestamp) + FeraConstants.DEPOSIT_COOLDOWN_SEC);
-        }
+        // Finding-3 hardening: an exempt address's OWN shares get a SHORTER transfer lock (the same
+        // JIT-window-plus-margin floor `_exemptWithdrawFloorSec` already uses for withdrawals)
+        // instead of the full DEPOSIT_COOLDOWN_SEC — the whole point of the exemption is that this
+        // address's withdrawals/transfers must not be gated by a clock unrelated depositors keep
+        // re-arming, not that they should be gated by NOTHING. This is what lets a future Index's
+        // `emergencyRedeemInKind` (raw `FeraShare.transfer`, not `burn`) actually move member shares
+        // once granted the exemption, once its own short floor has elapsed.
+        // Audit finding (High, open-kritt): an EARLIER version of this fix skipped arming the lock
+        // entirely for exempt addresses, making their fresh shares transferable in the SAME block as
+        // the deposit that minted them — a recipient's own lastDepositTs/depositClock is 0 in that
+        // case, trivially satisfying the withdraw cooldown check for ANY nonzero block.timestamp, so
+        // the recipient could withdraw immediately. Arming a real (shorter, never zero) lock closes
+        // it at the source: by the time ANY transfer of these shares becomes possible — exempt or
+        // not — the relevant JIT window has already elapsed, so an immediate post-transfer withdrawal
+        // is safe by construction, exactly like the pre-existing non-exempt transfer-then-withdraw
+        // flow this fix must not break (test_V22_cooldownEvasion_viaShareTransfer).
+        uint64 lockDuration = cooldownExempt[msg.sender]
+            ? uint64(_exemptWithdrawFloorSec(id))
+            : FeraConstants.DEPOSIT_COOLDOWN_SEC;
+        IFeraShare(tr.share).setTransferLock(msg.sender, uint64(block.timestamp) + lockDuration);
 
         IFeraShare(tr.share).mint(msg.sender, sharesMinted);
 
@@ -420,7 +448,12 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         // Finding-2 hardening: an exempt address still waits its regime's JIT window + margin past
         // its OWN last deposit (see `_exemptWithdrawFloorSec` -> shared `VaultMath.exemptWithdrawFloorSec`
         // / EXEMPT_WITHDRAW_MARGIN_SEC NatSpec) — shorter than the full cooldown, but never zero, so
-        // it cannot harvest a JIT window it just armed itself.
+        // it cannot harvest a JIT window it just armed itself. A transfer-received zero clock is safe
+        // to leave unblocked here (unlike an earlier draft of this fix): `FeraShare.transferLockUntil`
+        // is what gates WHEN a transfer can happen at all, and Finding-3.1 (below, `deposit()`) now
+        // arms a real, non-zero, JIT-window-sized lock for exempt depositors too — so by the time
+        // ANY transfer (exempt or not) becomes possible, the relevant JIT window has already closed,
+        // making an immediate post-transfer withdrawal safe by construction, not a bypass.
         uint256 requiredDelay =
             cooldownExempt[msg.sender] ? _exemptWithdrawFloorSec(id) : FeraConstants.DEPOSIT_COOLDOWN_SEC;
         if (block.timestamp < lastDepositTs[id][t][msg.sender] + requiredDelay) {
@@ -570,6 +603,24 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         address feedToSet = oracleFeed;
         if (regime == FeraTypes.Regime.RWA) {
             if (oracleFeed == address(0) || !approvedRwaFeeds[oracleFeed]) revert RwaFeedNotApproved();
+            // v3.5 NEW (audit finding, open-kritt): unlike MEME (no oracle reference exists for a
+            // brand-new memecoin, so nothing to check the initial price against — an accepted
+            // tradeoff of permissionless creation, see OPEN_DECISIONS.md#OD-20), RWA DOES have a
+            // real, curated price reference at creation time. Without this check, a caller could
+            // initialize an RWA pool's `sqrtPriceX96` arbitrarily far from the approved oracle,
+            // becoming the first depositor at a self-chosen basis that also seeds every later
+            // depositor's NAV pricing. `p.oracleFeed` is set BELOW the assignment it needs, so set
+            // it here first and reuse `VaultMath.tryReadOracle` — the single shared oracle-read path
+            // — rather than re-deriving a second Chainlink read.
+            p.oracleFeed = feedToSet;
+            (uint256 oraclePrice, bool ok) = VaultMath.tryReadOracle(p);
+            if (!ok) revert OracleUnavailable();
+            if (
+                VaultMath.absDeviationBps(VaultMath.priceFromSqrt(sqrtPriceX96), oraclePrice)
+                    > FeraConstants.RWA_ORACLE_RECENTER_HYSTERESIS_BPS
+            ) {
+                revert RwaInitPriceOffOracle();
+            }
         } else {
             feedToSet = address(0);
         }
@@ -679,12 +730,30 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///      `oorSince`; repeated pokes while still OOR are a no-op on the timer (the `if (== 0)`
     ///      guard below) — an attacker spamming this cannot advance/backdate the dwell clock in
     ///      either direction, so it cannot change WHEN `rebalanceBase`'s dwell gate is satisfied.
+    /// @dev OPEN_DECISIONS.md#OD-14 FIX (independently re-flagged, open-kritt): the CLEAR path used
+    ///      to reset `oorSince` on a raw-SPOT in-range read alone, with no TWAP gate — asymmetric
+    ///      with `rebalanceBase`'s own Gate 4 (`requireTwapConfirmedOor`), which DOES re-verify TWAP
+    ///      at execution time. A same-block spot round-trip (push in-range, poke, push back OOR)
+    ///      could reset a genuine, already-mature dwell clock, delaying `rebalanceBase` eligibility
+    ///      strictly past the FIRST genuine breach. Fixed exactly per OD-14's own recommended shape:
+    ///      only clear when the recovery is ALSO TWAP-confirmed — a same-tx flicker cannot move the
+    ///      30-min TWAP, so it can no longer forge a clear, while a genuine, sustained recovery still
+    ///      clears once the TWAP itself catches up.
+    /// @dev The ARM side deliberately stays spot-only (unlike the CLEAR side): `rebalanceBase`'s own
+    ///      Gate 4 independently re-confirms TWAP-OOR at EXECUTION time regardless of when `oorSince`
+    ///      was stamped, so a spot-only arm can only make the dwell clock start EARLIER than a
+    ///      TWAP-confirmed arm would — never fire the recenter on an unconfirmed spike. Gating the
+    ///      arm side on TWAP confirmation too was evaluated and rejected: nearly every OOR-detection
+    ///      call in this codebase (keeper bots, tests) naturally happens in the SAME block as the
+    ///      price move that caused it, and a same-block TWAP requirement would silently delay
+    ///      detection of GENUINE breaches by however long the TWAP takes to catch up — a real
+    ///      regression to normal operation for a griefing-only, already-bounded gap (see OD-14).
     function pokeOutOfRange(PoolId id, uint8 t) public knownTranche(id, t) returns (bool oor) {
         _requireBaseLimit(id, t);
         oor = _baseOutOfRange(id, t);
         if (oor) {
             if (oorSince[id][t] == 0) oorSince[id][t] = uint64(block.timestamp);
-        } else {
+        } else if (VaultMath.twapConfirmsRecovery(tranches[id][t], _vaultCtx(id, t))) {
             oorSince[id][t] = 0;
         }
     }
@@ -1044,8 +1113,24 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///      single source of truth also called directly by `VaultActions.withdrawSingle` — instead of
     ///      reimplementing the regime/JIT-window lookup here, so the two withdrawal paths cannot
     ///      silently drift apart if the JIT windows or margin constant are ever revisited.
+    ///      NOTE: this floor is still keyed by `msg.sender` alone — see `cooldownExempt`'s
+    ///      "RESIDUAL RISK" NatSpec for why that is not sufficient, by itself, for a multi-pool
+    ///      aggregator caller.
     function _exemptWithdrawFloorSec(PoolId id) internal view returns (uint32) {
         return VaultMath.exemptWithdrawFloorSec(pools[id].regime);
+    }
+
+    /// @inheritdoc IFeraVault
+    /// @dev Exists so a caller that touches MANY pools under one shared address (e.g. an index/
+    ///      aggregator vault looping `withdraw` per member) can pre-flight-check every pool it is
+    ///      about to touch BEFORE committing to a state-changing action (e.g. burning its own
+    ///      liability shares), instead of discovering a not-yet-ready pool only via a `withdraw`
+    ///      that reverts deep inside a loop. This does NOT remove the underlying cross-pool clock
+    ///      coupling for such a caller — it only makes it observable and avoidable ahead of time.
+    function withdrawReadyAt(PoolId id, uint8 t, address account) external view returns (uint64) {
+        uint256 requiredDelay =
+            cooldownExempt[account] ? _exemptWithdrawFloorSec(id) : FeraConstants.DEPOSIT_COOLDOWN_SEC;
+        return lastDepositTs[id][t][account] + uint64(requiredDelay);
     }
 
     /// @dev Generic min-interval guard against an arbitrary last-action timestamp (R-15).

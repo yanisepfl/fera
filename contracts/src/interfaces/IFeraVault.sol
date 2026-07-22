@@ -136,6 +136,13 @@ interface IFeraVault {
     /// @notice v3.3 NEW: an RWA `createBaseLimitPool` call supplied `oracleFeed == address(0)` or a
     ///         feed not on the team-curated `approvedRwaFeeds` registry. Never applies to MEME.
     error RwaFeedNotApproved();
+    /// @notice v3.5 NEW (audit finding, open-kritt): an RWA `createBaseLimitPool` call's
+    ///         `sqrtPriceX96` deviates from the approved oracle's price by more than
+    ///         `RWA_ORACLE_RECENTER_HYSTERESIS_BPS`. RWA (unlike MEME) has a real, curated price
+    ///         reference at creation time — initializing away from it would let the first-depositor
+    ///         NAV basis start divorced from the asset's actual value. Never applies to MEME (there
+    ///         is no oracle reference to check against for a brand-new memecoin).
+    error RwaInitPriceOffOracle();
     /// @notice v3.5 NEW (Finding-1 hardening): an `onlyKeeper` action was attempted on a pool the
     ///         owner has not (yet) activated via `setKeeperActive` — see FeraVault.sol's
     ///         `keeperActive` NatSpec. Never applies to deposits/withdrawals/swaps.
@@ -170,6 +177,11 @@ interface IFeraVault {
     function withdraw(PoolId poolId, uint8 tranche, uint256 shares, uint256 minAmount0, uint256 minAmount1)
         external
         returns (uint256 amount0, uint256 amount1);
+
+    /// @notice Timestamp at/after which `account` may `withdraw`/`withdrawSingle` `poolId`/`tranche`
+    ///         without hitting `CooldownActive` — see FeraVault.sol's `cooldownExempt` NatSpec
+    ///         (including the "RESIDUAL RISK" note for multi-pool callers). Pure view.
+    function withdrawReadyAt(PoolId poolId, uint8 tranche, address account) external view returns (uint64);
 
     /// @notice Checkpoint a tranche: poke its bands, realize fees, skim EXACTLY 10% to the
     ///         RevenueDistributor (INV-3 per tranche, INV-15), retain 90% as pending LP income.
@@ -222,6 +234,10 @@ interface IFeraVault {
     ///         IDEMPOTENT while OOR persists: only the FIRST out-of-range poke starts the clock;
     ///         repeated pokes while still OOR are a no-op on the timer (audited, contracts/
     ///         VAULT_STRATEGY_V3.md §6 / contracts/THREAT_MODEL.md).
+    /// @dev    OPEN_DECISIONS.md#OD-14 FIX: the CLEAR transition (oor=false) only zeroes `oorSince`
+    ///         when the recovery is ALSO TWAP-confirmed — a same-block spot flicker cannot forge a
+    ///         clear and forfeit real accrued dwell time. The ARM transition stays spot-only by
+    ///         design (see FeraVault.pokeOutOfRange's NatSpec).
     function pokeOutOfRange(PoolId poolId, uint8 tranche) external returns (bool outOfRange);
 
     /// @notice LIMIT-FIRST rebalance: collect the (largely filled) limit band(s) into reserve and

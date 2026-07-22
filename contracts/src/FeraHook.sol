@@ -55,9 +55,13 @@ import {CurrencySettler} from "@uniswap/v4-core/test/utils/CurrencySettler.sol";
 ///          - afterRemoveLiquidity: outside the window ⇒ all withheld fees are returned, penalty 0.
 ///            Inside the window ⇒ (withheld + newly accrued) fees are forfeited pro-rata to the
 ///            REMAINING time: penalty = total × (window − elapsed) / window (linear decay,
-///            PARAMS.md#JIT_PENALTY_DECAY), donated to in-range LPs via PoolManager.donate. If no
-///            in-range liquidity exists to receive, the donation is SKIPPED and fees returned
-///            (PARAMS.md#JIT_DONATION_FALLBACK). Removal itself NEVER reverts.
+///            PARAMS.md#JIT_PENALTY_DECAY), donated to in-range LPs via PoolManager.donate. The
+///            withdrawer forfeits this amount UNCONDITIONALLY — if no in-range liquidity exists to
+///            receive it right now (a JIT LP fully controls its own range and can arrange to be the
+///            pool's sole in-range liquidity), the forfeited amount is taken into hook custody instead
+///            of donated, and queued for the real donate() at the next add that finds a recipient
+///            (`_flushPendingForfeit`); it is never returned to the forfeiting withdrawer. Removal
+///            itself NEVER reverts.
 contract FeraHook is BaseHook, IFeraHook {
     using BalanceDeltaLibrary for BalanceDelta;
     using LPFeeLibrary for uint24;
@@ -128,6 +132,16 @@ contract FeraHook is BaseHook, IFeraHook {
     }
 
     mapping(PoolId => mapping(bytes32 => JitState)) internal _jit;
+
+    /// @dev Forfeiture queued when a remove found NO in-range liquidity to donate to (the
+    ///      sole-in-range-LP edge, `poolManager.getLiquidity(id) == 0` post-removal — a JIT LP fully
+    ///      controls its own tickLower/tickUpper and can pick a range/pool where this is always true).
+    ///      The withdrawer still forfeits in full at removal time (see `_afterRemoveLiquidity`); only
+    ///      the actual `donate()` is deferred, since `donate()` itself reverts on zero liquidity.
+    ///      Flushed opportunistically by `_flushPendingForfeit` at the top of the next add — never
+    ///      returned to the forfeiting withdrawer.
+    mapping(PoolId => uint128) internal _pendingForfeit0;
+    mapping(PoolId => uint128) internal _pendingForfeit1;
 
     // ─────────────────────────────────────────────────────────────────────────────────────
     // Cumulative-tick TWAP oracle (V2-2 / SEC-3 / R-23 — the deposit gate was inert spot before this).
@@ -309,6 +323,9 @@ contract FeraHook is BaseHook, IFeraHook {
         bytes calldata
     ) internal override returns (bytes4, BalanceDelta) {
         PoolId id = key.toId();
+        // Opportunistically donate any forfeiture that an earlier sole-in-range-LP remove queued —
+        // an add is the earliest point a real donation recipient can exist again (D-14 audit fix).
+        _flushPendingForfeit(key, id);
         JitState storage j = _jit[id][Position.calculatePositionKey(sender, params.tickLower, params.tickUpper, params.salt)];
 
         BalanceDelta hookDelta = BalanceDeltaLibrary.ZERO_DELTA;
@@ -374,14 +391,25 @@ contract FeraHook is BaseHook, IFeraHook {
 
         (j.withheld0, j.withheld1) = (0, 0);
 
-        if ((p0 | p1) != 0 && poolManager.getLiquidity(id) != 0) {
-            // Donate the forfeited fees to the remaining in-range LPs (OZ pattern). The tail band
-            // makes a recipient near-always exist (PARAMS.md#JIT_DONATION_FALLBACK).
-            poolManager.donate(key, p0, p1, "");
+        if ((p0 | p1) != 0) {
+            if (poolManager.getLiquidity(id) != 0) {
+                // Donate the forfeited fees to the remaining in-range LPs (OZ pattern).
+                poolManager.donate(key, p0, p1, "");
+            } else {
+                // No in-range recipient right now (last-withdrawer edge — D-14 audit fix). The
+                // withdrawer still forfeits IN FULL: take the penalty into hook custody exactly like
+                // the withholding path (`take(...,claims=true)`) instead of skipping it, and queue it
+                // for the real `donate()` once this pool has in-range liquidity again
+                // (`_flushPendingForfeit`, run at the top of every add). This closes the gap where a
+                // JIT LP could pick a pool/range where it is always the sole in-range liquidity to
+                // dodge the penalty entirely — the forfeited amount is NEVER returned to them, whether
+                // donated now or later.
+                if (p0 != 0) key.currency0.take(poolManager, address(this), p0, true);
+                if (p1 != 0) key.currency1.take(poolManager, address(this), p1, true);
+                _pendingForfeit0[id] = _satAdd(_pendingForfeit0[id], p0);
+                _pendingForfeit1[id] = _satAdd(_pendingForfeit1[id], p1);
+            }
             emit JitPenaltyApplied(PoolId.unwrap(id), sender, p0, p1);
-        } else {
-            // No in-range recipient (last-withdrawer edge) ⇒ SKIP the donation, forfeit nothing.
-            (p0, p1) = (0, 0);
         }
 
         // Release custody claims; net hook delta = penalty − withheld per currency:
@@ -400,6 +428,20 @@ contract FeraHook is BaseHook, IFeraHook {
     function _settleClaims(PoolKey calldata key, uint128 a0, uint128 a1) private {
         if (a0 != 0) key.currency0.settle(poolManager, address(this), a0, true);
         if (a1 != 0) key.currency1.settle(poolManager, address(this), a1, true);
+    }
+
+    /// @dev Opportunistic flush of forfeiture queued by the no-recipient branch in
+    ///      `_afterRemoveLiquidity` (D-14 audit fix). Delta-neutral for the hook — `donate()`'s debit
+    ///      is paid off in full by burning the exact claims taken into custody at forfeiture time, the
+    ///      same balance as `_settleClaims` uses for the immediate-donation path — so this can NEVER
+    ///      revert or block the add (INV-1″). A no-op (two cold reads) when nothing is queued.
+    function _flushPendingForfeit(PoolKey calldata key, PoolId id) private {
+        uint128 q0 = _pendingForfeit0[id];
+        uint128 q1 = _pendingForfeit1[id];
+        if ((q0 | q1) == 0 || poolManager.getLiquidity(id) == 0) return;
+        (_pendingForfeit0[id], _pendingForfeit1[id]) = (0, 0);
+        poolManager.donate(key, q0, q1, "");
+        _settleClaims(key, q0, q1);
     }
 
     /// @dev The regime-scoped JIT penalty window (PARAMS.md#JIT_PENALTY_WINDOW_SEC_{MEME,RWA}).
@@ -597,11 +639,17 @@ contract FeraHook is BaseHook, IFeraHook {
     ///              behaves exactly as before); only the release side is slowed (v3.5 fix: a
     ///              symmetric flow decay let one priming buy erase accumulated sell pressure as fast
     ///              as a sell built it — see MEME_FLOW_LAMBDA_ATTACK/_RELEASE).
-    ///        flowEwmaX ← (λ_f·flowEwmaX + (ONE−λ_f)·(r<<16)) >> 16
+    ///        flowEwmaX ← (λ_f·flowEwmaX + (ONE−λ_f)·(clamp(r, ±R_CLAMP if release)<<16)) >> 16
     ///      Vol's attack/release makes it spike in ~1–2 swaps but bleed off over tens (defeats the
     ///      decay-then-dump exploit); flow's asymmetry protects against a cheap priming-buy fee-dodge
-    ///      without changing how it reacts to ordinary selling. Never reverts; all intermediates in
-    ///      uint256/int256, downcast + clamp.
+    ///      without changing how it reacts to ordinary selling. The release branch ADDITIONALLY
+    ///      clamps the raw sample `r` before blending (v3.6 fix, open-kritt finding): the tiny
+    ///      release weight alone does not bound a single swap's influence, since it multiplies the
+    ///      UN-normalized `r`, which is bounded only by the pool's tick range — a large enough
+    ///      one-shot `r` still flips flowEwmaX's sign regardless of accumulated magnitude. Clamping
+    ///      `r` restores the "single offsetting swap can't erase built-up sell pressure" guarantee
+    ///      the v3.5 fix intended (see MEME_FLOW_RELEASE_R_CLAMP_TICKS NatSpec). Never reverts; all
+    ///      intermediates in uint256/int256, downcast + clamp.
     function _updateEwma(PoolId id, int24 tickNow) internal {
         (uint256 volX, int256 flowX, int24 lastTick,) = _loadMemeState(id);
 
@@ -615,10 +663,19 @@ contract FeraHook is BaseHook, IFeraHook {
 
         // Signed arithmetic-shift descale (Solidity 0.8.x rounds `>>` toward -infinity for signed
         // ints, consistent with the fixed-point convention used throughout this estimator).
-        int256 lamF = (r < (flowX >> 16))
-            ? int256(FeraConstants.MEME_FLOW_LAMBDA_ATTACK)
-            : int256(FeraConstants.MEME_FLOW_LAMBDA_RELEASE);
-        int256 newFlow = (lamF * flowX + (int256(ONE) - lamF) * (r << 16)) >> 16;
+        bool isAttack = r < (flowX >> 16);
+        int256 lamF = isAttack ? int256(FeraConstants.MEME_FLOW_LAMBDA_ATTACK) : int256(FeraConstants.MEME_FLOW_LAMBDA_RELEASE);
+        // v3.6 FIX (audit finding, open-kritt): clamp the RELEASE branch's raw sample so a single
+        // large swap cannot dominate the slow release weight and flip flowEwmaX's sign in one shot
+        // (see MEME_FLOW_RELEASE_R_CLAMP_TICKS NatSpec). The ATTACK branch is untouched — ordinary
+        // selling behaves exactly as before.
+        int256 rForFlow = r;
+        if (!isAttack) {
+            int256 clamp = int256(FeraConstants.MEME_FLOW_RELEASE_R_CLAMP_TICKS);
+            if (rForFlow > clamp) rForFlow = clamp;
+            else if (rForFlow < -clamp) rForFlow = -clamp;
+        }
+        int256 newFlow = (lamF * flowX + (int256(ONE) - lamF) * (rForFlow << 16)) >> 16;
 
         _memeState[id] = _packMemeState(newVol, _toInt64Sat(newFlow), tickNow, uint32(block.timestamp));
     }
@@ -786,6 +843,27 @@ contract FeraHook is BaseHook, IFeraHook {
         hasObservation = true;
     }
 
+    /// @inheritdoc IFeraHook
+    /// @dev Audit finding (open-kritt, OD-17): `consultTwapTick`'s `ready` flag only requires >0
+    ///      seconds of elapsed time — it can be TRUE from a single very-recent floating-head
+    ///      observation with no real window-spanning history (e.g. right after a pool's first-ever
+    ///      swap, before the first checkpoint has had TWAP_OBS_SPACING_SEC to freeze), making the
+    ///      returned "TWAP" collapse to whatever tick the most recent swap just set. This scans the
+    ///      ring for the OLDEST initialized checkpoint so a caller can require genuine depth (compare
+    ///      the returned age against its own desired window) before trusting a TWAP-anchored bound.
+    function oldestObservationAge(PoolId id) external view returns (uint32 ageSec, bool hasObservation) {
+        uint32 oldestTs = type(uint32).max;
+        for (uint16 i; i < OBS_CARDINALITY; ++i) {
+            Observation storage o = _obs[id][i];
+            if (!o.initialized) continue;
+            hasObservation = true;
+            if (o.blockTimestamp < oldestTs) oldestTs = o.blockTimestamp;
+        }
+        if (!hasObservation) return (0, false);
+        uint32 nowTs = uint32(block.timestamp);
+        ageSec = nowTs > oldestTs ? nowTs - oldestTs : 0;
+    }
+
     // ── transient fee handoff (EIP-1153) ────────────────────────────────────────────────
     function _tstoreFee(PoolId id, uint24 fee) private {
         bytes32 slot = keccak256(abi.encode(_T_FEE_SLOT, id));
@@ -864,5 +942,10 @@ contract FeraHook is BaseHook, IFeraHook {
     {
         JitState storage j = _jit[poolId][positionKey];
         return (j.lastAddTs, j.withheld0, j.withheld1);
+    }
+
+    /// @inheritdoc IFeraHook
+    function pendingForfeitOf(PoolId poolId) external view returns (uint128 pending0, uint128 pending1) {
+        return (_pendingForfeit0[poolId], _pendingForfeit1[poolId]);
     }
 }

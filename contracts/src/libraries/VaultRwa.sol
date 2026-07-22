@@ -24,6 +24,11 @@ import {TierConfig, TrancheState, PoolInfo} from "./VaultTypes.sol";
 ///         inline code. The `nonReentrant`/`knownTranche` modifiers remain on the vault's thin
 ///         wrappers (they gate on the vault's own guard + pool state). The per-(pool,tranche) clocks
 ///         are passed as the inner `mapping(uint256 => uint64)` (i.e. `lastX[id]`), indexed by `c.t`.
+/// @dev    AUDIT NOTE (Informational, v3.5): these `public` functions are DELEGATECALL-ONLY by
+///         design (invoked only via FeraVault's linked reference) — see VaultOps.sol's identical
+///         note (and test/unit/LibraryDirectCall_PoC.t.sol) for the empirically-verified detail:
+///         for this storage-struct-parameter signature shape, the library's OWN dispatcher does not
+///         even recognize the function's documented selector via a plain external `CALL`.
 library VaultRwa {
     using StateLibrary for IPoolManager;
 

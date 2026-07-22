@@ -7,7 +7,6 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import {IFeraShare} from "../interfaces/IFeraShare.sol";
 import {IFeraVault} from "../interfaces/IFeraVault.sol";
@@ -26,9 +25,12 @@ import {TrancheState, PoolInfo} from "./VaultTypes.sol";
 ///         fallback routing, the no-staker reroute, and every emitted event are unchanged) — a
 ///         mechanical relocation to shrink the vault's runtime size. Events are emitted with their
 ///         canonical `IFeraVault.*` signatures, so on-chain logs are identical.
+/// @dev    AUDIT NOTE (Informational, v3.5): these `public` functions are DELEGATECALL-ONLY by
+///         design (invoked only via FeraVault's linked reference) — see VaultOps.sol's identical
+///         note (and test/unit/LibraryDirectCall_PoC.t.sol) for the empirically-verified detail:
+///         for this storage-struct-parameter signature shape, the library's OWN dispatcher does not
+///         even recognize the function's documented selector via a plain external `CALL`.
 library VaultFees {
-    using SafeERC20 for IERC20;
-
     // Callback action tags — MUST match FeraVault's internal encoding.
     uint8 internal constant CB_CHECKPOINT = 0;
     uint8 internal constant CB_ROUTE_FEE_SWAP = 9;
@@ -84,8 +86,8 @@ library VaultFees {
         if (perfFee0 == 0 && perfFee1 == 0) return;
 
         if (address(anchor) == address(0)) {
-            _routePerfFee(rd, anchor, p.key.currency0, perfFee0);
-            _routePerfFee(rd, anchor, p.key.currency1, perfFee1);
+            _routePerfFee(rd, anchor, c, p.key.currency0, perfFee0);
+            _routePerfFee(rd, anchor, c, p.key.currency1, perfFee1);
             return;
         }
 
@@ -99,44 +101,81 @@ library VaultFees {
         bool quoteAllowed = anchor.isRewardToken(Currency.unwrap(quoteCurrency));
 
         if (nativeAllowed && quoteAllowed) {
-            _routePerfFee(rd, anchor, p.key.currency0, perfFee0);
-            _routePerfFee(rd, anchor, p.key.currency1, perfFee1);
+            _routePerfFee(rd, anchor, c, p.key.currency0, perfFee0);
+            _routePerfFee(rd, anchor, c, p.key.currency1, perfFee1);
             return;
         }
 
         if (nativePerfFee != 0) {
             bool zeroForOne = !isQuoteToken0; // native==token0 (quote==token1) sells token0 for token1
-            try c.pm.unlock(abi.encode(CB_ROUTE_FEE_SWAP, c.id, c.t, abi.encode(zeroForOne, nativePerfFee)))
-            returns (bytes memory ret) {
-                uint256 swappedOut = abi.decode(ret, (uint256));
-                quotePerfFee += swappedOut;
-                emit IFeraVault.PerfFeeSwapped(
-                    PoolId.unwrap(c.id),
-                    c.t,
-                    Currency.unwrap(nativeCurrency),
-                    nativePerfFee,
-                    Currency.unwrap(quoteCurrency),
-                    swappedOut
-                );
-            } catch {
+            // Audit finding (Medium, open-kritt / OPEN_DECISIONS.md#OD-17): the self-swap's minOut is
+            // TWAP-anchored, but `consultTwapTick`'s `ready` flag only requires >0 seconds of elapsed
+            // time — a pool whose oracle ring holds no checkpoint older than this window (e.g. shortly
+            // after its first-ever swap, before TWAP_OBS_SPACING_SEC has let one freeze) can have its
+            // "TWAP" collapse to whatever tick the attacker's OWN immediately-preceding swap just set,
+            // making the 1% bound a no-op against a reference the attacker just shaped. OD-17's own
+            // verdict was already BOUNDED (the dyn-fee/slippage interaction still caps the loss to
+            // that pool's own perf fee), but this closes the gap for real per OD-17's recommended
+            // hardening: require genuine window-spanning history before trusting the self-swap's
+            // TWAP bound at all; otherwise skip straight to the fail-static in-kind fallback (routing
+            // efficiency cost only — never blocks fee collection, never risks depositor principal).
+            (uint32 oldestAge, bool hasHistory) = c.hook.oldestObservationAge(c.id);
+            if (hasHistory && oldestAge >= FeraConstants.REBALANCE_TWAP_WINDOW_SEC) {
+                try c.pm.unlock(abi.encode(CB_ROUTE_FEE_SWAP, c.id, c.t, abi.encode(zeroForOne, nativePerfFee)))
+                returns (bytes memory ret) {
+                    uint256 swappedOut = abi.decode(ret, (uint256));
+                    quotePerfFee += swappedOut;
+                    emit IFeraVault.PerfFeeSwapped(
+                        PoolId.unwrap(c.id),
+                        c.t,
+                        Currency.unwrap(nativeCurrency),
+                        nativePerfFee,
+                        Currency.unwrap(quoteCurrency),
+                        swappedOut
+                    );
+                } catch {
+                    _forwardInKindToTreasury(rd, c, Currency.unwrap(nativeCurrency), nativePerfFee);
+                }
+            } else {
                 _forwardInKindToTreasury(rd, c, Currency.unwrap(nativeCurrency), nativePerfFee);
             }
         }
 
-        _routePerfFee(rd, anchor, quoteCurrency, quotePerfFee);
+        _routePerfFee(rd, anchor, c, quoteCurrency, quotePerfFee);
     }
 
     /// @dev Route one currency's perf-fee through RevenueDistributor's 50/25/25 split; zero total
     ///      staked ⇒ fold the stakers' 50% leg into treasury (`notifyRevenueNoStakers`).
-    function _routePerfFee(IRevenueDistributor rd, IAnchorStaking anchor, Currency cur, uint256 amount) internal {
+    /// @dev Audit finding (Medium, open-kritt): the transfer used to be a bare `safeTransfer` with no
+    ///      failure containment, unlike the sibling swap branch above (which already `try/catch`es
+    ///      and falls back to `_forwardInKindToTreasury`). `createBaseLimitPool` only allowlists the
+    ///      QUOTE-side currency — the NATIVE side is fully attacker-chosen — so a pool created with a
+    ///      hostile/reverting native token reached this DIRECT (no-swap) route whenever anchor staking
+    ///      was unset or both sides happened to be reward-allowed, and a reverting `safeTransfer`
+    ///      propagated all the way up through `checkpoint`/`collectFees`, permanently bricking fee
+    ///      collection for that pool — violating this library's own stated invariant that a hostile
+    ///      token must NEVER brick `collectFees`. Fixed: a raw low-level call (never reverts) plus a
+    ///      `try/catch` around the RevenueDistributor notify (covers a token that reports success
+    ///      without truly delivering the balance, which trips RevenueDistributor's own delta guard);
+    ///      either failure falls back to the same fail-static in-kind forward the swap branch uses.
+    function _routePerfFee(IRevenueDistributor rd, IAnchorStaking anchor, VaultOps.Ctx memory c, Currency cur, uint256 amount)
+        internal
+    {
         if (amount == 0) return;
         address token = Currency.unwrap(cur);
-        IERC20(token).safeTransfer(address(rd), amount);
-        if (address(anchor) != address(0) && anchor.totalStaked() == 0) {
-            rd.notifyRevenueNoStakers(token, amount);
-        } else {
-            rd.notifyRevenue(token, amount);
+        (bool ok, bytes memory ret) = token.call(abi.encodeCall(IERC20.transfer, (address(rd), amount)));
+        if (ok && (ret.length == 0 || abi.decode(ret, (bool)))) {
+            if (address(anchor) != address(0) && anchor.totalStaked() == 0) {
+                try rd.notifyRevenueNoStakers(token, amount) {
+                    return;
+                } catch { }
+            } else {
+                try rd.notifyRevenue(token, amount) {
+                    return;
+                } catch { }
+            }
         }
+        _forwardInKindToTreasury(rd, c, token, amount);
     }
 
     /// @dev FAIL-STATIC forward: a hostile/reverting/fee-on-transfer native token must NEVER brick

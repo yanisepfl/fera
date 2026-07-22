@@ -449,6 +449,111 @@ contract FeraIndexVaultTest is Deployers {
     }
 
     // ═════════════════════════════════════════════════════════════════════════════════════════
+    // Cooldown coupling (audit finding on FeraVault.sol:987-993 / FeraIndexVault.sol:55-60,256-283):
+    // `cooldownExempt` shortens but does NOT remove the per-(pool,tranche,shared-address) coupling,
+    // AND it is not wired to this index anywhere in the repo by default. These tests prove both.
+    // ═════════════════════════════════════════════════════════════════════════════════════════
+
+    /// `FeraVault.withdrawReadyAt` (new) must (a) report the FULL DEPOSIT_COOLDOWN_SEC by default —
+    /// i.e. the index gets ZERO benefit from the v3.5 `cooldownExempt` fix until an owner explicitly
+    /// wires it up (the second half of the finding: grep confirms this repo never calls
+    /// `setCooldownExempt` for the index anywhere) — and (b) correctly reflect the shortened,
+    /// regime-JIT-window-plus-margin floor once that wiring happens.
+    function test_withdrawReadyAt_zeroBenefitUntilWired_thenReflectsShortenedFloor() public {
+        _fund(alice, 1_000e18);
+        vm.prank(alice);
+        index.deposit(500e18, 0);
+        uint256 depositTs = block.timestamp;
+
+        // Not wired (today's actual, as-shipped state — see FeraIndexVault's header NatSpec and
+        // grep confirming `cooldownExempt`/`setCooldownExempt` appear nowhere for the index):
+        // every member reports the FULL hour, not the shortened floor.
+        assertEq(
+            vault.withdrawReadyAt(ids[0], 0, address(index)),
+            depositTs + COOLDOWN,
+            "un-exempt index should be gated by the FULL cooldown (zero benefit from v3.5 fix)"
+        );
+
+        // Wire it the way a real deploy MUST (the fix for the wiring gap) — every member now
+        // reports the shortened JIT-window-plus-margin floor instead.
+        vault.setCooldownExempt(address(index), true);
+        uint256 exemptFloor = FeraConstants.JIT_PENALTY_WINDOW_MEME + FeraConstants.EXEMPT_WITHDRAW_MARGIN_SEC;
+        assertLt(exemptFloor, COOLDOWN, "sanity: shortened floor really is shorter");
+        assertEq(
+            vault.withdrawReadyAt(ids[0], 0, address(index)),
+            depositTs + exemptFloor,
+            "wired-exempt index should report the shortened floor, not the full hour"
+        );
+    }
+
+    /// Once wired, `withdraw()` unblocks at the SHORTENED floor instead of the full hour — the
+    /// concrete, on-chain-enforced counterpart of the view-only assertion above. Run against the
+    /// UN-wired default, this exact call reverts CooldownActive (proving the "zero benefit" half of
+    /// the finding is not merely a view-function artifact but the real, enforced behavior).
+    function test_withdraw_succeedsAtShortenedExemptFloor_onceWired() public {
+        vault.setCooldownExempt(address(index), true);
+        uint256 exemptFloor = FeraConstants.JIT_PENALTY_WINDOW_MEME + FeraConstants.EXEMPT_WITHDRAW_MARGIN_SEC;
+
+        _fund(alice, 1_000e18);
+        vm.prank(alice);
+        uint256 sh = index.deposit(500e18, 0);
+
+        // Still inside the shortened floor: the exemption is a SHORTER wait, never a bypass.
+        vm.warp(block.timestamp + exemptFloor - 1);
+        vm.prank(alice);
+        vm.expectRevert(IFeraIndexVault.CooldownActive.selector);
+        index.withdraw(sh, 0);
+
+        // Past the shortened floor, but STILL well within the full 3600s un-exempt cooldown:
+        // succeeds. Without the exemption wired, this same warp would still revert.
+        vm.warp(block.timestamp + 2);
+        vm.prank(alice);
+        uint256 out = index.withdraw(sh, 0);
+        assertGt(out, 0, "withdraw did not unblock within the shortened, wired-exempt floor");
+    }
+
+    /// The residual risk the exemption does NOT remove (core of the finding): the per-member clock
+    /// is keyed by the index's ONE shared address, not by which end-user is withdrawing. ANY user's
+    /// deposit (not only a keeper rebalance) re-arms EVERY member's clock, so it can block a
+    /// DIFFERENT, unrelated user's withdrawal of an OLD, fully-aged position — even with
+    /// `cooldownExempt` correctly wired.
+    function test_withdraw_blockedByUnrelatedUsersDeposit_evenWithExemptionWired_agedPositionNotSpared()
+        public
+    {
+        vault.setCooldownExempt(address(index), true);
+        uint256 exemptFloor = FeraConstants.JIT_PENALTY_WINDOW_MEME + FeraConstants.EXEMPT_WITHDRAW_MARGIN_SEC;
+
+        // Alice deposits and ages well past any floor — an ordinary, fully-settled position. Capped
+        // under FeraIndexVault.TWAP_MAX_STALENESS_SEC (7200s) so the pool's TWAP stays fresh enough
+        // for Bob's deposit below to price normally (a fail-closed staleness bound, not the thing
+        // under test here) — exemptFloor + 3600 is still 1.5x the full un-exempt cooldown past the
+        // floor, comfortably "fully aged."
+        _fund(alice, 1_000e18);
+        vm.prank(alice);
+        uint256 sh = index.deposit(500e18, 0);
+        vm.warp(block.timestamp + exemptFloor + 3600);
+
+        // Bob deposits (an everyday user action, not a keeper rebalance) — `_deployMember` calls
+        // `feraVault.deposit` on EVERY member, re-arming the index's shared clock across the board.
+        _fund(bob, 1_000e18);
+        vm.prank(bob);
+        index.deposit(500e18, 0);
+
+        // Alice's position is old, but the CLOCK is not hers — it belongs to the shared index
+        // address. Her withdraw is blocked by Bob's unrelated deposit, exactly as the finding
+        // describes (and the exemption only shortens this window; it does not remove it).
+        vm.prank(alice);
+        vm.expectRevert(IFeraIndexVault.CooldownActive.selector);
+        index.withdraw(sh, 0);
+
+        // Once the shortened floor re-elapses past Bob's deposit, Alice unblocks.
+        vm.warp(block.timestamp + exemptFloor + 1);
+        vm.prank(alice);
+        uint256 out = index.withdraw(sh, 0);
+        assertGt(out, 0, "alice never unblocked");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════════════════════
     // Rebalance: a successful bounded move (overweight → underweight) shifts value without minting
     // ═════════════════════════════════════════════════════════════════════════════════════════
 

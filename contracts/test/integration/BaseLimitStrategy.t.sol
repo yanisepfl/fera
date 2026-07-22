@@ -442,8 +442,11 @@ contract BaseLimitStrategyTest is Deployers {
         _seedMeme();
         uint256 sh = IERC20(vault.shareToken(memeId, 0)).balanceOf(address(this));
 
-        // withdrawSingle with an unreachable minOut reverts...
-        vm.expectRevert(IFeraVault.SingleOutTooLow.selector);
+        // withdrawSingle of the FULL position reverts: the internal conversion swap is now
+        // TWAP-bound (withdrawSingle hardening, open-kritt High) and a whole-position, one-sided
+        // conversion trips that bound long before the caller's own (unreachable) minOut is even
+        // checked — so RebalanceSlippage fires, not SingleOutTooLow.
+        vm.expectRevert(IFeraVault.RebalanceSlippage.selector);
         vault.withdrawSingle(memeId, 0, sh, Currency.unwrap(currency1), type(uint256).max);
 
         // ...but the plain in-kind withdraw is NEVER blockable (INV-11) — the true fallback.
@@ -481,12 +484,17 @@ contract BaseLimitStrategyTest is Deployers {
         _refreshTwap(memeKey);
         vault.rebalanceLimit(memeId, 0); // swap-free skewed limit redeploy
 
-        // ref exits: a small single-coin slice + the in-kind rest (both never-blockable, INV-11).
+        // ref exits: a small single-coin slice + the in-kind rest. The single-coin slice must stay
+        // small relative to the (now keeper-skewed, by the selfSwap+rebalanceLimit above) band depth:
+        // its internal conversion swap is TWAP-bound (§ withdrawSingle hardening, open-kritt High), so
+        // a slice sized for the ORIGINAL 50/50 depth (e.g. sh/20, ~100e18) can legitimately no longer
+        // clear the post-skew depth within 1% of TWAP — that is the fix working as intended, not a
+        // bug. The in-kind path (INV-11) remains unconditionally available for the rest regardless.
         vm.warp(block.timestamp + COOLDOWN + 1);
         _refreshTwap(memeKey);
         (uint256 s0, uint256 s1) = _bal(ref);
         vm.startPrank(ref);
-        vault.withdrawSingle(memeId, 0, sh / 20, Currency.unwrap(currency0), 0);
+        vault.withdrawSingle(memeId, 0, sh / 200, Currency.unwrap(currency0), 0);
         vault.withdraw(memeId, 0, IERC20(vault.shareToken(memeId, 0)).balanceOf(ref), 0, 0);
         vm.stopPrank();
         (uint256 e0, uint256 e1) = _bal(ref);

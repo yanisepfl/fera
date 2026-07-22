@@ -26,7 +26,9 @@ import {ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.so
 ///          - fee-forfeiture math: 100% at elapsed 0, ~50% at half-window (LINEAR decay), 0 outside
 ///          - forfeited fees are DONATED to remaining in-range LPs
 ///          - fees auto-collected by an in-window ADD are withheld (no poke-and-dodge)
-///          - donation fallback: if no in-range recipient remains, skip (fees returned, no revert)
+///          - donation fallback: if no in-range recipient remains, the withdrawer still forfeits in
+///            full (D-14 audit fix) — the amount is queued and donated at the next opportunity,
+///            never returned to the forfeiting withdrawer
 contract JitPenaltyTest is Deployers {
     FeraHook internal hook;
     PoolKey internal pkey;
@@ -218,12 +220,14 @@ contract JitPenaltyTest is Deployers {
     }
 
     // ─────────────────────────────────────────────────────────────────────────────────────
-    // Donation fallback (PARAMS.md#JIT_DONATION_FALLBACK) — skip when no in-range recipient
+    // Donation fallback — deferred (never skipped) when no in-range recipient (D-14 audit fix)
     // ─────────────────────────────────────────────────────────────────────────────────────
 
     /// A second pool where the remover is the ONLY liquidity: in-window remove-all finds no
-    /// in-range donation recipient ⇒ donation is skipped, nothing reverts, fees come back.
-    function test_donationFallback_skipWhenNoRecipient() public {
+    /// in-range donation recipient. The withdrawer still forfeits in full — `donate()` itself would
+    /// revert with zero in-range liquidity, so the forfeited amount is taken into hook custody and
+    /// queued (`pendingForfeitOf`) instead of being returned; nothing reverts.
+    function test_donationFallback_deferredWhenNoRecipient() public {
         PoolKey memory k2 = PoolKey({
             currency0: currency0,
             currency1: currency1,
@@ -233,6 +237,7 @@ contract JitPenaltyTest is Deployers {
         });
         hook.registerRegime(k2, FeraTypes.Regime.MEME);
         manager.initialize(k2, SQRT_PRICE_1_1);
+        PoolId id2 = k2.toId();
 
         modifyLiquidityRouter.modifyLiquidity(
             k2, ModifyLiquidityParams({tickLower: -600, tickUpper: 600, liquidityDelta: int256(L), salt: "solo"}), ""
@@ -243,10 +248,66 @@ contract JitPenaltyTest is Deployers {
         BalanceDelta d = modifyLiquidityRouter.modifyLiquidity(
             k2, ModifyLiquidityParams({tickLower: -600, tickUpper: 600, liquidityDelta: -int256(L), salt: "solo"}), ""
         );
-        (, uint256 n) = _forfeited0(vm.getRecordedLogs());
+        (uint256 forfeited, uint256 n) = _forfeited0(vm.getRecordedLogs());
 
-        assertEq(n, 0, "donation should be SKIPPED with no in-range recipient");
-        assertGt(d.amount0(), 0, "principal+fees did not exit");
+        assertEq(n, 1, "forfeiture must still fire with no in-range recipient (was: skipped)");
+        assertGt(forfeited, 0, "no in-range recipient must not mean zero penalty");
+        assertGt(d.amount0(), 0, "principal did not exit");
+
+        (uint128 pend0,) = hook.pendingForfeitOf(id2);
+        assertGt(pend0, 0, "forfeiture was not queued for the next in-range recipient");
+    }
+
+    /// D-14 AUDIT FIX (open-kritt): a JIT LP fully controls its own `tickLower`/`tickUpper` and pool
+    /// choice, so it can always arrange to be the SOLE in-range liquidity at removal time. Before the
+    /// fix, `getLiquidity(id) != 0` (checked AFTER the withdrawer's own liquidity was removed) gated
+    /// donation, and the `else` branch zeroed the forfeiture instead of just skipping the donate —
+    /// letting a solo JIT sandwich (add → swap → remove, same block) pay ZERO penalty. This proves
+    /// the sole-in-range-LP case forfeits exactly like any other JIT exit, and that the queued amount
+    /// is genuinely donated (not stranded, not refunded to the attacker) once the pool has a real
+    /// in-range LP again.
+    function test_D14audit_soleInRangeLP_JIT_stillForfeits_queuedNotSkipped() public {
+        PoolKey memory k3 = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: 10, // distinct from pkey's 60 and k2's 30 -- avoid PoolAlreadyInitialized
+            hooks: IHooks(address(hook))
+        });
+        hook.registerRegime(k3, FeraTypes.Regime.MEME);
+        manager.initialize(k3, SQRT_PRICE_1_1);
+        PoolId id3 = k3.toId();
+
+        // Attacker is the pool's ONLY in-range liquidity — a fresh pool + a range of their own
+        // choosing, both fully within a JIT attacker's control.
+        modifyLiquidityRouter.modifyLiquidity(
+            k3, ModifyLiquidityParams({tickLower: LO, tickUpper: HI, liquidityDelta: int256(L), salt: "attacker"}), ""
+        );
+        swap(k3, true, -1e18, ""); // the JIT-sandwiched swap; fees accrue to the attacker's own position
+
+        vm.recordLogs();
+        BalanceDelta d = modifyLiquidityRouter.modifyLiquidity(
+            k3, ModifyLiquidityParams({tickLower: LO, tickUpper: HI, liquidityDelta: -int256(L), salt: "attacker"}), ""
+        );
+        (uint256 forfeited, uint256 n) = _forfeited0(vm.getRecordedLogs());
+
+        // Same-block add->swap->remove ⇒ elapsed 0 ⇒ 100% of accrued fees must forfeit, exactly as
+        // for any other position (test_penalty_linearDecay_fullHalfZero) — being the sole in-range LP
+        // must not be a way to dodge that.
+        assertEq(n, 1, "forfeiture must still fire even with no donation recipient (bug: was skipped)");
+        assertGt(forfeited, 0, "attacker paid zero penalty (bug NOT fixed)");
+        assertGt(d.amount0(), 0, "principal did not exit");
+
+        (uint128 pend0,) = hook.pendingForfeitOf(id3);
+        assertGt(pend0, 0, "attacker's forfeiture was not queued (fees must not vanish OR be refunded)");
+
+        // The queued forfeiture is genuinely donated — not stranded, and never handed back to the
+        // attacker — the next time this pool gets a real in-range LP.
+        modifyLiquidityRouter.modifyLiquidity(
+            k3, ModifyLiquidityParams({tickLower: LO, tickUpper: HI, liquidityDelta: int256(L), salt: "honest"}), ""
+        );
+        (uint128 pend0After, uint128 pend1After) = hook.pendingForfeitOf(id3);
+        assertEq(uint256(pend0After) + pend1After, 0, "queued forfeiture was not flushed to the new in-range LP");
     }
 
     // ─────────────────────────────────────────────────────────────────────────────────────

@@ -109,6 +109,17 @@ interface IFeraHook {
     /// @return hasObservation false until the ring is seeded (fresh pool ⇒ consumers fall back to spot).
     function twapObservationAge(PoolId poolId) external view returns (uint32 ageSec, bool hasObservation);
 
+    /// @notice Age (seconds) of the OLDEST observation still in the ring = `now − oldest.blockTimestamp`
+    ///         — i.e. how far back REAL history actually reaches, as opposed to `consultTwapTick`'s
+    ///         `ready` flag (which only requires >0 seconds of elapsed time and can therefore be TRUE
+    ///         from a single very-recent floating-head observation with no genuine window-spanning
+    ///         history behind it — see VaultFees's perf-fee self-swap readiness gate, OPEN_DECISIONS
+    ///         #OD-17). A caller wanting to know "does the TWAP genuinely span ~window seconds, or is
+    ///         it a near-degenerate extrapolation from one recent point" compares this against `window`.
+    /// @return ageSec         seconds since the OLDEST observation (0 if none yet).
+    /// @return hasObservation false until the ring is seeded (fresh pool ⇒ consumers fall back).
+    function oldestObservationAge(PoolId poolId) external view returns (uint32 ageSec, bool hasObservation);
+
     /// @notice Withheld (in-custody) fees + last-add timestamp for a position's JIT state.
     /// @dev    Keyed exactly like v4 positions: (owner=sender, tickLower, tickUpper, salt) — the
     ///         review-verified keying that makes third-party dust-griefing impossible.
@@ -116,4 +127,9 @@ interface IFeraHook {
         external
         view
         returns (uint64 lastAddTs, uint128 withheld0, uint128 withheld1);
+
+    /// @notice Forfeited fees held in hook custody for `poolId`, queued because a prior remove found
+    ///         no in-range liquidity to donate to (D-14 audit fix). Flushed opportunistically at the
+    ///         next add that finds a real recipient — never returned to the forfeiting withdrawer.
+    function pendingForfeitOf(PoolId poolId) external view returns (uint128 pending0, uint128 pending1);
 }

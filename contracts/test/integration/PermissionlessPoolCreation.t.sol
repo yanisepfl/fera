@@ -18,6 +18,7 @@ import {MockAggregatorV3, MintableERC20} from "../utils/Mocks.sol";
 
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
+import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
@@ -154,6 +155,54 @@ contract PermissionlessPoolCreationTest is Deployers {
         vm.prank(randomCaller);
         PoolId rid = vault.createBaseLimitPool(rwaKey, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, true, "RWA", "R");
         assertEq(uint8(vault.regimeOf(rid)), uint8(FeraTypes.Regime.RWA));
+    }
+
+    /// @notice Audit finding (open-kritt): unlike MEME (no oracle reference exists for a brand-new
+    ///         memecoin), an RWA pool DOES have a real, curated price reference at creation time —
+    ///         `createBaseLimitPool` used to accept ANY caller-chosen `sqrtPriceX96` for RWA with no
+    ///         check against the approved oracle, letting a caller become the first depositor at a
+    ///         self-chosen basis that also seeds every later depositor's NAV pricing. Proves
+    ///         `RwaInitPriceOffOracle` fires for a far-off initial price and creation still succeeds
+    ///         once initialized close to the oracle.
+    function test_rwaCreation_revertsForPriceFarFromOracle_succeedsNearOracle() public {
+        vault.setAllowedQuoteAsset(Currency.unwrap(currency0), true);
+        vault.approveRwaFeed(address(feed), "NVDA/USD test feed");
+        PoolKey memory rwaKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: 10,
+            hooks: IHooks(address(hook))
+        });
+
+        // feed reports 1e8/1e8 == 1:1 (8 decimals); a tick far enough away is well outside the
+        // RWA_ORACLE_RECENTER_HYSTERESIS_BPS (2%) tolerance — tick 10_000 is roughly e^1 ≈ 2.7x.
+        uint160 farSqrtPrice = TickMath.getSqrtPriceAtTick(10_000);
+        vm.expectRevert(IFeraVault.RwaInitPriceOffOracle.selector);
+        vault.createBaseLimitPool(rwaKey, FeraTypes.Regime.RWA, address(feed), farSqrtPrice, true, "RWA", "R");
+
+        // Initializing close to the oracle (still exactly 1:1 here) succeeds normally.
+        PoolId rid = vault.createBaseLimitPool(rwaKey, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, true, "RWA", "R");
+        assertEq(uint8(vault.regimeOf(rid)), uint8(FeraTypes.Regime.RWA));
+    }
+
+    /// @notice A stale/unreadable oracle must ALSO block RWA creation — an unknown price is not a
+    ///         "close enough" price. Reuses `feed`'s existing staleness knob (unset ⇒ never updated).
+    function test_rwaCreation_revertsWhenOracleUnavailable() public {
+        vault.setAllowedQuoteAsset(Currency.unwrap(currency0), true);
+        vault.approveRwaFeed(address(feed), "NVDA/USD test feed");
+        PoolKey memory rwaKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            tickSpacing: 10,
+            hooks: IHooks(address(hook))
+        });
+
+        // Push the feed's own reported timestamp stale relative to `block.timestamp`.
+        vm.warp(block.timestamp + 30 days);
+        vm.expectRevert(IFeraVault.OracleUnavailable.selector);
+        vault.createBaseLimitPool(rwaKey, FeraTypes.Regime.RWA, address(feed), SQRT_PRICE_1_1, true, "RWA", "R");
     }
 
     function test_rwaFeedRegistry_onlyOwnerCanApprove() public {
