@@ -261,12 +261,25 @@ library VaultMath {
         try IAggregatorV3(feed).latestRoundData() returns (uint80, int256 answer, uint256, uint256 updatedAt, uint80) {
             if (answer <= 0) return (0, false);
             if (block.timestamp - updatedAt > FeraConstants.ORACLE_STALENESS_MAX) return (0, false);
-            uint8 dec = IAggregatorV3(feed).decimals();
             // v3.5 FIX (audit finding, low): a feed with >18 decimals underflowed `18 - dec` and
             // panicked, contradicting this function's "never reverts" contract. Mirrors FeraHook's
             // `_oraclePriceX96` normalization exactly.
-            price = dec <= 18 ? uint256(answer) * (10 ** (18 - dec)) : uint256(answer) / (10 ** (dec - 18));
-            ok = true;
+            //
+            // v3.5.1 FIX (audit finding, medium): `decimals()` is a SEPARATE external call, not
+            // covered by the `latestRoundData` try/catch above — Solidity's try/catch only guards the
+            // single call named after `try`, so a `decimals()` revert (upgraded/paused proxy, malformed
+            // or deliberately-hostile feed implementation) used to propagate straight out of this
+            // function instead of degrading to (0,false), breaking the very "never reverts" contract
+            // this comment block claims to restore. Wrapping it in its own try/catch closes that gap
+            // without needing FeraHook's decimals-caching redesign (`_decimalsOf`/`setOracleFeed`) —
+            // this read-only view has no hot swap-path budget to protect, so re-reading decimals()
+            // live (safely) is the simpler fix here.
+            try IAggregatorV3(feed).decimals() returns (uint8 dec) {
+                price = dec <= 18 ? uint256(answer) * (10 ** (18 - dec)) : uint256(answer) / (10 ** (dec - 18));
+                ok = true;
+            } catch {
+                return (0, false);
+            }
         } catch {
             return (0, false);
         }

@@ -287,6 +287,44 @@ contract RevertingAggregatorV3 is IAggregatorV3 {
     }
 }
 
+/// @dev Chainlink feed whose `latestRoundData()` is perfectly healthy but whose `decimals()` can be
+///      toggled to REVERT (models an upgraded/paused proxy or a malformed/hostile aggregator
+///      implementation — the exact cause is irrelevant, only that the call reverts). `decimals()`
+///      succeeds by default so this feed can pass through `FeraHook.setOracleFeed`'s one-time
+///      registration snapshot (and `createBaseLimitPool`) exactly like a real feed would BEFORE later
+///      degrading — `setDecimalsReverting` flips it to reverting afterward. Proves the v3.5.1 fix:
+///      `decimals()` sits behind its OWN try/catch in `VaultMath.tryReadOracle`/
+///      `VaultOps._tryReadOracle`, so a later decimals() revert no longer propagates out of the
+///      "never reverts" oracle read (audit finding, medium).
+contract DecimalsRevertingAggregatorV3 is IAggregatorV3 {
+    int256 internal _answer;
+    uint256 internal _updatedAt;
+    bool internal _revertDecimals;
+
+    function set(int256 answer_, uint256 updatedAt_) external {
+        _answer = answer_;
+        _updatedAt = updatedAt_;
+    }
+
+    function setDecimalsReverting(bool r) external {
+        _revertDecimals = r;
+    }
+
+    function decimals() external view override returns (uint8) {
+        if (_revertDecimals) revert("decimals down");
+        return 8;
+    }
+
+    function latestRoundData()
+        external
+        view
+        override
+        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)
+    {
+        return (1, _answer, _updatedAt, _updatedAt, 1);
+    }
+}
+
 /// @dev Hostile "native/project token" for the v3.1 unified fee-routing tests
 ///      (contracts/VAULT_STRATEGY_V3.md §9). Two independently-configurable hostile shapes on the
 ///      SAME token, so the fee-routing fail-static path can be probed against both:
