@@ -271,6 +271,10 @@ contract Deploy is Script {
         console2.log("  vault.setKeeperActive(poolId, true) -- per pool, ONLY after reviewing its native token");
         console2.log("  (a hostile transfer hook could reenter PoolManager during rebalance settlement --");
         console2.log("   review bytecode/behavior before activating a permissionlessly-created pool's native token)");
+        console2.log("  For >1 pool at once: vault.setKeeperActiveBatch(poolIds, true) -- one tx, same checks apply");
+        console2.log("  BEFORE re-enabling keeper.yml's cron: vault.inactiveKeeperPools(allLivePoolIds) MUST return");
+        console2.log("   empty for every pool you intend to run the keeper on -- a forgotten pool here is silent");
+        console2.log("   (see FeraVault.sol keeperActive NatSpec / audit finding: silent un-activated pools)");
         console2.log("  vault:", address(vault), " hook:", address(hook));
     }
 }

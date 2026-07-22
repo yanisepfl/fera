@@ -1,6 +1,11 @@
-// FeraVaultAbi — GENERATED from contracts/out/FeraVault.sol/FeraVault.json (BK-1 regen, 2026-07-16).
+// FeraVaultAbi — GENERATED from contracts/out/FeraVault.sol/FeraVault.json (BK-1 regen, 2026-07-22).
 // Source of truth: the compiled forge artifact's .abi (i.e. contracts/src/FeraVault.sol).
-// Do not hand-edit: re-run the BK-1 ABI regen to refresh. 68 functions, 18 events, 38 errors.
+// Do not hand-edit: re-run the BK-1 ABI regen to refresh. 74 functions, 20 events, 39 errors.
+// Regenerated for the v3.5 audit-hardening fix (Finding: keeperActive defaults false with no
+// batch setter / no diffable view) — the prior snapshot (2026-07-16) predated ALL of v3.5
+// (keeperActive/setKeeperActive/KeeperActiveSet/PoolNotKeeperActive were entirely absent), which
+// is why the keeper backend could not decode that revert by name until now. Also picks up this
+// fix's new setKeeperActiveBatch + inactiveKeeperPools.
 export const FeraVaultAbi = [
   {
     "type": "constructor",
@@ -298,6 +303,25 @@ export const FeraVaultAbi = [
   },
   {
     "type": "function",
+    "name": "cooldownExempt",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "createBaseLimitPool",
     "inputs": [
       {
@@ -537,6 +561,25 @@ export const FeraVaultAbi = [
   },
   {
     "type": "function",
+    "name": "inactiveKeeperPools",
+    "inputs": [
+      {
+        "name": "ids",
+        "type": "bytes32[]",
+        "internalType": "PoolId[]"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "inactive",
+        "type": "bytes32[]",
+        "internalType": "PoolId[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "isEventWindow",
     "inputs": [
       {
@@ -601,6 +644,25 @@ export const FeraVaultAbi = [
         "name": "",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "keeperActive",
+    "inputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "PoolId"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -1087,6 +1149,24 @@ export const FeraVaultAbi = [
   },
   {
     "type": "function",
+    "name": "setCooldownExempt",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "exempt",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setDepositTwapGate",
     "inputs": [
       {
@@ -1160,6 +1240,42 @@ export const FeraVaultAbi = [
         "name": "newKeeper",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setKeeperActive",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "bytes32",
+        "internalType": "PoolId"
+      },
+      {
+        "name": "active",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setKeeperActiveBatch",
+    "inputs": [
+      {
+        "name": "ids",
+        "type": "bytes32[]",
+        "internalType": "PoolId[]"
+      },
+      {
+        "name": "active",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "outputs": [],
@@ -1542,6 +1658,25 @@ export const FeraVaultAbi = [
   },
   {
     "type": "event",
+    "name": "CooldownExemptSet",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "exempt",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Deposit",
     "inputs": [
       {
@@ -1641,6 +1776,25 @@ export const FeraVaultAbi = [
         "type": "uint8",
         "indexed": false,
         "internalType": "uint8"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "KeeperActiveSet",
+    "inputs": [
+      {
+        "name": "poolId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "active",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
       }
     ],
     "anonymous": false
@@ -2172,6 +2326,11 @@ export const FeraVaultAbi = [
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "PoolNotKeeperActive",
+    "inputs": []
   },
   {
     "type": "error",

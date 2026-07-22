@@ -307,6 +307,13 @@ interface IFeraVault {
     ///         `keeperActive`'s NatSpec in FeraVault.sol.
     function setKeeperActive(PoolId poolId, bool active) external;
 
+    /// @notice v3.5 hardening addendum (audit finding, medium): batched `setKeeperActive` — same
+    ///         onlyOwner/UnknownPool semantics, applied to every id in `poolIds`, so a whole
+    ///         redeploy's/permissionless-creation wave's worth of pools can be activated (or
+    ///         deactivated) in one tx instead of one per pool. Reverts the whole batch on the first
+    ///         unknown id. Still emits one `KeeperActiveSet` per pool.
+    function setKeeperActiveBatch(PoolId[] calldata poolIds, bool active) external;
+
     /// @notice v3 NEW: timelocked-owner setter for the vol-adaptive width-multiplier clamp band,
     ///         bounded WITHIN the immutable [VOL_WIDTH_MULT_MIN_LEGAL_BPS,
     ///         VOL_WIDTH_MULT_MAX_LEGAL_BPS] legal range (the Gamma lesson).
@@ -400,4 +407,10 @@ interface IFeraVault {
     /// @notice v3.5 (Finding-1 hardening): whether the automated keeper may act on `poolId` at all.
     ///         Defaults FALSE for every pool. See `keeperActive`'s NatSpec in FeraVault.sol.
     function keeperActive(PoolId poolId) external view returns (bool);
+
+    /// @notice v3.5 hardening addendum (audit finding, medium: silent un-activated pools). Given a
+    ///         candidate list of pool ids (e.g. reconstructed off-chain from FeraHook's
+    ///         `PoolRegistered` events), returns exactly the subset that is NOT `keeperActive` — a
+    ///         one-call diff instead of polling `keeperActive(id)` per pool.
+    function inactiveKeeperPools(PoolId[] calldata poolIds) external view returns (PoolId[] memory inactive);
 }

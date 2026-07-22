@@ -109,12 +109,29 @@ async function priceGuard(
   return divBps > ARB_CHECK_BPS ? { ours, ref, divBps } : null;
 }
 
+/// Audit finding (medium): a `PoolNotKeeperActive` revert means the owner has not (or forgot to)
+/// call `setKeeperActive` for this pool — every automated action is permanently a no-op until they
+/// do. That is NOT the same "nothing to do this tick" as `NotOutOfRange`/`OorNotPersistent`/
+/// `TwapStale`/idle-at-target, which are expected, healthy, and self-resolving. Folding both into
+/// one `info`-level "skipped" log (as this used to) makes a silently un-activated pool
+/// indistinguishable from a calm one in the logs — this is the actual bug the finding reports.
+const POOL_NOT_KEEPER_ACTIVE = "PoolNotKeeperActive";
+
+function revertReason(e: unknown): string {
+  // viem decodes a known custom error (present in FeraVaultAbi) into the message as
+  // `<ErrorName>()` — fall back to the generic `Error: <Name>` shape / "reverted" for anything the
+  // ABI can't decode (e.g. a stale ABI, or a revert with no reason string at all).
+  const msg = String((e as Error)?.message ?? e);
+  return msg.match(/\b(\w+)\(\)/)?.[1] ?? msg.match(/Error: (\w+)/)?.[1] ?? "reverted";
+}
+
 /** simulate as the keeper; send only when the simulation succeeds (zero wasted gas). */
 async function simulateThenSend(
   env: KeeperEnv,
   poolId: `0x${string}`,
   functionName: "skimIdle" | "rebalanceLimit" | "rebalanceBase",
   args: readonly unknown[],
+  notKeeperActive: Set<`0x${string}`>,
 ): Promise<boolean> {
   try {
     const { request } = await env.publicClient.simulateContract({
@@ -133,12 +150,21 @@ async function simulateThenSend(
     log("vault-strategy", rcpt.status === "success" ? "info" : "warn", `${functionName} ${rcpt.status}`, { poolId, hash });
     return rcpt.status === "success";
   } catch (e) {
-    // Simulation revert = the vault says "not needed / not yet" (NotOutOfRange, OorNotPersistent,
-    // TwapStale, idle at target…). Expected — log at debug and skip.
-    log("vault-strategy", "info", `${functionName} skipped`, {
-      poolId,
-      reason: String((e as Error).message ?? e).match(/Error: (\w+)/)?.[1] ?? "reverted",
-    });
+    const reason = revertReason(e);
+    if (reason === POOL_NOT_KEEPER_ACTIVE) {
+      // NOT ordinary no-op noise: the owner has never (or no longer) activated this pool. warn so
+      // this is distinguishable from a healthy idle tick in anything scraping these logs, and
+      // record it so the tick-level heartbeat surfaces it too (see ops/metrics.ts, ops/alerts.yml).
+      notKeeperActive.add(poolId);
+      log("vault-strategy", "warn", `${functionName} skipped — pool is NOT keeperActive`, {
+        poolId,
+        hint: "owner has not called setKeeperActive(poolId, true) for this pool — see FeraVault.sol keeperActive NatSpec",
+      });
+      return false;
+    }
+    // Any OTHER simulation revert = the vault says "not needed / not yet" (NotOutOfRange,
+    // OorNotPersistent, TwapStale, idle at target…). Expected — log at info and skip.
+    log("vault-strategy", "info", `${functionName} skipped`, { poolId, reason });
     return false;
   }
 }
@@ -174,10 +200,14 @@ async function syncDwellClock(env: KeeperEnv, poolId: `0x${string}`, t: number):
   log("vault-strategy", "info", "poked", { poolId, hash });
 }
 
-export async function tick(env: KeeperEnv): Promise<void> {
+export async function tick(env: KeeperEnv): Promise<Record<string, unknown>> {
   const pools = await env.publicClient.getLogs({
     address: HOOK, event: poolRegisteredEvent, fromBlock: START_BLOCK, toBlock: "latest",
   });
+  // Populated by simulateThenSend when a pool reverts with PoolNotKeeperActive (audit finding,
+  // medium) — surfaced below as both a tick-level warn log and heartbeat detail, instead of being
+  // folded into ordinary "nothing to do" noise.
+  const notKeeperActive = new Set<`0x${string}`>();
   // Idle-skim + limit-(re)deploy are LOW-URGENCY and gas-heavy across many pools — at bootstrap
   // TVL the per-tick churn (100+/day) outran the fees it captured and drained the keeper. Throttle
   // them to a ~4h cadence off the block clock (stateless — GitHub Actions runs are ephemeral); the
@@ -222,13 +252,20 @@ export async function tick(env: KeeperEnv): Promise<void> {
 
       await syncDwellClock(env, poolId, t); // 1. dwell clock — ALWAYS (even when diverged)
       if (diverged) continue;               // hold off recenter/skim/limit while mispriced
-      await simulateThenSend(env, poolId, "rebalanceBase", [poolId, t, true]); // 2. recenter base if due
+      await simulateThenSend(env, poolId, "rebalanceBase", [poolId, t, true], notKeeperActive); // 2. recenter base if due
       if (doSkimLimit) {                                                       // 3+4. throttled ~daily
-        await simulateThenSend(env, poolId, "skimIdle", [poolId, t]);
-        await simulateThenSend(env, poolId, "rebalanceLimit", [poolId, t]);
+        await simulateThenSend(env, poolId, "skimIdle", [poolId, t], notKeeperActive);
+        await simulateThenSend(env, poolId, "rebalanceLimit", [poolId, t], notKeeperActive);
       }
     }
   }
+
+  if (notKeeperActive.size > 0) {
+    log("vault-strategy", "warn", `${notKeeperActive.size} pool(s) NOT keeper-active — automated actions are no-ops on them`, {
+      poolIds: [...notKeeperActive],
+    });
+  }
+  return { poolsNotKeeperActive: [...notKeeperActive] };
 }
 
 runOnce("vault-strategy", tick).then((code) => process.exit(code));

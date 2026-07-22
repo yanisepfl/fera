@@ -74,13 +74,22 @@ export function jitterMs(windowMs: number): number {
  * Run a keeper tick with fail-static semantics: any throw is logged + heartbeated as NOT-ok and
  * swallowed (the process exits non-zero for the supervisor, but never leaves a half-submitted
  * on-chain action — each keeper's write is a single idempotent tx re-verified on-chain).
+ *
+ * `fn` may optionally return a plain object of tick-level detail (e.g. per-pool findings that
+ * aren't themselves failures) which is merged into the success heartbeat — see
+ * `vaultStrategy.ts`'s `poolsNotKeeperActive` for the motivating case (audit finding, medium: a
+ * pool with `PoolNotKeeperActive` reverting on every tick is a healthy heartbeat — the tick itself
+ * "succeeds" — but was otherwise invisible to anything scraping the heartbeat file).
  */
-export async function runOnce(keeper: string, fn: (env: KeeperEnv) => Promise<void>): Promise<number> {
+export async function runOnce(
+  keeper: string,
+  fn: (env: KeeperEnv) => Promise<Record<string, unknown> | void>,
+): Promise<number> {
   const env = loadEnv();
   log(keeper, "info", "start", { chainId: env.chainId, dryRun: env.dryRun });
   try {
-    await fn(env);
-    heartbeat(keeper, true);
+    const detail = (await fn(env)) ?? {};
+    heartbeat(keeper, true, detail);
     log(keeper, "info", "ok");
     return 0;
   } catch (e) {

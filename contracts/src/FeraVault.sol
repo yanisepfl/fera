@@ -150,9 +150,19 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///             SHORTER but NON-ZERO floor (`_exemptWithdrawFloorSec` — the address's regime-JIT
     ///             window + margin) past its OWN last deposit. Finding-2 hardening: a full bypass
     ///             would let an exempt address deposit-then-instantly-withdraw in one tx, forcing its
-    ///             own mandatory fee checkpoint to land inside the JIT-forfeiture window it just
-    ///             armed and donate its own fees away — this floor closes that while still avoiding
-    ///             the full hour-long shared-clock wait.
+    ///             own mandatory fee checkpoint to land inside the JIT-forfeiture window it itself
+    ///             just armed and donate its own fees away — this floor closes THAT self-inflicted
+    ///             round trip while still avoiding the full hour-long shared-clock wait. It is
+    ///             NOT a general guarantee against every JIT-forfeiture window: `FeraHook`'s JIT
+    ///             clock is keyed per (pool, tranche, band) — SHARED across every depositor and the keeper,
+    ///             not per-depositor (THREAT_MODEL.md §10.1 "Vault self-interaction" / V2-3) — so a
+    ///             DIFFERENT depositor's ordinary deposit, or a keeper rebalance re-mint, occurring
+    ///             AFTER this floor has already elapsed can still re-arm the same band and cause this
+    ///             address's own withdraw-time checkpoint to forfeit fees, same as any other
+    ///             withdrawal (audit finding, medium — v3.5.1). For MEME pools this recurs routinely,
+    ///             not just adversarially: `MEME_MIN_REBALANCE_INTERVAL_SEC` (the keeper's minimum
+    ///             rebalance cadence) exactly equals `JIT_PENALTY_WINDOW_MEME`. Bounded and fee-only
+    ///             in every case — never fund-theft, never a blocked exit (INV-1''/INV-11).
     ///           - `deposit`: skips arming `transferLockUntil` for this address at all (Finding-3
     ///             hardening — the exemption would otherwise be defeated the moment the Index needs a
     ///             raw share `transfer`, not `burn`, to move a member's shares).
@@ -924,9 +934,54 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     /// @dev Team-curation gate for the AUTOMATED KEEPER (see `keeperActive` NatSpec). Never affects
     ///      deposits, withdrawals, or swaps — only `onlyKeeper` rebalance/skim actions consult it.
     function setKeeperActive(PoolId id, bool active) external onlyOwner {
+        _setKeeperActive(id, active);
+    }
+
+    /// @inheritdoc IFeraVault
+    /// @dev v3.5 hardening addendum (audit finding, medium: a forgotten per-pool `setKeeperActive`
+    ///      call is silent and indistinguishable from a healthy idle pool). Same onlyOwner/
+    ///      UnknownPool semantics as the single-pool setter — just batched, so the team can activate
+    ///      (or deactivate) every pool from one redeploy/permissionless-creation wave in ONE tx
+    ///      instead of one per pool. Still emits one `KeeperActiveSet` per pool (unchanged event
+    ///      shape for indexers); reverts the WHOLE batch on the first unknown id (fail-closed, no
+    ///      partial activation) exactly like the single-pool setter would on that id alone.
+    function setKeeperActiveBatch(PoolId[] calldata ids, bool active) external onlyOwner {
+        uint256 len = ids.length;
+        for (uint256 i = 0; i < len; ++i) {
+            _setKeeperActive(ids[i], active);
+        }
+    }
+
+    function _setKeeperActive(PoolId id, bool active) internal {
         if (!pools[id].initialized) revert UnknownPool();
         keeperActive[id] = active;
         emit KeeperActiveSet(PoolId.unwrap(id), active);
+    }
+
+    /// @inheritdoc IFeraVault
+    /// @dev v3.5 hardening addendum (audit finding, medium): off-chain, discovering "which pools are
+    ///      NOT keeper-active" otherwise means reconstructing the candidate id list from FeraHook's
+    ///      `PoolRegistered` events (already how `backend/keepers/vaultStrategy.ts` discovers pools)
+    ///      and then polling the public `keeperActive(id)` getter one id at a time. This lets a
+    ///      monitoring/ops script pass that WHOLE candidate list in a single call and get back
+    ///      exactly the subset still gated — one round-trip instead of N. Pure filter over the
+    ///      existing mapping; adds no new storage and has no on-chain effect of its own. Passing an
+    ///      id that was never `createBaseLimitPool`-initialized reports it as "inactive" too (the
+    ///      mapping defaults false for any key) — callers are expected to source `ids` from
+    ///      `PoolRegistered`, i.e. real pools only.
+    function inactiveKeeperPools(PoolId[] calldata ids) external view returns (PoolId[] memory inactive) {
+        uint256 len = ids.length;
+        PoolId[] memory buf = new PoolId[](len);
+        uint256 n;
+        for (uint256 i = 0; i < len; ++i) {
+            if (!keeperActive[ids[i]]) {
+                buf[n++] = ids[i];
+            }
+        }
+        inactive = new PoolId[](n);
+        for (uint256 i = 0; i < n; ++i) {
+            inactive[i] = buf[i];
+        }
     }
 
     /// @inheritdoc IFeraVault
@@ -1218,20 +1273,29 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     }
 
     /// @notice RWA market-hours keeper flag (bounded). Mirrored onto the hook for the fee overlay.
-    function setMarketOpen(PoolId id, bool open) external onlyKeeper {
+    /// @dev Audit finding (Low): this and the two setters below are `onlyKeeper` but move no funds
+    ///      and never call `_modifyBand`, so they were originally left off `keeperReady` on the
+    ///      theory that they're flags, not "pool-touching" in Finding-1's reentrancy sense. But
+    ///      `setMarketOpen`/`setHoliday` mirror straight onto `FeraHook`'s RWA in-hours/off-hours fee
+    ///      overlay — a real pricing lever — so leaving them ungated let a keeper flip RWA market
+    ///      regime on a pool the owner never reviewed/activated, contradicting `keeperActive`'s
+    ///      documented promise that "the keeper cannot touch an unreviewed pool at all." Gating all
+    ///      three with `keeperReady` closes that gap and makes the modifier's own claim ("blocks
+    ///      EVERY onlyKeeper ... action") literally true again.
+    function setMarketOpen(PoolId id, bool open) external onlyKeeper keeperReady(id) {
         pools[id].marketOpen = open;
         hook.setMarketOpen(id, open);
     }
 
     /// @notice Keeper flags a scheduled-event session (earnings before next open — D-M11 legacy;
     ///         reserved, no on-chain consumer in v3).
-    function setEventWindow(PoolId id, bool on) external onlyKeeper {
+    function setEventWindow(PoolId id, bool on) external onlyKeeper keeperReady(id) {
         pools[id].eventWindow = on;
     }
 
     /// @notice Keeper holiday flag (§10) — force-closes an RWA market regardless of the calendar or
     ///         the hours flag. Fail-static: a keeper can only CLOSE the market with this, never open.
-    function setHoliday(PoolId id, bool on) external onlyKeeper {
+    function setHoliday(PoolId id, bool on) external onlyKeeper keeperReady(id) {
         pools[id].holiday = on;
         hook.setHoliday(id, on); // mirror onto the hook so the fee overlay force-closes too (§2.1)
     }

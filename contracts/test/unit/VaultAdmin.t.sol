@@ -252,6 +252,82 @@ contract VaultAdminTest is Deployers {
         vault.skimIdle(memeId, 0); // succeeds
     }
 
+    // ══════════════════════════════════════════════════════════════════════════════════════
+    // v3.5 hardening ADDENDUM (audit finding, medium: a forgotten per-pool `setKeeperActive` call
+    // is silent and indistinguishable from a healthy idle pool — no batch setter, no on/off-chain
+    // way to see which pools are un-activated). `setKeeperActiveBatch` activates/deactivates many
+    // pools in one tx; `inactiveKeeperPools` diffs a candidate id list (sourced off-chain from
+    // FeraHook's `PoolRegistered`) against on-chain state in ONE call instead of polling
+    // `keeperActive(id)` per pool.
+    // ══════════════════════════════════════════════════════════════════════════════════════
+    function test_setKeeperActiveBatch_onlyOwner() public {
+        PoolId[] memory ids = new PoolId[](1);
+        ids[0] = memeId;
+        vm.prank(notOwner);
+        vm.expectRevert();
+        vault.setKeeperActiveBatch(ids, true);
+    }
+
+    function test_setKeeperActiveBatch_activatesAllAndEmitsPerPool() public {
+        // setUp() already activated both — deactivate first so the batch call has real work to do.
+        vault.setKeeperActive(memeId, false);
+        vault.setKeeperActive(rwaId, false);
+
+        PoolId[] memory ids = new PoolId[](2);
+        ids[0] = memeId;
+        ids[1] = rwaId;
+
+        vm.expectEmit(false, false, false, true, address(vault));
+        emit IFeraVault.KeeperActiveSet(PoolId.unwrap(memeId), true);
+        vm.expectEmit(false, false, false, true, address(vault));
+        emit IFeraVault.KeeperActiveSet(PoolId.unwrap(rwaId), true);
+        vault.setKeeperActiveBatch(ids, true);
+
+        assertTrue(vault.keeperActive(memeId));
+        assertTrue(vault.keeperActive(rwaId));
+    }
+
+    /// The batch setter must be all-or-nothing: an unknown id anywhere in the array reverts the
+    /// WHOLE call, exactly like calling the single-pool setter on that id would — never leaving
+    /// earlier ids in the batch silently activated while a later one fails.
+    function test_setKeeperActiveBatch_revertsWholeBatchOnUnknownPool() public {
+        vault.setKeeperActive(memeId, false); // so we can prove it stayed false below
+        PoolId fake = PoolId.wrap(bytes32(uint256(0xdead)));
+        PoolId[] memory ids = new PoolId[](2);
+        ids[0] = memeId;
+        ids[1] = fake;
+
+        vm.expectRevert(IFeraVault.UnknownPool.selector);
+        vault.setKeeperActiveBatch(ids, true);
+
+        assertFalse(vault.keeperActive(memeId), "batch must not partially apply before reverting");
+    }
+
+    /// The core observability PoC: `inactiveKeeperPools` returns exactly the subset of a candidate
+    /// list that is NOT keeper-active, in one call — closing the "no on/off-chain way to see which
+    /// pools are un-activated" gap without polling `keeperActive(id)` one pool at a time.
+    function test_inactiveKeeperPools_diffsCandidateListInOneCall() public {
+        // setUp() activated both pools — deactivate memeId only so the two pools disagree.
+        vault.setKeeperActive(memeId, false);
+
+        PoolId[] memory candidates = new PoolId[](2);
+        candidates[0] = memeId;
+        candidates[1] = rwaId;
+
+        PoolId[] memory inactive = vault.inactiveKeeperPools(candidates);
+        assertEq(inactive.length, 1, "exactly one pool is inactive");
+        assertEq(PoolId.unwrap(inactive[0]), PoolId.unwrap(memeId), "the inactive one must be memeId");
+
+        // Re-activating clears it from the report.
+        vault.setKeeperActive(memeId, true);
+        assertEq(vault.inactiveKeeperPools(candidates).length, 0, "no pools inactive once activated");
+    }
+
+    function test_inactiveKeeperPools_emptyCandidateListReturnsEmpty() public view {
+        PoolId[] memory empty = new PoolId[](0);
+        assertEq(vault.inactiveKeeperPools(empty).length, 0);
+    }
+
     function test_constructor_zeroAddressRejected() public {
         // keeper_ == 0 and shareImplementation_ == 0 both trip the guard (`||` legs).
         vm.expectRevert(IFeraVault.ZeroAddress.selector);

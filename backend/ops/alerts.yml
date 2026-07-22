@@ -40,6 +40,20 @@ groups:
         annotations:
           summary: "FERA keeper {{ $labels.keeper }} last tick FAILED"
 
+      # Audit finding (medium): keeperActive defaults false with no wired alert distinguishing "the
+      # owner forgot to call setKeeperActive" from "nothing to do this tick" — both used to look
+      # like an identical healthy no-op. `for: 60m` intentionally tolerates a freshly-created,
+      # not-yet-reviewed pool (permissionless createBaseLimitPool, VAULT_STRATEGY_V3.md §11) without
+      # paging; it only fires once a pool has been stuck this way long enough that it's very
+      # unlikely to be "still under review" and very likely "forgotten."
+      - alert: PoolNotKeeperActive
+        expr: fera_keeper_pool_not_keeper_active == 1
+        for: 60m
+        labels: { severity: warning }
+        annotations:
+          summary: "Pool {{ $labels.poolId }} has keeperActive=false — automated rebalancing is a permanent no-op"
+          description: "vault-strategy has seen PoolNotKeeperActive for {{ $labels.poolId }} for over an hour. Either it's a new pool still pending the owner's native-token review, or setKeeperActive was never called after a redeploy — check FeraVault.keeperActive(poolId) / call vault.setKeeperActive(poolId, true) (or the batched setKeeperActiveBatch) once reviewed."
+
       # Epoch ended but no root posted well after close (root-poster stuck). Tune window to epoch len.
       - alert: EmissionsRootLate
         expr: (time() - fera_epoch_last_posted_ts) > 7200 and fera_epoch_pending == 1

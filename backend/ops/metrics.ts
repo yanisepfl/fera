@@ -50,6 +50,12 @@ export const METRIC = {
   oracleSecondsSinceUpdate: "fera_oracle_seconds_since_update", // labels: symbol
   reconcileFeeDriftBps: "fera_reconcile_fee_drift_bps", // labels: poolId; |indexer-onchain|/onchain
   reconcilePerfFeeViolations: "fera_reconcile_perf_fee_violations_total", // INV-3 breaches
+  // Audit finding (medium): keeperActive defaults false with no wired alert distinguishing "the
+  // owner forgot to activate this pool" from "the keeper process is fine and there's nothing to
+  // do." labels: keeper, poolId. 1 while vault-strategy's tick is currently seeing
+  // PoolNotKeeperActive for that pool; the sample simply stops appearing once it activates (no
+  // stale "0" left behind — see keeperInactivePoolMetrics below).
+  keeperPoolNotActive: "fera_keeper_pool_not_keeper_active",
 } as const;
 
 /** Build the keeper-heartbeat gauges from the files keepers/common.ts writes. */
@@ -72,4 +78,42 @@ export function keeperHeartbeatMetrics(heartbeatDir: string): Metric[] {
     }
   }
   return [lastSuccess, ok];
+}
+
+/**
+ * Audit finding (medium): a pool the owner never (or no longer) called `setKeeperActive(id, true)`
+ * for reverts `PoolNotKeeperActive` on every automated action, forever — but that's a *successful*
+ * keeper tick (fail-static, nothing to submit), so it never shows up in `keeperHeartbeatMetrics`
+ * above. `keepers/vaultStrategy.ts` now records every pool it saw `PoolNotKeeperActive` for in this
+ * tick's heartbeat detail (`poolsNotKeeperActive: string[]`) instead of folding it into ordinary
+ * no-op log noise; this turns that into a per-pool gauge so `ops/alerts.yml`'s `PoolNotKeeperActive`
+ * rule can page on a pool stuck this way past its acceptable review window.
+ */
+export function keeperInactivePoolMetrics(heartbeatDir: string): Metric[] {
+  const gauge: Metric = {
+    name: METRIC.keeperPoolNotActive,
+    help: "1 if the keeper is currently seeing PoolNotKeeperActive for this pool (last tick)",
+    type: "gauge",
+    samples: [],
+  };
+  let files: string[] = [];
+  try {
+    files = readdirSync(heartbeatDir).filter((f) => f.endsWith(".json"));
+  } catch {
+    return [gauge];
+  }
+  for (const f of files) {
+    try {
+      const hb = JSON.parse(readFileSync(join(heartbeatDir, f), "utf8")) as {
+        keeper: string;
+        poolsNotKeeperActive?: string[];
+      };
+      for (const poolId of hb.poolsNotKeeperActive ?? []) {
+        gauge.samples.push({ labels: { keeper: hb.keeper, poolId }, value: 1 });
+      }
+    } catch {
+      /* skip malformed */
+    }
+  }
+  return [gauge];
 }
