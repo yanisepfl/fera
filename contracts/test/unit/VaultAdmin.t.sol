@@ -217,6 +217,14 @@ contract VaultAdminTest is Deployers {
     /// cross-contract PoolManager-reentrancy surface a permissionlessly-created pool's unreviewed
     /// native token could otherwise expose (see `keeperActive` NatSpec, FeraVault.sol). Deposits,
     /// withdrawals, and swaps are completely unaffected (only onlyKeeper functions consult it).
+    ///
+    /// v3.5.1 hardening (audit finding, Low): originally this exercised only the 7 fund/position-
+    /// moving `onlyKeeper` functions and NOT `setMarketOpen`/`setEventWindow`/`setHoliday` — despite
+    /// this test's own name and doc claiming "EVERY onlyKeeper [...] action." Those three were
+    /// ungated, so a keeper could flip `setMarketOpen`/`setHoliday` (which mirror onto FeraHook's
+    /// RWA in-hours/off-hours fee overlay — a real pricing lever) on a pool the owner had never
+    /// reviewed/activated, contradicting the "keeper cannot touch an unreviewed pool at all"
+    /// framing. All 10 of the 10 `onlyKeeper` functions on the Vault are now covered below.
     function test_keeperActive_gatesEveryOnlyKeeperPoolAction() public {
         // setUp() already activated both pools by default — deactivate to test the gated state.
         vault.setKeeperActive(memeId, false);
@@ -243,6 +251,16 @@ contract VaultAdminTest is Deployers {
         vm.expectRevert(IFeraVault.PoolNotKeeperActive.selector);
         vault.defendRwaOffHours(rwaId, 0);
 
+        // The three market-flag setters (v3.5.1 fix) — same gate now applies to them too.
+        vm.expectRevert(IFeraVault.PoolNotKeeperActive.selector);
+        vault.setMarketOpen(rwaId, true);
+
+        vm.expectRevert(IFeraVault.PoolNotKeeperActive.selector);
+        vault.setEventWindow(rwaId, true);
+
+        vm.expectRevert(IFeraVault.PoolNotKeeperActive.selector);
+        vault.setHoliday(rwaId, true);
+
         // Deposits/withdrawals are NEVER gated by keeperActive.
         vault.deposit(memeId, 0, 10e18, 10e18, 0);
 
@@ -250,6 +268,10 @@ contract VaultAdminTest is Deployers {
         // logic instead (proving this is an ADDITIVE gate, not a replacement for existing bounds).
         vault.setKeeperActive(memeId, true);
         vault.skimIdle(memeId, 0); // succeeds
+
+        vault.setKeeperActive(rwaId, true);
+        vault.setMarketOpen(rwaId, true); // succeeds
+        assertTrue(vault.isMarketOpen(rwaId), "setMarketOpen did not take effect once keeperActive");
     }
 
     // ══════════════════════════════════════════════════════════════════════════════════════
