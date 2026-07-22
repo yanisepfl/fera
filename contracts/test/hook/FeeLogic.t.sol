@@ -101,7 +101,7 @@ contract FeeLogicTest is Test {
         fi.marketOpen = false;
         fi.oraclePriceX96 = 1e18;
         fi.poolPriceX96 = 1e18 + (1e18 * 200) / 10_000; // +2%
-        assertEq(FeeLogic.quoteLpFee(fi), 7_000, "closed/drift != 7000 pips");
+        assertEq(FeeLogic.quoteLpFee(fi), 7000, "closed/drift != 7000 pips");
     }
 
     /// RWA with a huge deviation clamps to the ceiling (never reverts, never blocks the swap).
@@ -116,6 +116,29 @@ contract FeeLogicTest is Test {
         uint24 fee = FeeLogic.quoteLpFee(fi);
         assertGe(fee, FeraConstants.RWA_FEE_INHOURS_PIPS, "below RWA floor");
         assertLe(fee, FeraConstants.RWA_FEE_CEIL_PIPS, "above RWA ceil");
+    }
+
+    /// Reviewed Informational (2026-07-22, DOCUMENTED not fixed — see THREAT_MODEL.md §10.7 and
+    /// `_rwaFee`'s NatSpec): the RWA deviation overlay is INTENTIONALLY direction-agnostic, unlike
+    /// MEME's asymmetric sell adder (`test_meme_sellAdderExceedsBuy` above). This pins that
+    /// documented behavior — `isSell` must have ZERO effect on the RWA fee for ANY inputs, so a
+    /// future change that threads direction into `_rwaFee` without a conscious spec update trips
+    /// this test instead of silently drifting from what THREAT_MODEL.md says the code does.
+    function testFuzz_rwa_feeIsDirectionAgnostic(uint256 poolP, uint256 oracleP, bool marketOpen) public pure {
+        poolP = bound(poolP, 1, type(uint128).max);
+        oracleP = bound(oracleP, 1, type(uint128).max);
+
+        FeeLogic.FeeInputs memory buy;
+        buy.regime = FeraTypes.Regime.RWA;
+        buy.marketOpen = marketOpen;
+        buy.poolPriceX96 = poolP;
+        buy.oraclePriceX96 = oracleP;
+        buy.isSell = false;
+
+        FeeLogic.FeeInputs memory sell = buy;
+        sell.isSell = true;
+
+        assertEq(FeeLogic.quoteLpFee(buy), FeeLogic.quoteLpFee(sell), "RWA fee must be direction-agnostic by design");
     }
 
     /// The dynamic-fee sentinel mirrors v4-core exactly (drift guard, FeraConstants).

@@ -23,7 +23,10 @@ library FeeLogic {
     struct FeeInputs {
         FeraTypes.Regime regime;
         // ── MEME ──
-        bool isSell; // this swap is the toxic sell side (zeroForOne == sellIsZeroForOne[pool])
+        bool isSell; // MEME-only: this swap is the toxic sell side (zeroForOne == sellIsZeroForOne[pool]).
+        // RWA never reads this field (stays at its false zero-default on the RWA path in
+        // `FeraHook._beforeSwap`/`getDynamicFee`) — see `_rwaFee`'s NatSpec: unlike MEME's
+        // direction-aware sell adder, the RWA deviation overlay is INTENTIONALLY symmetric.
         uint256 volEwmaX; // EWMA(r²)·2^16 (Q48.16), tick² units — from the packed MEME state slot
         int256 flowEwmaX; // EWMA(r)·2^16 (Q48.16), signed tick units — net-flow drift
         // ── RWA ──
@@ -67,8 +70,8 @@ library FeeLogic {
         } else if (sigma >= sigmaAtCeil) {
             feeBase = ceilPips;
         } else {
-            feeBase = floorPips
-                + FeraConstants.MEME_FEE_SLOPE_PIPS_PER_TICK * (sigma - FeraConstants.MEME_FEE_SIGMA0_TICKS);
+            feeBase =
+                floorPips + FeraConstants.MEME_FEE_SLOPE_PIPS_PER_TICK * (sigma - FeraConstants.MEME_FEE_SIGMA0_TICKS);
         }
 
         // Asymmetric sell-side adder, applied ONLY to the toxic sell direction under one-sided DOWN
@@ -92,6 +95,22 @@ library FeeLogic {
     // ─────────────────────────────────────────────────────────────────────────────────────
     // RWA (MECHANISM_SPEC §2.2–2.3): tight open base / widened closed base, a deviation overlay
     // scaling with |pool−oracle|/oracle, clamped to the ceiling; oracle-fail ⇒ flat blind fee.
+    //
+    // INTENTIONAL SYMMETRY (documents a reviewed Informational finding — no code change; the
+    // formula below is the verbatim, frozen MECHANISM_SPEC §2.3 math): the overlay is computed
+    // from `_absDeviationBps`, an UNSIGNED |pool−oracle|/oracle, and this function never reads
+    // `in_.isSell` — a gap-narrowing ("healing") swap and a gap-widening swap starting from the
+    // same pre-swap deviation pay the identical overlay. This is a deliberate departure from
+    // `_memeFee` above, whose sell adder explicitly zeroes for buys/dip-arb to reward the healing
+    // direction (§1.6). Two reasons RWA does NOT mirror that asymmetry in the continuous curve:
+    //   1. §2.3's own rationale: DEV_SLOPE (20 pips/bp) is calibrated low enough that a healing
+    //      arb closing a 1–3% weekend gap for 0.3–0.9% stays profitable even paying the full
+    //      symmetric overlay — directional discrimination isn't needed to incentivize it.
+    //   2. §2.4 already carries a genuinely direction-aware RWA mechanism — the (default-off)
+    //      extreme-deviation circuit — which blocks ONLY deviation-worsening swaps and always
+    //      allows deviation-healing ones. Direction-awareness for RWA is deliberately scoped to
+    //      that circuit, not duplicated into the fee curve. See THREAT_MODEL.md §10.7 for the
+    //      full write-up.
     // ─────────────────────────────────────────────────────────────────────────────────────
     function _rwaFee(FeeInputs memory in_) private pure returns (uint24) {
         // Oracle unavailable (0 sentinel: reverting feed, non-positive answer, or in-hours staleness):
@@ -104,6 +123,8 @@ library FeeLogic {
         uint256 base = in_.marketOpen ? FeraConstants.RWA_FEE_INHOURS_PIPS : FeraConstants.RWA_FEE_OFFHOURS_PIPS;
 
         // devBps = |pool−oracle|/oracle in bps; overlay = DEV_SLOPE (20) pips per bp of deviation.
+        // Direction-agnostic by construction (see INTENTIONAL SYMMETRY note above) — `in_.isSell`
+        // is deliberately not consulted here.
         uint256 deviationBps = _absDeviationBps(in_.poolPriceX96, in_.oraclePriceX96);
         uint256 overlay = deviationBps * FeraConstants.RWA_DEV_SLOPE_PIPS_PER_BP;
 
