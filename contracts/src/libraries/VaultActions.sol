@@ -181,15 +181,12 @@ library VaultActions {
     ) public returns (uint256 amountOut) {
         // Same cooldown semantics as FeraVault.withdraw (see `cooldownExempt`'s NatSpec / Finding-2
         // hardening): an exempt address still waits its regime's JIT window + margin, never zero.
-        uint32 requiredDelay;
-        if (cooldownExempt[msg.sender]) {
-            uint32 jitWindow = p.regime == FeraTypes.Regime.MEME
-                ? FeraConstants.JIT_PENALTY_WINDOW_MEME
-                : FeraConstants.JIT_PENALTY_WINDOW_RWA;
-            requiredDelay = jitWindow + FeraConstants.EXEMPT_WITHDRAW_MARGIN_SEC;
-        } else {
-            requiredDelay = FeraConstants.DEPOSIT_COOLDOWN_SEC;
-        }
+        // Audit finding (Low): calls the SHARED `VaultMath.exemptWithdrawFloorSec` — the same helper
+        // `FeraVault._exemptWithdrawFloorSec` delegates to — instead of reimplementing the regime/
+        // JIT-window lookup inline, so this path cannot silently drift from `FeraVault.withdraw`.
+        uint32 requiredDelay = cooldownExempt[msg.sender]
+            ? VaultMath.exemptWithdrawFloorSec(p.regime)
+            : FeraConstants.DEPOSIT_COOLDOWN_SEC;
         if (block.timestamp < depositClock[msg.sender] + requiredDelay) {
             revert IFeraVault.CooldownActive();
         }

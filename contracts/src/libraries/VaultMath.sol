@@ -286,4 +286,17 @@ library VaultMath {
         if (sq > uint256(TickMath.MAX_SQRT_PRICE) - 1) sq = uint256(TickMath.MAX_SQRT_PRICE) - 1;
         return TickMath.getTickAtSqrtPrice(uint160(sq));
     }
+
+    /// @dev Finding-2 hardening: the shortest a `cooldownExempt` address may wait past its OWN last
+    ///      deposit before withdrawing — its regime's JIT-forfeiture window plus a fixed safety
+    ///      margin (see EXEMPT_WITHDRAW_MARGIN_SEC NatSpec), always well under DEPOSIT_COOLDOWN_SEC.
+    ///      Audit finding (Low): this is the SINGLE shared source of truth for that computation —
+    ///      called by both `FeraVault._exemptWithdrawFloorSec` (-> `withdraw`) and
+    ///      `VaultActions.withdrawSingle` directly — so the two withdrawal paths cannot silently
+    ///      drift apart if the JIT windows or the margin constant are ever revisited.
+    function exemptWithdrawFloorSec(FeraTypes.Regime regime) public pure returns (uint32) {
+        uint32 jitWindow =
+            regime == FeraTypes.Regime.MEME ? FeraConstants.JIT_PENALTY_WINDOW_MEME : FeraConstants.JIT_PENALTY_WINDOW_RWA;
+        return jitWindow + FeraConstants.EXEMPT_WITHDRAW_MARGIN_SEC;
+    }
 }

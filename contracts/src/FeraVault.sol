@@ -147,8 +147,9 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///         contracts/INDEX_VAULT_SPEC.md §12). Exemption is narrow and inert by default (empty
     ///         mapping, opt-in per address, owner/timelock-gated):
     ///           - `withdraw`/`withdrawSingle`: swaps the full `DEPOSIT_COOLDOWN_SEC` wait for a
-    ///             SHORTER but NON-ZERO floor (`_exemptWithdrawFloorSec` — the address's regime-JIT
-    ///             window + margin) past its OWN last deposit. Finding-2 hardening: a full bypass
+    ///             SHORTER but NON-ZERO floor (`VaultMath.exemptWithdrawFloorSec` — the address's
+    ///             regime-JIT window + margin, shared by BOTH withdrawal paths so they cannot drift
+    ///             apart — audit finding, low) past its OWN last deposit. Finding-2 hardening: a full bypass
     ///             would let an exempt address deposit-then-instantly-withdraw in one tx, forcing its
     ///             own mandatory fee checkpoint to land inside the JIT-forfeiture window it itself
     ///             just armed and donate its own fees away — this floor closes THAT self-inflicted
@@ -417,9 +418,9 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         returns (uint256 amount0, uint256 amount1)
     {
         // Finding-2 hardening: an exempt address still waits its regime's JIT window + margin past
-        // its OWN last deposit (see `_exemptWithdrawFloorSec` / EXEMPT_WITHDRAW_MARGIN_SEC NatSpec) —
-        // shorter than the full cooldown, but never zero, so it cannot harvest a JIT window it just
-        // armed itself.
+        // its OWN last deposit (see `_exemptWithdrawFloorSec` -> shared `VaultMath.exemptWithdrawFloorSec`
+        // / EXEMPT_WITHDRAW_MARGIN_SEC NatSpec) — shorter than the full cooldown, but never zero, so
+        // it cannot harvest a JIT window it just armed itself.
         uint256 requiredDelay =
             cooldownExempt[msg.sender] ? _exemptWithdrawFloorSec(id) : FeraConstants.DEPOSIT_COOLDOWN_SEC;
         if (block.timestamp < lastDepositTs[id][t][msg.sender] + requiredDelay) {
@@ -1039,11 +1040,12 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     /// @dev Finding-2 hardening: the shortest a `cooldownExempt` address may wait past its OWN last
     ///      deposit before withdrawing — its regime's JIT-forfeiture window plus a fixed safety
     ///      margin (see EXEMPT_WITHDRAW_MARGIN_SEC NatSpec), always well under DEPOSIT_COOLDOWN_SEC.
+    ///      Audit finding (Low): delegates to the SHARED `VaultMath.exemptWithdrawFloorSec` — the
+    ///      single source of truth also called directly by `VaultActions.withdrawSingle` — instead of
+    ///      reimplementing the regime/JIT-window lookup here, so the two withdrawal paths cannot
+    ///      silently drift apart if the JIT windows or margin constant are ever revisited.
     function _exemptWithdrawFloorSec(PoolId id) internal view returns (uint32) {
-        uint32 jitWindow = pools[id].regime == FeraTypes.Regime.MEME
-            ? FeraConstants.JIT_PENALTY_WINDOW_MEME
-            : FeraConstants.JIT_PENALTY_WINDOW_RWA;
-        return jitWindow + FeraConstants.EXEMPT_WITHDRAW_MARGIN_SEC;
+        return VaultMath.exemptWithdrawFloorSec(pools[id].regime);
     }
 
     /// @dev Generic min-interval guard against an arbitrary last-action timestamp (R-15).

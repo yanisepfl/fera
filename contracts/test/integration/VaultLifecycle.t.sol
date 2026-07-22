@@ -239,6 +239,29 @@ contract VaultLifecycleTest is Deployers {
         vault.withdraw(id, 0, shares, type(uint256).max, type(uint256).max);
     }
 
+    /// Audit finding (Low): FeraVault._exemptWithdrawFloorSec (used by `withdraw`) and
+    /// VaultActions.withdrawSingle used to hand-duplicate the SAME regime-JIT-window + margin
+    /// computation instead of sharing one helper -- consistent only by manual synchronization, one
+    /// missed future edit away from silently reopening Finding-2 in whichever path wasn't updated.
+    /// Proves `withdrawSingle` gates at the EXACT same second-precision boundary as `withdraw`
+    /// (EXEMPT_FLOOR), not merely "eventually similar" -- the two paths cannot have silently drifted.
+    function test_cooldownExempt_withdrawSingle_sharesExactFloorWith_withdraw() public {
+        vault.setCooldownExempt(address(this), true);
+        uint256 shares = vault.deposit(id, 0, 10e18, 10e18, 0);
+
+        // One second short of the shared exempt floor -- withdrawSingle must still revert, same as
+        // plain `withdraw` does at this exact boundary (test_cooldownExempt_blocksImmediateWithdraw_
+        // allowsAfterShortFloor uses the identical EXEMPT_FLOOR constant).
+        vm.warp(block.timestamp + EXEMPT_FLOOR - 1);
+        vm.expectRevert(IFeraVault.CooldownActive.selector);
+        vault.withdrawSingle(id, 0, shares, Currency.unwrap(currency0), 0);
+
+        // Clearing the floor by exactly one more second unblocks withdrawSingle too.
+        vm.warp(block.timestamp + 1);
+        uint256 outAmt = vault.withdrawSingle(id, 0, shares, Currency.unwrap(currency0), 0);
+        assertGt(outAmt, 0, "exempt address could not withdrawSingle after clearing the shared floor");
+    }
+
     function notOwnerForCooldownTest() internal returns (address) {
         return makeAddr("notOwnerCooldown");
     }
