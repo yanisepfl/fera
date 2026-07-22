@@ -230,8 +230,22 @@ library FeraConstants {
     /// its own accrued fees to whichever in-range LP (including an attacker's own co-located direct
     /// position) is present. Non-exempt addresses can never do this: DEPOSIT_COOLDOWN_SEC (3600s)
     /// already exceeds both JIT windows by construction, so their cooldown-gated withdrawal always
-    /// lands after their own JIT window has closed. This margin restores that same guarantee for
+    /// lands after THEIR OWN JIT window has closed. This margin restores that same guarantee for
     /// exempt addresses, at a shorter, regime-appropriate distance instead of the full hour.
+    ///
+    /// v3.5.1 CORRECTION (audit finding, medium): "restores that same guarantee" above is narrower
+    /// than it reads — it closes only the SELF-inflicted round trip this margin was built for (this
+    /// address's OWN deposit -> its OWN withdrawal). `FeraHook`'s JIT clock is keyed per (pool,
+    /// tranche, band), SHARED across every depositor and the keeper, not per-depositor
+    /// (THREAT_MODEL.md §10.1 "Vault self-interaction" / V2-3): a DIFFERENT depositor's ordinary
+    /// ratio-mint, or a keeper rebalance re-mint, can re-arm the same band after this margin has
+    /// already elapsed, so an exempt withdrawal can still land inside a window it did not itself
+    /// arm and forfeit fees — the SAME bounded, fee-only residual V2-3 already accepts for every
+    /// withdrawal, just reachable sooner here (this margin is sized to the JIT window itself,
+    /// unlike DEPOSIT_COOLDOWN_SEC which comfortably exceeds it). For MEME this is not only
+    /// adversarial: MEME_MIN_REBALANCE_INTERVAL_SEC exactly equals JIT_PENALTY_WINDOW_MEME, so
+    /// routine keeper cadence alone keeps a band's window "hot" roughly half the time. Never a
+    /// fund-safety issue either way — principal is never blocked or reduced (INV-1''/INV-11).
     uint32 internal constant EXEMPT_WITHDRAW_MARGIN_SEC = 600; // 10 min buffer past the JIT window
     /// PARAMS.md#DEPOSIT_TWAP_WINDOW_SEC (FROZEN v2). NAV-mint reference TWAP window.
     uint32 internal constant DEPOSIT_TWAP_WINDOW_SEC = 600; // 10 min

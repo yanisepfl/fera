@@ -359,6 +359,75 @@ contract JitAndVaultPoCTest is Deployers {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
+    // v3.5.1 (audit finding, medium) — `cooldownExempt`'s withdraw floor (`_exemptWithdrawFloorSec`)
+    // is anchored ONLY to the exempt address's OWN `lastDepositTs`. It fully closes THAT address's
+    // own deposit-then-instantly-withdraw round trip (Finding-2), but `FeraHook`'s JIT clock is keyed
+    // per (pool, tranche, band) — SHARED across every depositor and the keeper, not per-depositor.
+    // This proves the pre-fix NatSpec's "this floor closes that" / "restores that same guarantee"
+    // language overclaimed: an exempt address that waits out its OWN floor can still have its
+    // withdraw-time checkpoint forfeit fees because a DIFFERENT depositor's ordinary ratio-mint
+    // re-armed the same band afterward — the exact V2-3 "Vault self-interaction" residual
+    // (THREAT_MODEL.md §10.1), just reachable at the exempt address's shorter floor instead of the
+    // full DEPOSIT_COOLDOWN_SEC. This is a documentation/NatSpec fix (see FeraVault.sol's
+    // `cooldownExempt` NatSpec and FeraConstants.sol's `EXEMPT_WITHDRAW_MARGIN_SEC` NatSpec, plus
+    // THREAT_MODEL.md's new v3.5.1 addendum) -- the mechanism itself is the SAME already-accepted,
+    // bounded, fee-only V2-3 residual, so this test passes both before and after that doc fix; it
+    // exists to pin the real behavior the corrected NatSpec now describes, and to guard against a
+    // future "fix" that quietly re-introduces the false guarantee without addressing this residual.
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    function test_cooldownExempt_floorDoesNotProtect_againstThirdPartyReArm() public {
+        address indexVault = makeAddr("indexVault");
+        _fund(indexVault, 1_000e18);
+        vault.setCooldownExempt(indexVault, true);
+
+        // Seed so it is not a first deposit.
+        vm.prank(honest);
+        vault.deposit(id, 0, 200e18, 200e18, 0);
+
+        // indexVault deposits -- arms BOTH its own `lastDepositTs` (the exempt floor's anchor) AND
+        // the shared per-band JIT clock (the same bands honest already minted into).
+        vm.prank(indexVault);
+        uint256 shares = vault.deposit(id, 0, 100e18, 100e18, 0);
+
+        // Ordinary fee-generating flow.
+        for (uint256 i; i < 4; ++i) {
+            swap(pk, true, -2e18, "");
+            swap(pk, false, -2e18, "");
+        }
+
+        // Wait out indexVault's OWN exempt floor: regime JIT window + margin, past ITS OWN deposit.
+        // Per the pre-fix NatSpec ("this floor closes that" / "restores that same guarantee") this
+        // should be enough for indexVault to withdraw clear of any JIT-forfeiture window.
+        vm.warp(block.timestamp + FeraConstants.JIT_PENALTY_WINDOW_MEME + FeraConstants.EXEMPT_WITHDRAW_MARGIN_SEC + 1);
+
+        // A THIRD PARTY's ordinary, honest, ratio-matched deposit into the SAME tranche re-arms the
+        // SHARED band clock. indexVault's own floor computation (anchored only to its OWN deposit)
+        // never sees this -- and never could, by construction.
+        vm.prank(bob);
+        vault.deposit(id, 0, 5e18, 5e18, 0);
+
+        // Fresh flow lands INSIDE the window bob's deposit just (re)armed.
+        for (uint256 i; i < 4; ++i) {
+            swap(pk, true, -2e18, "");
+            swap(pk, false, -2e18, "");
+        }
+
+        // indexVault's OWN floor is satisfied (it waited well past its own deposit) -- withdraw
+        // succeeds (never blocked, INV-1''/INV-11), but its mandatory checkpoint pokes bands that
+        // are still inside the window BOB armed a moment ago, and forfeits.
+        vm.recordLogs();
+        vm.prank(indexVault);
+        vault.withdraw(id, 0, shares, 0, 0);
+        (uint256 f0, uint256 f1, uint256 n) = _forfeited(vm.getRecordedLogs());
+
+        emit log_named_uint("exempt withdraw forfeit events despite satisfied exempt floor", n);
+        emit log_named_decimal_uint("exempt withdraw forfeited token0", f0, 18);
+        emit log_named_decimal_uint("exempt withdraw forfeited token1", f1, 18);
+        assertGt(n, 0, "expected a JIT forfeiture even though indexVault's own exempt floor had elapsed");
+        assertGt(f0 + f1, 0, "expected nonzero forfeited fees from the third-party-armed window");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
     // R-12 — first-depositor / donation inflation is DEFUSED (MINIMUM_LIQUIDITY lock + liquidity-
     // based share price). A raw token donation to the Vault does not move share price.
     // ═══════════════════════════════════════════════════════════════════════════════════════
