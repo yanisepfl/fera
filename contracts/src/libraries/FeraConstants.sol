@@ -148,7 +148,15 @@ library FeraConstants {
     /// TODO(spec-freeze): PARAMS.md#MEME_VOL_LAMBDA_UP/_DOWN, #MEME_FLOW_LAMBDA_ATTACK/_RELEASE —
     ///   [PROVISIONAL] (DM-6, gated on V3 swap-frequency). NON-ZERO conservative launch values.
     uint256 internal constant MEME_VOL_LAMBDA_UP = 45_875; // 0.70·2^16 — fast attack (~2-swap half-life)
-    uint256 internal constant MEME_VOL_LAMBDA_DOWN = 64_225; // 0.98·2^16 — slow release (~34-swap half-life)
+    /// 0.98·2^16 — slow release (~34-swap half-life). INTENTIONALLY the same value reused below as
+    /// MEME_FLOW_LAMBDA_RELEASE (derived from this constant, not a coincidental duplicate literal):
+    /// both are "how slowly does this EWMA decay back toward baseline" rates, and the v3.5 fix reused
+    /// this already-vetted slow-release half-life for flow's release side rather than invent a second
+    /// one — see the NatSpec on MEME_FLOW_LAMBDA_RELEASE below for the full reasoning. If you retune
+    /// this value, MEME_FLOW_LAMBDA_RELEASE moves with it automatically; if that propagation is NOT
+    /// desired for a given retune, decouple it explicitly (give it its own literal) as a deliberate,
+    /// reviewed change — do not let it happen silently.
+    uint256 internal constant MEME_VOL_LAMBDA_DOWN = 64_225;
     /// v3.5 FIX (audit finding, toxic-sell-fee gaming): the signed-flow EWMA now uses an asymmetric
     /// ratchet instead of one symmetric decay — but UNLIKE vol, only the RELEASE (recovery-via-buying)
     /// side is slowed; the ATTACK (fresh-selling) side is left at the ORIGINAL, already-tuned decay
@@ -164,7 +172,17 @@ library FeraConstants {
     /// single non-adversarial sell swing flowEwmaX 3× harder than before and spuriously tripped the
     /// surcharge on the very next unrelated swap, e.g. the vault's own fee-routing self-swap).
     uint256 internal constant MEME_FLOW_LAMBDA_ATTACK = 58_982; // 0.90·2^16 — UNCHANGED reactivity to fresh selling
-    uint256 internal constant MEME_FLOW_LAMBDA_RELEASE = 64_225; // 0.98·2^16 — slow release toward positive
+    /// Slow release toward positive. INTENTIONALLY derived from (== by design, not by coincidence)
+    /// MEME_VOL_LAMBDA_DOWN: both estimators need a "slow enough to resist a single offsetting swap,
+    /// but still track a genuine reversal over ~34 swaps" release rate, and vol's DOWN constant was
+    /// already tuned to exactly that shape — reusing it here avoids inventing and separately
+    /// calibrating a second identical-purpose constant. This is NOT the same situation as
+    /// MEME_FLOW_LAMBDA_ATTACK, which deliberately stayed OFF vol's UP constant (see that NatSpec) —
+    /// the attack/release sides were evaluated independently and only this one pair was found to
+    /// warrant sharing. Compiler-enforced via direct reference so the two constants cannot silently
+    /// drift apart: retuning MEME_VOL_LAMBDA_DOWN moves this too; give this its own literal instead if
+    /// a future retune should NOT propagate.
+    uint256 internal constant MEME_FLOW_LAMBDA_RELEASE = MEME_VOL_LAMBDA_DOWN;
     /// PARAMS.md#MEME_ONE (immutable). Fixed-point unit for the Q16 λ.
     uint256 internal constant MEME_ONE = 65_536; // 2^16
     /// PARAMS.md#MEME_VOL_CLAMP (immutable). Overflow guard on volEwmaX (σ_max ≈ 131072 ticks ≫ ceil).
