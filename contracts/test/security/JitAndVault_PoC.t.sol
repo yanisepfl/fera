@@ -316,6 +316,49 @@ contract JitAndVaultPoCTest is Deployers {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
+    // Finding-3 (v3.5) — unlike a normal depositor above, a `cooldownExempt` address (e.g. a future
+    // Index/aggregator, contracts/INDEX_VAULT_SPEC.md §12) never has its FeraShare.transferLockUntil
+    // armed on deposit AT ALL — `deposit()` skips the `setTransferLock` call for it entirely. This is
+    // what lets `emergencyRedeemInKind` (a raw `FeraShare.transfer`, not `burn`) move a member's
+    // shares the instant the exemption is granted; an armed lock would otherwise silently brick that
+    // path. THREAT_MODEL.md §10.2 carries the matching v3.5 addendum (proof for that doc claim).
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    function test_cooldownExempt_neverArmsTransferLock_nonExemptStillLocked() public {
+        address indexVault = makeAddr("indexVault");
+        _fund(indexVault, 1_000e18);
+        vault.setCooldownExempt(indexVault, true);
+
+        // seed so it is not a first deposit
+        vm.prank(honest);
+        vault.deposit(id, 0, 100e18, 100e18, 0);
+
+        IFeraShare share = IFeraShare(vault.shareToken(id, 0));
+
+        // Exempt address: deposit skips arming the lock entirely (Finding-3).
+        vm.prank(indexVault);
+        uint256 exemptShares = vault.deposit(id, 0, 50e18, 50e18, 0);
+        assertEq(share.transferLockUntil(indexVault), 0, "exempt address must never have its transfer lock armed");
+
+        // ...so its fresh shares are transferable IMMEDIATELY, with no cooldown wait — exactly what
+        // an emergencyRedeemInKind-style raw transfer would need the moment the exemption is granted.
+        vm.prank(indexVault);
+        share.transfer(bob, exemptShares);
+        assertEq(share.balanceOf(bob), exemptShares, "exempt address's fresh shares must be transferable immediately");
+
+        // Non-exempt address, same block: deposit DOES still arm the lock (contrast) — the exemption
+        // is narrow and per-address, not a global relaxation of V2-2's evasion fix.
+        vm.prank(attacker);
+        uint256 nonExemptShares = vault.deposit(id, 0, 50e18, 50e18, 0);
+        assertGt(
+            share.transferLockUntil(attacker), block.timestamp, "non-exempt deposit must still arm the transfer lock"
+        );
+
+        vm.prank(attacker);
+        vm.expectRevert(IFeraShare.TransferLocked.selector);
+        share.transfer(bob, nonExemptShares);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
     // R-12 — first-depositor / donation inflation is DEFUSED (MINIMUM_LIQUIDITY lock + liquidity-
     // based share price). A raw token donation to the Vault does not move share price.
     // ═══════════════════════════════════════════════════════════════════════════════════════
