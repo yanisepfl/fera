@@ -24,9 +24,7 @@ import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -625,25 +623,10 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         // true by convention.
         address feedToSet = oracleFeed;
         if (regime == FeraTypes.Regime.RWA) {
-            if (oracleFeed == address(0) || !approvedRwaFeeds[oracleFeed]) revert RwaFeedNotApproved();
-            // v3.5 NEW (audit finding, open-kritt): unlike MEME (no oracle reference exists for a
-            // brand-new memecoin, so nothing to check the initial price against — an accepted
-            // tradeoff of permissionless creation, see OPEN_DECISIONS.md#OD-20), RWA DOES have a
-            // real, curated price reference at creation time. Without this check, a caller could
-            // initialize an RWA pool's `sqrtPriceX96` arbitrarily far from the approved oracle,
-            // becoming the first depositor at a self-chosen basis that also seeds every later
-            // depositor's NAV pricing. `p.oracleFeed` is set BELOW the assignment it needs, so set
-            // it here first and reuse `VaultMath.tryReadOracle` — the single shared oracle-read path
-            // — rather than re-deriving a second Chainlink read.
-            p.oracleFeed = feedToSet;
-            (uint256 oraclePrice, bool ok) = VaultMath.tryReadOracle(p);
-            if (!ok) revert OracleUnavailable();
-            if (
-                VaultMath.absDeviationBps(VaultMath.priceFromSqrt(sqrtPriceX96), oraclePrice)
-                    > FeraConstants.RWA_ORACLE_RECENTER_HYSTERESIS_BPS
-            ) {
-                revert RwaInitPriceOffOracle();
-            }
+            // Audit finding (open-kritt, OPEN_DECISIONS.md#OD-21 RWA half): feed-registry check +
+            // initial sqrtPriceX96 sanity vs. the approved oracle — see
+            // VaultRwa.requireRwaInitPriceSane's NatSpec.
+            VaultRwa.requireRwaInitPriceSane(p, approvedRwaFeeds, feedToSet, sqrtPriceX96);
         } else {
             feedToSet = address(0);
         }
@@ -688,13 +671,10 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         string calldata symbol_
     ) internal {
         TrancheState storage tr = tranches[id][t];
-        tr.exists = true;
-        tr.share = _cloneShare(id, key, name_, symbol_, t);
         (int24 baseHalf, int24 limitHalf, uint16 idle) = _tierDefaults(tier);
         tierConfig[id][t] = TierConfig({tier: tier, baseHalfTicks: baseHalf, limitHalfTicks: limitHalf, idleBps: idle, set: true});
         int24 effHalf = _effectiveHalfWidth(id, baseHalf);
-        (int24 lo, int24 hi) = _bandAround(tick, effHalf, spacing);
-        _pushBand(tr, lo, hi, true, uint16(FeraConstants.BPS)); // BASE band
+        VaultOps.initBaseLimitTranche(tr, shareImplementation, id, t, tick, effHalf, spacing, key, name_, symbol_);
     }
 
     function _tierDefaults(uint8 tier) internal pure returns (int24 baseHalf, int24 limitHalf, uint16 idle) {
@@ -1318,70 +1298,9 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         return FullMath.mulDiv(amount0, priceX96, 1 << 96) + amount1;
     }
 
-    function _bandAround(int24 center, int24 half, int24 spacing) internal pure returns (int24 lower, int24 upper) {
-        lower = _floorTick(center - half, spacing);
-        upper = _ceilTick(center + half, spacing);
-        int24 min = TickMath.minUsableTick(spacing);
-        int24 max = TickMath.maxUsableTick(spacing);
-        if (lower < min) lower = min;
-        if (upper > max) upper = max;
-    }
-
-    function _floorTick(int24 tick, int24 spacing) internal pure returns (int24) {
-        // slither-disable-next-line weak-prng — tick-spacing alignment (modulo), not randomness.
-        int24 r = tick % spacing;
-        if (r < 0) r += spacing;
-        return tick - r;
-    }
-
-    function _ceilTick(int24 tick, int24 spacing) internal pure returns (int24) {
-        int24 fl = _floorTick(tick, spacing);
-        return fl == tick ? tick : fl + spacing;
-    }
-
-    function _pushBand(TrancheState storage tr, int24 lower, int24 upper, bool principal, uint16 weightBps) internal {
-        tr.bands.push(
-            Band({tickLower: lower, tickUpper: upper, liquidity: 0, isPrincipal: principal, weightBps: weightBps, isLimit: false})
-        );
-    }
 
     function _refund(Currency c, address to, uint256 amount) internal {
         if (amount != 0) IERC20(Currency.unwrap(c)).safeTransfer(to, amount);
-    }
-
-    /// @dev Audit finding (open-kritt / OPEN_DECISIONS.md#OD-22): `name_`/`symbol_` are fully
-    ///      caller-chosen with no validation, letting a permissionless `createBaseLimitPool` caller
-    ///      brand the cloned share tokens with a deceptive, unrelated name (e.g. "USD Coin"). This
-    ///      cannot be fully closed on-chain (nothing stops a caller from ALSO deploying a fake
-    ///      underlying ERC20 with fraudulent metadata) but the far cheaper, far more common attack —
-    ///      slapping an unrelated deceptive label on the FERA WRAPPER itself, regardless of what the
-    ///      real underlying tokens are — is closed by appending the pool's OWN on-chain token symbols
-    ///      (read directly from the currencies, never caller-supplied) so the share's real composition
-    ///      is always visible alongside whatever name the caller chose, in every wallet/explorer.
-    function _cloneShare(PoolId id, PoolKey calldata key, string calldata name_, string calldata symbol_, uint8 t)
-        internal
-        returns (address share)
-    {
-        share = Clones.clone(shareImplementation);
-        string memory pair = string.concat(_tokenSymbol(Currency.unwrap(key.currency0)), "/", _tokenSymbol(Currency.unwrap(key.currency1)));
-        string memory fullName = string.concat(name_, " (", pair, ")");
-        IFeraShare(share).initialize(
-            address(this),
-            PoolId.unwrap(id),
-            t,
-            t == 0 ? string.concat(fullName, " Core") : string.concat(fullName, " Anchor"),
-            t == 0 ? string.concat(symbol_, "-C") : string.concat(symbol_, "-A")
-        );
-    }
-
-    /// @dev Best-effort ERC-20 `symbol()` read for `_cloneShare`'s anti-impersonation suffix — MUST
-    ///      NEVER revert `createBaseLimitPool` over a nonstandard/missing-metadata token.
-    function _tokenSymbol(address token) internal view returns (string memory) {
-        try IERC20Metadata(token).symbol() returns (string memory s) {
-            return bytes(s).length == 0 ? "TKN" : s;
-        } catch {
-            return "TKN";
-        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════

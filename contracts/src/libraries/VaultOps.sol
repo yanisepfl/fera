@@ -7,6 +7,7 @@ import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import {SqrtPriceMath} from "@uniswap/v4-core/src/libraries/SqrtPriceMath.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {ModifyLiquidityParams, SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
@@ -14,10 +15,13 @@ import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmo
 import {CurrencySettler} from "@uniswap/v4-core/test/utils/CurrencySettler.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 import {IFeraHook} from "../interfaces/IFeraHook.sol";
 import {IFeraVault} from "../interfaces/IFeraVault.sol";
+import {IFeraShare} from "../interfaces/IFeraShare.sol";
 import {IAggregatorV3} from "../interfaces/IAggregatorV3.sol";
 import {FeraTypes} from "./FeraTypes.sol";
 import {FeraConstants} from "./FeraConstants.sol";
@@ -764,5 +768,79 @@ library VaultOps {
     function _ceilTick(int24 tick, int24 spacing) internal pure returns (int24) {
         int24 fl = _floorTick(tick, spacing);
         return fl == tick ? tick : fl + spacing;
+    }
+
+    /// @dev EIP-170 size-split (moved out of FeraVault.sol to stay under the 24,576-byte runtime
+    ///      limit — the try/catch + string-concat machinery below is disproportionately expensive in
+    ///      bytecode terms). `shareImplementation` is a plain FeraVault state variable with no
+    ///      natural storage-reference shape to pass instead, so it's threaded through as a value.
+    /// @dev Audit finding (open-kritt / OPEN_DECISIONS.md#OD-22): `name_`/`symbol_` are fully
+    ///      caller-chosen with no validation, letting a permissionless `createBaseLimitPool` caller
+    ///      brand the cloned share tokens with a deceptive, unrelated name (e.g. "USD Coin"). This
+    ///      cannot be fully closed on-chain (nothing stops a caller from ALSO deploying a fake
+    ///      underlying ERC20 with fraudulent metadata) but the far cheaper, far more common attack —
+    ///      slapping an unrelated deceptive label on the FERA WRAPPER itself, regardless of what the
+    ///      real underlying tokens are — is closed by appending the pool's OWN on-chain token symbols
+    ///      (read directly from the currencies, never caller-supplied) so the share's real composition
+    ///      is always visible alongside whatever name the caller chose, in every wallet/explorer.
+    function cloneShare(
+        address shareImplementation,
+        PoolId id,
+        PoolKey memory key,
+        string memory name_,
+        string memory symbol_,
+        uint8 t
+    ) public returns (address share) {
+        share = Clones.clone(shareImplementation);
+        string memory pair =
+            string.concat(_tokenSymbol(Currency.unwrap(key.currency0)), "/", _tokenSymbol(Currency.unwrap(key.currency1)));
+        string memory fullName = string.concat(name_, " (", pair, ")");
+        IFeraShare(share).initialize(
+            address(this),
+            PoolId.unwrap(id),
+            t,
+            t == 0 ? string.concat(fullName, " Core") : string.concat(fullName, " Anchor"),
+            t == 0 ? string.concat(symbol_, "-C") : string.concat(symbol_, "-A")
+        );
+    }
+
+    /// @dev Best-effort ERC-20 `symbol()` read for `cloneShare`'s anti-impersonation suffix — MUST
+    ///      NEVER revert `createBaseLimitPool` over a nonstandard/missing-metadata token.
+    function _tokenSymbol(address token) internal view returns (string memory) {
+        try IERC20Metadata(token).symbol() returns (string memory s) {
+            return bytes(s).length == 0 ? "TKN" : s;
+        } catch {
+            return "TKN";
+        }
+    }
+
+    /// @dev EIP-170 size-split (moved out of FeraVault.sol's `_initBaseLimitTranche`, its only
+    ///      caller, to stay under the 24,576-byte runtime limit). Clones the share, then pushes the
+    ///      single wide BASE band (weight 100% — the first deposit fills it; IDLE reserve is
+    ///      established afterwards by `skimIdle`). `effHalf` is computed by the caller (needs
+    ///      `VaultMath.effectiveHalfWidth`, which itself depends on this library's `Ctx` type —
+    ///      passing the already-computed value here avoids a circular library import).
+    function initBaseLimitTranche(
+        TrancheState storage tr,
+        address shareImplementation,
+        PoolId id,
+        uint8 t,
+        int24 tick,
+        int24 effHalf,
+        int24 spacing,
+        PoolKey memory key,
+        string memory name_,
+        string memory symbol_
+    ) public {
+        tr.exists = true;
+        tr.share = cloneShare(shareImplementation, id, key, name_, symbol_, t);
+        (int24 lo, int24 hi) = _bandAround(tick, effHalf, spacing);
+        _pushBand(tr, lo, hi, true, uint16(FeraConstants.BPS)); // BASE band
+    }
+
+    function _pushBand(TrancheState storage tr, int24 lower, int24 upper, bool principal, uint16 weightBps) internal {
+        tr.bands.push(
+            Band({tickLower: lower, tickUpper: upper, liquidity: 0, isPrincipal: principal, weightBps: weightBps, isLimit: false})
+        );
     }
 }

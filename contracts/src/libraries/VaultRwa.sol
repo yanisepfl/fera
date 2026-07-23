@@ -142,4 +142,31 @@ library VaultRwa {
     function _requireIntervalSince(uint64 last, uint32 minInterval) internal view {
         if (last != 0 && block.timestamp - last < minInterval) revert IFeraVault.RebalanceTooSoon();
     }
+
+    /// @dev EIP-170 size-split (moved out of FeraVault.sol's `createBaseLimitPool` to stay under the
+    ///      24,576-byte runtime limit). Audit finding (open-kritt / OPEN_DECISIONS.md#OD-21, RWA
+    ///      half): unlike MEME (no oracle reference exists for a brand-new memecoin — accepted
+    ///      tradeoff of permissionless creation), RWA DOES have a real, curated price reference at
+    ///      creation time. Without this check, a caller could initialize an RWA pool's `sqrtPriceX96`
+    ///      arbitrarily far from the approved oracle, becoming the first depositor at a self-chosen
+    ///      basis that also seeds every later depositor's NAV pricing. Sets `p.oracleFeed` so
+    ///      `VaultMath.tryReadOracle` (the single shared oracle-read path) can read it; the caller
+    ///      re-sets the same field again right after, harmlessly.
+    function requireRwaInitPriceSane(
+        PoolInfo storage p,
+        mapping(address => bool) storage approvedRwaFeeds,
+        address oracleFeed,
+        uint160 sqrtPriceX96
+    ) public {
+        if (oracleFeed == address(0) || !approvedRwaFeeds[oracleFeed]) revert IFeraVault.RwaFeedNotApproved();
+        p.oracleFeed = oracleFeed;
+        (uint256 oraclePrice, bool ok) = VaultMath.tryReadOracle(p);
+        if (!ok) revert IFeraVault.OracleUnavailable();
+        if (
+            VaultMath.absDeviationBps(VaultMath.priceFromSqrt(sqrtPriceX96), oraclePrice)
+                > FeraConstants.RWA_ORACLE_RECENTER_HYSTERESIS_BPS
+        ) {
+            revert IFeraVault.RwaInitPriceOffOracle();
+        }
+    }
 }
