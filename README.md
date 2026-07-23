@@ -34,36 +34,31 @@ flowchart LR
 *Three layers; the frontend reads only through the API and writes only by sending wallet
 transactions to chain.* **Honesty note:** the contracts are feature-complete but **not deployed
 yet** — today the "live" API is a standalone GeckoTerminal-backed dev server (every vault field
-`vaultLive:false`) and write paths are mocked. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full, illustrated map.
+`vaultLive:false`) and write paths are mocked.
 
 ## Documentation
 
 **Read the docs: [`docs/gitbook/`](docs/gitbook/README.md)** — the canonical, GitBook-synced
-documentation set. Start with the [Introduction](docs/gitbook/README.md) and
-[What is FERA?](docs/gitbook/what-is-fera.md).
-
-**System architecture (visual): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** — an illustrated
-map of the whole system (contracts, off-chain backend, frontend) with sequence and flow diagrams for
-every money path. The best single starting point for newcomers and auditors.
+documentation set, and the only documentation kept in this public repo. Start with the
+[Introduction](docs/gitbook/README.md) and [What is FERA?](docs/gitbook/what-is-fera.md).
+Deeper internal specs, audit reports, and deployment runbooks are kept privately by the team.
 
 | If you are… | Read |
 |-------------|------|
 | A liquidity provider | [LP guide](docs/gitbook/lp-guide.md), [How the fee works](docs/gitbook/how-fees-work.md), [Rewards & vesting](docs/gitbook/rewards-and-vesting.md), [Risks](docs/gitbook/risks.md) |
 | Curious about the token | [Emissions & tokenomics](docs/gitbook/emissions-and-tokenomics.md), [Transparency](docs/gitbook/transparency.md) |
-| Evaluating safety | [Security](docs/gitbook/security.md), and the reports in [`security/`](security/) |
+| Evaluating safety | [Security](docs/gitbook/security.md) |
 | A developer / integrator | [Developers](docs/gitbook/developers.md) |
 
 ## Repository layout
 
 | Path | Contents |
 |------|----------|
-| [`docs/gitbook/`](docs/gitbook/README.md) | The documentation set (GitBook-synced via `SUMMARY.md`). |
-| `docs/` | Reference specs: [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) (visual system map), `MASTER_SPEC.md`, `mechanism/` (fee math + params + sims), `VAULT_ARCHITECTURE.md`, `CHAIN.md`, `RISK_REGISTER.md`, `deployment/` guides. |
-| `contracts/` | Foundry project — the v4 hook, vault, token, emissions, staking, treasury. See `contracts/SETUP.md`. |
+| [`docs/gitbook/`](docs/gitbook/README.md) | The public documentation set (GitBook-synced via `SUMMARY.md`). |
+| `docs/mechanism/`, `docs/research/` | Runnable fee-math sims and backtest data supporting the docs. |
+| `contracts/` | Foundry project — the v4 hook, vault, token, emissions, staking, treasury. |
 | `backend/` | Ponder indexer, REST/JSON API, the deterministic weekly emissions pipeline, and keepers. |
-| `frontend/` | Next.js app + design system (`frontend/DESIGN.md`). |
-| `security/` | The security review reports (summarized in the docs' Security page). |
+| `frontend/` | Next.js app. |
 | `pressure-test/harnesses/` | Runnable validation / attack simulation scripts. |
 
 ## Design invariants
@@ -77,8 +72,6 @@ every money path. The best single starting point for newcomers and auditors.
    activity, not a subsidy.
 5. **No upgradeable proxies on money paths.** Parameters are immutable or behind a 48-hour timelock.
 
-The full, testable list is in [`docs/MASTER_SPEC.md`](docs/MASTER_SPEC.md).
-
 ## Build
 
 ```bash
@@ -89,8 +82,7 @@ cd contracts && git submodule update --init --recursive && forge build && forge 
 cd backend && npm run typecheck && npm run pipeline:dryrun
 ```
 
-See [`docs/gitbook/developers.md`](docs/gitbook/developers.md) and `contracts/SETUP.md` for the
-full workflow, and `docs/deployment/DEPLOYMENT_GUIDE.md` for deployment.
+See [`docs/gitbook/developers.md`](docs/gitbook/developers.md) for the full workflow.
 
 ## A note on honesty
 

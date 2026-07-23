@@ -1,8 +1,7 @@
 # How the dynamic fee works
 
 This page explains the mechanism behind FERA's fee, the part that makes it different from a plain
-pool. It is the reader's version of the frozen mathematical spec
-([`docs/mechanism/MECHANISM_SPEC.md`](../mechanism/MECHANISM_SPEC.md)), with the actual numbers but
+pool. It is the reader's version of the frozen mathematical spec, with the actual numbers but
 without the on-chain bit-packing. Every value here is a fixed protocol constant.
 
 The one rule that governs everything: **the fee is set per swap, and the swap never reverts because

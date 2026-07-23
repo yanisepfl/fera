@@ -1,8 +1,7 @@
 # Risks: read this before you deposit
 
 Providing liquidity on FERA can lose you money. This page is the honest list of how. None of it is
-hidden in fine print; it's here because you should decide with it in front of you. The
-[Risk Register](../RISK_REGISTER.md) tracks these and more at the engineering level.
+hidden in fine print; it's here because you should decide with it in front of you.
 
 ## No guaranteed yield
 
