@@ -64,6 +64,32 @@ interface IReentrancyVictim {
     function onTokenReceived() external;
 }
 
+/// @dev "Lying balance" fake token (OPEN_DECISIONS.md#OD-23): `balanceOf` always reports an
+///      arbitrary, caller-set value with ZERO real backing — no mint ever happened, transfer is a
+///      no-op success. Models a throwaway contract an attacker deploys purely to fool
+///      RevenueDistributor's `balanceOf(this) >= _accounted[token] + amount` guard for ITS OWN
+///      (fake) token namespace — the guard is only as honest as `token` itself for a token nobody
+///      legitimate would ever `pull()`.
+contract LyingBalanceERC20 {
+    uint256 public fakeBalance;
+
+    constructor(uint256 fakeBalance_) {
+        fakeBalance = fakeBalance_;
+    }
+
+    function balanceOf(address) external view returns (uint256) {
+        return fakeBalance;
+    }
+
+    function transfer(address, uint256) external pure returns (bool) {
+        return true;
+    }
+
+    function transferFrom(address, address, uint256) external pure returns (bool) {
+        return true;
+    }
+}
+
 contract CallbackERC20 is ERC20 {
     address public callbackTarget;
     bool public reenterOn;

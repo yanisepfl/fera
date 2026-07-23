@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {RevenueDistributor} from "../../src/RevenueDistributor.sol";
 import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol";
 import {FeraConstants} from "../../src/libraries/FeraConstants.sol";
-import {MintableERC20, ReturnsFalseERC20, CallbackERC20, PullReenterer} from "../utils/Mocks.sol";
+import {MintableERC20, ReturnsFalseERC20, CallbackERC20, PullReenterer, LyingBalanceERC20} from "../utils/Mocks.sol";
 
 /// @notice INV-10 — RevenueDistributor splits every inflow EXACTLY 50/25/25 (stakers/treasury/ops);
 ///         no rounding dust escapes accounting. Plus malicious-ERC20 policy (SafeERC20) and CEI.
@@ -128,6 +128,66 @@ contract RevenueDistributorTest is Test {
                 + dist.pending(treasury, address(token)) + dist.pending(ops, address(token));
             assertLe(sigmaPending, token.balanceOf(address(dist)), "sum(pending) exceeded real balance (R-22)");
         }
+    }
+
+    // ── OD-23: a fake token's fabricated credit must never contaminate a REAL token's accounting ──
+
+    /// OPEN_DECISIONS.md#OD-23, "ACCEPTED, isolated per-token, no cross-contamination" — proven
+    /// here rather than left as verbal reasoning. A throwaway token whose `balanceOf` always lies
+    /// (reports an arbitrary large value with zero real backing) fools the R-22 guard for ITS OWN
+    /// namespace, but `_pending`/`_accounted` are keyed per-token — fuzzes the fake token's lied
+    /// balance and credited amount, a REAL token's own independent revenue amount, and the ORDER
+    /// the two are notified in, and asserts the real token's pending balances are bit-for-bit
+    /// unaffected by the fake credit, in either order.
+    function testFuzz_OD23_fakeTokenCreditNeverContaminatesRealToken(
+        uint256 fakeReportedBalance,
+        uint256 fakeAmount,
+        uint256 realAmount,
+        bool fakeFirst
+    ) public {
+        // Capped at 1e30 (~1000x the entire 900M-FERA max supply at 18 decimals) — comfortably
+        // beyond any real-world amount while staying well under the ~1.15e73 threshold where the
+        // contract's OWN internal `amount * BPS` multiplication would overflow uint256 on its own
+        // (a separate, already-accepted "checked-arith reverts on an astronomical, physically
+        // unreachable input" class — see OPEN_DECISIONS.md#OD-16 — not what OD-23 is about).
+        fakeReportedBalance = bound(fakeReportedBalance, 1, 1e30);
+        fakeAmount = bound(fakeAmount, 1, fakeReportedBalance);
+        realAmount = bound(realAmount, 1, 1e30);
+
+        LyingBalanceERC20 fakeToken = new LyingBalanceERC20(fakeReportedBalance);
+
+        if (fakeFirst) {
+            dist.notifyRevenue(address(fakeToken), fakeAmount);
+        }
+
+        token.mint(address(dist), realAmount);
+        dist.notifyRevenue(address(token), realAmount);
+
+        if (!fakeFirst) {
+            dist.notifyRevenue(address(fakeToken), fakeAmount);
+        }
+
+        (uint256 es, uint256 et, uint256 eo) = (
+            (realAmount * FeraConstants.REV_STAKERS_BPS) / FeraConstants.BPS,
+            (realAmount * FeraConstants.REV_TREASURY_BPS) / FeraConstants.BPS,
+            realAmount - (realAmount * FeraConstants.REV_STAKERS_BPS) / FeraConstants.BPS
+                - (realAmount * FeraConstants.REV_TREASURY_BPS) / FeraConstants.BPS
+        );
+        assertEq(dist.pending(stakers, address(token)), es, "fake credit contaminated real token (stakers)");
+        assertEq(dist.pending(treasury, address(token)), et, "fake credit contaminated real token (treasury)");
+        assertEq(dist.pending(ops, address(token)), eo, "fake credit contaminated real token (ops)");
+        assertEq(
+            dist.pending(stakers, address(token)) + dist.pending(treasury, address(token))
+                + dist.pending(ops, address(token)),
+            realAmount,
+            "real token accounting no longer conserves exactly"
+        );
+
+        // And the fake token's OWN (fabricated) credit is real only within its own namespace —
+        // pulling it is a hollow, self-contained event, not something that drains any real asset.
+        uint256 fakeSum = dist.pending(stakers, address(fakeToken)) + dist.pending(treasury, address(fakeToken))
+            + dist.pending(ops, address(fakeToken));
+        assertEq(fakeSum, fakeAmount, "fake token's own split still conserves (isolated bookkeeping)");
     }
 
     // ── malicious-ERC20 policy ───────────────────────────────────────────────────────────────
