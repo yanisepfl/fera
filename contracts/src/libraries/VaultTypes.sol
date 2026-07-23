@@ -58,5 +58,9 @@ struct PoolInfo {
     bool initialized;
     bool holiday; // keeper holiday flag — force-closes regardless of schedule/flag (mirrors to hook)
     bool quoteIsToken0; // v3.1 unified fee-routing (§9): which side is the liquid QUOTE asset. Immutable.
+    uint64 createdAt; // v3.6 (OD-24): block.timestamp at createBaseLimitPool — deliberately NOT derived
+        // from the hook's own oracle state (which ordinary swap activity perturbs), so the deposit
+        // gate's shallow-history check reflects genuine wall-clock pool age, not "time since the
+        // last oracle checkpoint freeze" (a swap-perturbable, much noisier signal).
     uint256 scheduleBitmap; // on-chain UTC weekly calendar (168 bits = hour-of-week; see _isMarketOpen)
 }

@@ -327,6 +327,8 @@ contract Phase2FuzzTest is Deployers {
 
         vm.prank(alice);
         uint256 aliceSh = vault.deposit(memeId, 0, dA0, dA1, 0);
+        // OD-24: non-first deposits require the pool to be past the shallow-oracle-history window.
+        vm.warp(block.timestamp + FeraConstants.DEPOSIT_TWAP_WINDOW_SEC + 1);
         vm.prank(bob);
         uint256 bobSh = vault.deposit(memeId, 0, dB0, dB1, 0);
         assertGt(aliceSh, 0, "alice got no shares");

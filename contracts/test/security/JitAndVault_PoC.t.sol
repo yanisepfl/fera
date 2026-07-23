@@ -289,6 +289,8 @@ contract JitAndVaultPoCTest is Deployers {
         vm.prank(honest);
         vault.deposit(id, 0, 100e18, 100e18, 0);
 
+        // OD-24: non-first deposits require the pool to be past the shallow-oracle-history window.
+        vm.warp(block.timestamp + FeraConstants.DEPOSIT_TWAP_WINDOW_SEC + 1);
         vm.prank(attacker);
         uint256 aShares = vault.deposit(id, 0, 50e18, 50e18, 0);
 
@@ -339,6 +341,9 @@ contract JitAndVaultPoCTest is Deployers {
         // seed so it is not a first deposit
         vm.prank(honest);
         vault.deposit(id, 0, 100e18, 100e18, 0);
+
+        // OD-24: non-first deposits require the pool to be past the shallow-oracle-history window.
+        vm.warp(block.timestamp + FeraConstants.DEPOSIT_TWAP_WINDOW_SEC + 1);
 
         IFeraShare share = IFeraShare(vault.shareToken(id, 0));
         uint256 exemptFloor = FeraConstants.JIT_PENALTY_WINDOW_MEME + FeraConstants.EXEMPT_WITHDRAW_MARGIN_SEC;
@@ -402,6 +407,9 @@ contract JitAndVaultPoCTest is Deployers {
         // Seed so it is not a first deposit.
         vm.prank(honest);
         vault.deposit(id, 0, 200e18, 200e18, 0);
+
+        // OD-24: non-first deposits require the pool to be past the shallow-oracle-history window.
+        vm.warp(block.timestamp + FeraConstants.DEPOSIT_TWAP_WINDOW_SEC + 1);
 
         // indexVault deposits -- arms BOTH its own `lastDepositTs` (the exempt floor's anchor) AND
         // the shared per-band JIT clock (the same bands honest already minted into).
@@ -471,6 +479,8 @@ contract JitAndVaultPoCTest is Deployers {
         // (4) The next depositor still receives FAIR (proportional) shares — the donation neither
         //     inflates the share price nor is it claimable (share value tracks banded liquidity +
         //     pending + reserve, never the raw balance; the 500e18 is stranded, THREAT_MODEL §3).
+        // OD-24: non-first deposits require the pool to be past the shallow-oracle-history window.
+        vm.warp(block.timestamp + FeraConstants.DEPOSIT_TWAP_WINDOW_SEC + 1);
         vm.prank(bob);
         uint256 s2 = vault.deposit(id, 0, 100e18, 100e18, 0);
         assertApproxEqRel(s2, s1, 0.01e18, "donation inflated/deflated the share price (R-12 broken)");

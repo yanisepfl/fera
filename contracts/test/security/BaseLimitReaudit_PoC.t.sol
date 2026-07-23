@@ -359,6 +359,8 @@ contract BaseLimitReauditPoC is Deployers {
         // Deployer seeds the pool first, so alice is a NON-first depositor (no MINIMUM_LIQUIDITY skew).
         vault.deposit(memeId, 0, 2_000e18, 2_000e18, 0);
         _fund(alice, 20_000e18);
+        // OD-24: non-first deposits require the pool to be past the shallow-oracle-history window.
+        vm.warp(block.timestamp + FeraConstants.DEPOSIT_TWAP_WINDOW_SEC + 1);
         vm.prank(alice);
         uint256 aSh = vault.deposit(memeId, 0, depAmt, depAmt, 0);
 

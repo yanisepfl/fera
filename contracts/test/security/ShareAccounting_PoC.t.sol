@@ -150,6 +150,9 @@ contract ShareAccountingPoCTest is Deployers {
         (uint256 pend0, uint256 pend1) = vault.pendingFees(rwaId, 0);
         assertEq(pend0 + pend1, 0, "no fees expected");
 
+        // OD-24: non-first deposits require the pool to be past the shallow-oracle-history window.
+        vm.warp(block.timestamp + FeraConstants.DEPOSIT_TWAP_WINDOW_SEC + 1);
+
         // 3) Attacker deposits while idle reserve > 0 (deposits are not reserve-gated).
         (uint256 a0b, uint256 a1b) = _bal(attacker);
         vm.prank(attacker);
@@ -255,6 +258,9 @@ contract ShareAccountingPoCTest is Deployers {
     function test_SAFE_memeMicroWithdrawRounding_neverProfits() public {
         vm.prank(honest);
         vault.deposit(memeId, 0, 100e18, 100e18, 0);
+
+        // OD-24: non-first deposits require the pool to be past the shallow-oracle-history window.
+        vm.warp(block.timestamp + FeraConstants.DEPOSIT_TWAP_WINDOW_SEC + 1);
 
         (uint256 a0b, uint256 a1b) = _bal(attacker);
         vm.prank(attacker);

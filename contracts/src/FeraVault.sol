@@ -26,6 +26,7 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -306,6 +307,28 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         // Gamma hardening #1: spot-vs-TWAP gate (bounds live in code — see setDepositTwapGate).
         if (_twapDeviationBps(id, FeraConstants.DEPOSIT_TWAP_WINDOW_SEC) > depositTwapGateBps) {
             revert TwapGateExceeded();
+        }
+        // v3.6 FIX (audit finding, open-kritt / OPEN_DECISIONS.md#OD-24): the check above can read
+        // ~0 deviation even under ACTIVE, ARBITRARILY LARGE manipulation when the pool's oracle has
+        // no checkpoint old enough to genuinely span DEPOSIT_TWAP_WINDOW_SEC — `consultTwapTick`'s
+        // `ready` flag only requires >0 seconds of elapsed time, so right after a pool's first-ever
+        // swap the "TWAP" it reports can collapse to whatever tick that very swap just set, and
+        // unlike the NORMAL case (where the deviation is at most `depositTwapGateBps`, code-immutable
+        // [50,500]bps), a degenerate reading places NO bound at all on how far the attacker moved
+        // spot. Not closeable for the pool's OWN first deposit (no market reference exists yet to
+        // check a brand-new pool against — accepted tradeoff, OPEN_DECISIONS.md#OD-21), but every
+        // LATER deposit prices against an EXISTING NAV that deserves the same protection.
+        //
+        // Gated on `p.createdAt` (a DEDICATED timestamp stamped once at pool creation) rather than
+        // the hook's own `oldestObservationAge` — an EARLIER version of this fix used that instead,
+        // and it does NOT reliably measure wall-clock pool age: the pre-first-freeze oracle slot's
+        // timestamp is overwritten by every ordinary swap, and even the FIRST freeze's timestamp is
+        // whenever that freeze-triggering swap happened, not the pool's creation time — so an
+        // ACTIVELY-TRADED pool could trip this gate indefinitely despite being genuinely old, purely
+        // because routine trading kept "refreshing" the oracle-derived age reading. `p.createdAt` is
+        // immune to that: it is set once and never perturbed by swap activity.
+        if (IFeraShare(tranches[id][t].share).totalSupply() != 0) {
+            if (block.timestamp - p.createdAt < FeraConstants.DEPOSIT_TWAP_WINDOW_SEC) revert TwapGateExceeded();
         }
 
         // Pull user funds; the callback settles them to the manager. Leftover refunded.
@@ -635,14 +658,15 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         p.marketOpen = regime == FeraTypes.Regime.MEME;
         p.initialized = true;
         p.trancheCount = 2; // tranche 0 = Steady, tranche 1 = Active (risk choice; INV-15 segregated)
+        p.createdAt = uint64(block.timestamp); // OD-24: deposit gate's shallow-history check
         // v3.1 unified fee-routing config (§9): which side is the liquid quote asset. Immutable
         // post-creation — a pool's token roles never change.
         p.quoteIsToken0 = quoteIsToken0_;
 
         int24 tick = TickMath.getTickAtSqrtPrice(sqrtPriceX96);
         int24 spacing = key.tickSpacing;
-        _initBaseLimitTranche(id, 0, FeraConstants.TIER_STEADY, tick, spacing, name_, symbol_);
-        _initBaseLimitTranche(id, 1, FeraConstants.TIER_ACTIVE, tick, spacing, name_, symbol_);
+        _initBaseLimitTranche(id, 0, FeraConstants.TIER_STEADY, tick, spacing, key, name_, symbol_);
+        _initBaseLimitTranche(id, 1, FeraConstants.TIER_ACTIVE, tick, spacing, key, name_, symbol_);
 
         emit StrategyAction(
             PoolId.unwrap(id), uint8(FeraTypes.StrategyKind.InitialMint), tick, tick, 0, bytes32("base+limit+idle")
@@ -659,12 +683,13 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         uint8 tier,
         int24 tick,
         int24 spacing,
+        PoolKey calldata key,
         string calldata name_,
         string calldata symbol_
     ) internal {
         TrancheState storage tr = tranches[id][t];
         tr.exists = true;
-        tr.share = _cloneShare(id, name_, symbol_, t);
+        tr.share = _cloneShare(id, key, name_, symbol_, t);
         (int24 baseHalf, int24 limitHalf, uint16 idle) = _tierDefaults(tier);
         tierConfig[id][t] = TierConfig({tier: tier, baseHalfTicks: baseHalf, limitHalfTicks: limitHalf, idleBps: idle, set: true});
         int24 effHalf = _effectiveHalfWidth(id, baseHalf);
@@ -1324,15 +1349,39 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
         if (amount != 0) IERC20(Currency.unwrap(c)).safeTransfer(to, amount);
     }
 
-    function _cloneShare(PoolId id, string calldata name_, string calldata symbol_, uint8 t) internal returns (address share) {
+    /// @dev Audit finding (open-kritt / OPEN_DECISIONS.md#OD-22): `name_`/`symbol_` are fully
+    ///      caller-chosen with no validation, letting a permissionless `createBaseLimitPool` caller
+    ///      brand the cloned share tokens with a deceptive, unrelated name (e.g. "USD Coin"). This
+    ///      cannot be fully closed on-chain (nothing stops a caller from ALSO deploying a fake
+    ///      underlying ERC20 with fraudulent metadata) but the far cheaper, far more common attack —
+    ///      slapping an unrelated deceptive label on the FERA WRAPPER itself, regardless of what the
+    ///      real underlying tokens are — is closed by appending the pool's OWN on-chain token symbols
+    ///      (read directly from the currencies, never caller-supplied) so the share's real composition
+    ///      is always visible alongside whatever name the caller chose, in every wallet/explorer.
+    function _cloneShare(PoolId id, PoolKey calldata key, string calldata name_, string calldata symbol_, uint8 t)
+        internal
+        returns (address share)
+    {
         share = Clones.clone(shareImplementation);
+        string memory pair = string.concat(_tokenSymbol(Currency.unwrap(key.currency0)), "/", _tokenSymbol(Currency.unwrap(key.currency1)));
+        string memory fullName = string.concat(name_, " (", pair, ")");
         IFeraShare(share).initialize(
             address(this),
             PoolId.unwrap(id),
             t,
-            t == 0 ? string.concat(name_, " Core") : string.concat(name_, " Anchor"),
+            t == 0 ? string.concat(fullName, " Core") : string.concat(fullName, " Anchor"),
             t == 0 ? string.concat(symbol_, "-C") : string.concat(symbol_, "-A")
         );
+    }
+
+    /// @dev Best-effort ERC-20 `symbol()` read for `_cloneShare`'s anti-impersonation suffix — MUST
+    ///      NEVER revert `createBaseLimitPool` over a nonstandard/missing-metadata token.
+    function _tokenSymbol(address token) internal view returns (string memory) {
+        try IERC20Metadata(token).symbol() returns (string memory s) {
+            return bytes(s).length == 0 ? "TKN" : s;
+        } catch {
+            return "TKN";
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════════════

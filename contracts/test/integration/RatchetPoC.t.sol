@@ -11,6 +11,7 @@ import {IFeraHook} from "../../src/interfaces/IFeraHook.sol";
 import {IRevenueDistributor} from "../../src/interfaces/IRevenueDistributor.sol";
 import {IAnchorStaking} from "../../src/interfaces/IAnchorStaking.sol";
 import {FeraTypes} from "../../src/libraries/FeraTypes.sol";
+import {FeraConstants} from "../../src/libraries/FeraConstants.sol";
 
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
@@ -102,6 +103,9 @@ contract RatchetPoCTest is Deployers {
         uint256 hIn0 = h0Before - h0Mid;
         uint256 hIn1 = h1Before - h1Mid;
 
+        // OD-24: non-first deposits require the pool to be past the shallow-oracle-history window.
+        vm.warp(block.timestamp + FeraConstants.DEPOSIT_TWAP_WINDOW_SEC + 1);
+
         (uint256 a0Before, uint256 a1Before) = _bal(attacker);
         vm.prank(attacker);
         uint256 aShares = vault.deposit(id, 0, 10e18, 10e18, 0);
@@ -156,6 +160,9 @@ contract RatchetPoCTest is Deployers {
 
         vm.prank(honest);
         vault.deposit(id, 0, 100e18, 100e18, 0);
+
+        // OD-24: non-first deposits require the pool to be past the shallow-oracle-history window.
+        vm.warp(block.timestamp + FeraConstants.DEPOSIT_TWAP_WINDOW_SEC + 1);
 
         (uint256 a0Before, uint256 a1Before) = _bal(attacker);
         vm.prank(attacker);

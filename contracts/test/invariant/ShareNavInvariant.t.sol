@@ -159,6 +159,9 @@ contract ShareNavInvariantTest is Deployers {
         vault.configureTier(rwaId, 0, FeraConstants.TIER_STEADY, idleBps);
         vault.skimIdle(rwaId, 0);
 
+        // OD-24: non-first deposits require the pool to be past the shallow-oracle-history window.
+        vm.warp(block.timestamp + FeraConstants.DEPOSIT_TWAP_WINDOW_SEC + 1);
+
         // Foreign deposit into the SAME tranche while reserve > 0, then a clean round-trip exit.
         (uint256 fShares, uint256 fIn) = _deposit(foreign, rwaId, depAmt, depAmt);
         vm.warp(block.timestamp + COOLDOWN);
@@ -179,6 +182,9 @@ contract ShareNavInvariantTest is Deployers {
         // Park the max idle fraction into reserve (maximum standing NAV outside the bands).
         vault.configureTier(rwaId, 0, FeraConstants.TIER_STEADY, FeraConstants.IDLE_BPS_MAX);
         vault.skimIdle(rwaId, 0);
+
+        // OD-24: non-first deposits require the pool to be past the shallow-oracle-history window.
+        vm.warp(block.timestamp + FeraConstants.DEPOSIT_TWAP_WINDOW_SEC + 1);
 
         // Foreign deposits + exits (fair, no fees). This must not transfer value away from honest.
         (uint256 fShares, uint256 fIn) = _deposit(foreign, rwaId, depAmt, depAmt);
