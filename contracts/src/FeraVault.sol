@@ -753,11 +753,28 @@ contract FeraVault is IFeraVault, IUnlockCallback, Ownable, ReentrancyGuard {
     ///      price move that caused it, and a same-block TWAP requirement would silently delay
     ///      detection of GENUINE breaches by however long the TWAP takes to catch up — a real
     ///      regression to normal operation for a griefing-only, already-bounded gap (see OD-14).
+    /// @dev STALE-ARM RESET (founder follow-up, OD-14): a spot-only arm that NEVER gets
+    ///      TWAP-confirmed (a one-off flicker whose in-range window nobody happened to poke during)
+    ///      would otherwise sit armed indefinitely — its accrued dwell time could then be spent
+    ///      instantly by a LATER, unrelated, genuinely-TWAP-confirmed breach, bypassing the
+    ///      anti-whipsaw dwell for that new breach entirely. If `oorSince` has stood for more than
+    ///      `OOR_ARM_TWAP_DEADLINE_SEC` (1h — 2x the TWAP window itself) with STILL no TWAP
+    ///      confirmation, treat it as stale and restart the clock from now, so a fresh breach must
+    ///      accrue its OWN dwell time. A real, sustained move that simply takes a while to get
+    ///      TWAP-confirmed still has ample room (1h vs. the 30-min TWAP window) before this fires.
     function pokeOutOfRange(PoolId id, uint8 t) public knownTranche(id, t) returns (bool oor) {
         _requireBaseLimit(id, t);
         oor = _baseOutOfRange(id, t);
         if (oor) {
-            if (oorSince[id][t] == 0) oorSince[id][t] = uint64(block.timestamp);
+            uint64 since = oorSince[id][t];
+            if (since == 0) {
+                oorSince[id][t] = uint64(block.timestamp);
+            } else if (
+                block.timestamp - since > FeraConstants.OOR_ARM_TWAP_DEADLINE_SEC
+                    && !VaultMath.twapConfirmsOor(tranches[id][t], _vaultCtx(id, t))
+            ) {
+                oorSince[id][t] = uint64(block.timestamp);
+            }
         } else if (VaultMath.twapConfirmsRecovery(tranches[id][t], _vaultCtx(id, t))) {
             oorSince[id][t] = 0;
         }

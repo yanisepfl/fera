@@ -229,4 +229,64 @@ contract PermissionlessRebalancePoC is Deployers {
         assertEq(vault.outOfRangeSince(memeId, 1), 0, "OOR cleared by a SUCCESSFUL recenter");
     }
 
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    // FINDING 3 — CLOSED (founder follow-up to OD-14, 2026-07-24): a spot-only arm that NEVER gets
+    // TWAP-confirmed (a flicker whose brief in-range window nobody happened to poke during — poke
+    // is permissionless but not guaranteed to run every block) sat armed INDEFINITELY. Its accrued
+    // dwell time could then be spent by a LATER, entirely unrelated, genuine breach: the FIRST poke
+    // on that new breach would see `oorSince != 0` (still the ancient, never-confirmed value) and
+    // leave it untouched, so `rebalanceBase`'s Gate 2 (`block.timestamp - since < dwell`) was
+    // ALREADY satisfied on arrival — the new breach never had to accrue its own dwell at all.
+    // Fixed: `pokeOutOfRange` now resets `oorSince` to `now` if the existing arm has stood longer
+    // than `OOR_ARM_TWAP_DEADLINE_SEC` (1h) with the TWAP STILL not confirming it — so a fresh
+    // breach must accrue its OWN dwell, while a genuinely continuous, already-TWAP-confirmed move
+    // is untouched (the reset only fires when TWAP does NOT confirm, matching the same "only ever
+    // makes the arm effectively conservative" discipline the rest of this function's NatSpec
+    // documents).
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    function test_F3_staleUnconfirmedArm_noLongerGrantsInstantDwellToLaterBreach() public {
+        _seedMeme();
+
+        // Step A: a one-off flicker arms the clock. Same-block push -> TWAP cannot have moved.
+        _pushToTick(2_200);
+        assertTrue(vault.pokeOutOfRange(memeId, 1), "flicker arms the clock");
+        uint64 staleArm = vault.outOfRangeSince(memeId, 1);
+        assertGt(staleArm, 0);
+
+        // Step B: spot recovers on its own. Deliberately do NOT poke here — the realistic gap this
+        // finding is about: poke is permissionless but nothing guarantees it runs during the exact
+        // window spot happens to be back in-range.
+        _pushToTick(0);
+
+        // Step C: a long, quiet stretch passes — nobody pokes, TWAP settles fully in-range (the
+        // original flicker genuinely never persisted). Past the stale-arm deadline.
+        vm.warp(block.timestamp + FeraConstants.OOR_ARM_TWAP_DEADLINE_SEC + 100);
+        _refreshTwap();
+
+        // Step D: a brand-new, GENUINE breach starts, and is poked IMMEDIATELY (realistic keeper
+        // cadence) — well before its OWN 30-min TWAP window could possibly confirm it yet.
+        _pushToTick(2_200);
+        assertTrue(vault.pokeOutOfRange(memeId, 1), "new breach arms/re-arms");
+        uint64 newArm = vault.outOfRangeSince(memeId, 1);
+
+        // FIXED: the stale, never-confirmed arm was reset — the new breach starts its OWN clock
+        // rather than inheriting the ancient timestamp (which would have trivially satisfied Gate 2
+        // on arrival, since `block.timestamp - staleArm` already vastly exceeds the dwell).
+        assertGt(newArm, staleArm, "stale unconfirmed arm was reset, not reused");
+        assertEq(newArm, block.timestamp, "fresh breach armed at NOW, not backdated");
+
+        // Gate 2 (dwell) correctly blocks the fresh breach immediately — it has not had time to
+        // accrue dwell of its own yet, unlike the old (bugged) behavior where the ancient
+        // `staleArm` would have already satisfied Gate 2 on this very first poke.
+        vm.expectRevert(IFeraVault.OorNotPersistent.selector);
+        vault.rebalanceBase(memeId, 1, false);
+
+        // And once the FRESH arm's own dwell elapses + its own TWAP confirms, the honest recenter
+        // still succeeds exactly as normal — the fix only removes the illegitimate shortcut.
+        vm.warp(uint256(newArm) + FeraConstants.MEME_OOR_DWELL_SEC + 100);
+        _refreshTwap();
+        vault.rebalanceBase(memeId, 1, false);
+        assertEq(vault.outOfRangeSince(memeId, 1), 0, "OOR cleared by a SUCCESSFUL recenter");
+    }
+
 }

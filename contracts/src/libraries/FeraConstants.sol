@@ -441,6 +441,14 @@ library FeraConstants {
     uint32 internal constant REBALANCE_TWAP_WINDOW_SEC = 1_800; // 30 min
     uint256 internal constant REBALANCE_TWAP_SANITY_BPS = 500; // ±5% spot-vs-TWAP
 
+    /// @notice `pokeOutOfRange` stale-arm deadline (founder request, OD-14 follow-up): if `oorSince`
+    ///         has been armed this long with the TWAP STILL not confirming the breach, the arm is
+    ///         treated as a stale, unconfirmed spot flicker and reset — so a later, genuinely
+    ///         TWAP-confirmed breach can't instantly spend dwell credit accrued by an unrelated,
+    ///         never-confirmed earlier spike. 2x REBALANCE_TWAP_WINDOW_SEC: ample time for a real,
+    ///         sustained move to get TWAP-confirmed before this kicks in.
+    uint32 internal constant OOR_ARM_TWAP_DEADLINE_SEC = 3_600; // 1h
+
     /// @notice Hard max-SLIPPAGE bound on ANY rebalancing token-ratio swap — whether executed as a
     ///         self-swap against the vault's OWN v4 pool or routed through a whitelisted external
     ///         venue. Executed output MUST be ≥ (1 − this) × the pool-TWAP-implied output, else the

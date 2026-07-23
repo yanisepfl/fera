@@ -217,6 +217,25 @@ library VaultMath {
         return twapTick >= b.tickLower && twapTick < b.tickUpper;
     }
 
+    /// @dev Passive (non-reverting) sibling of `requireTwapConfirmedOor`'s core condition — used by
+    ///      `pokeOutOfRange`'s stale-arm reset (OD-14 follow-up, founder request): if `oorSince` has
+    ///      been armed for longer than `OOR_ARM_TWAP_DEADLINE_SEC` and the TWAP STILL hasn't
+    ///      confirmed the breach, the arm is almost certainly stale (a one-off spot flicker that
+    ///      nobody happened to poke back down while spot was briefly in-range) rather than evidence
+    ///      of a persistent move — a LATER, genuinely-TWAP-confirmed breach should not get to spend
+    ///      that stale dwell credit instantly. Deliberately skips the staleness/sanity REVERTS
+    ///      `requireTwapConfirmedOor` has (those gate a fund-moving action; this only informs a
+    ///      passive timer reset) — an unready or stale TWAP reads as "not confirmed" here, which is
+    ///      the conservative (reset-inclined) direction.
+    function twapConfirmsOor(TrancheState storage tr, VaultOps.Ctx memory c) public view returns (bool) {
+        (int24 twapTick, bool ready) = _consultTwap(c, FeraConstants.REBALANCE_TWAP_WINDOW_SEC);
+        if (!ready) return false;
+        (uint32 ageSec, bool has) = c.hook.twapObservationAge(c.id);
+        if (has && ageSec > FeraConstants.TWAP_MAX_STALENESS_SEC) return false;
+        Band storage b = tr.bands[_baseIndex(tr)];
+        return twapTick < b.tickLower || twapTick >= b.tickUpper;
+    }
+
     // ── TWAP / oracle ───────────────────────────────────────────────────────────────────────
 
     /// @dev Read the hook TWAP behind a try/catch — a revert degrades to `ready=false` (fail-safe).
