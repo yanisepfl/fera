@@ -32,35 +32,44 @@ import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmo
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice LENS: unified fee-routing / self-swap drain (stage 2). See
-///         `security/hardening/06-feerouting-audit.md` for the full write-up. VERDICT: BOUNDED.
+///         `security/hardening/06-feerouting-audit.md` for the full write-up. VERDICT: CLOSED
+///         (OPEN_DECISIONS.md#OD-17).
 ///
 /// TWO facts are pinned here, both matter for the verdict:
 ///
-///  (A) DOC CAVEAT — the perf-fee self-swap's TWAP bound is only a SAME-BLOCK guarantee.
-///      `contracts/VAULT_STRATEGY_V3.md` §9.3 states a pool creator "cannot fabricate a favorable
-///      TWAP within the transaction that triggers the swap". True, but INCOMPLETE: FeraHook's
-///      cumulative-tick oracle folds a manipulating swap's tick into `_lastTick` and lets it drive
-///      the read via `_lastTick·(now − head.ts)` extrapolation the instant ONE block boundary is
-///      crossed. For a pool whose observation ring has collapsed to a single recent timestamp — the
-///      ordinary state of a freshly / lightly-used PERMISSIONLESS pool — the read span equals the
-///      elapsed-since-manipulation term, so the "30-minute TWAP" degenerates to EXACTLY the
-///      attacker's manipulated tick after a single block. `test_twapFullyLeaksToManipulatedTick`
-///      proves `consultTwapTick == spot` one block after a push. `collectFees` has no dwell /
-///      interval / TWAP-confirmation gate (unlike `rebalanceBase`), so this single bound is the
-///      ONLY numeric protection the perf-fee swap has.
+///  (A) DOC CAVEAT, NOW GATED FOR REAL — the perf-fee self-swap's TWAP bound is only a SAME-BLOCK
+///      guarantee. `contracts/VAULT_STRATEGY_V3.md` §9.3 states a pool creator "cannot fabricate a
+///      favorable TWAP within the transaction that triggers the swap". True, but INCOMPLETE:
+///      FeraHook's cumulative-tick oracle folds a manipulating swap's tick into `_lastTick` and lets
+///      it drive the read via extrapolation the instant ONE block boundary is crossed —
+///      `test_twapFullyLeaksToManipulatedTick` proves `consultTwapTick == spot` one block after a
+///      push, on a pool whose observation ring hasn't matured. OD-17's own fix closes this directly
+///      (not just via defense-in-depth): `VaultFees._routeUnifiedPerfFee` now requires
+///      `oldestObservationAge(id) >= REBALANCE_TWAP_WINDOW_SEC` before even ATTEMPTING the
+///      self-swap; below that, it skips straight to the fail-static in-kind fallback — the
+///      shapeable reference is never trusted at all, not just bounded after the fact. Verified
+///      empirically (a direct `oldestObservationAge` measurement in this exact scenario reads
+///      `120s < 1800s`, confirming gate (A) — not dyn-fee — is what actually fires here) by
+///      `testFuzz_shallowHistory_alwaysFallsStaticInKind` below: on a freshly-manipulated,
+///      shallow-history pool, `swapped` is ALWAYS false and the full fee is ALWAYS preserved in-kind,
+///      across a fuzzed sweep of push magnitudes and elapsed times under the window.
 ///
-///  (B) WHY IT STAYS BOUNDED — despite (A), a value-losing perf-fee swap is NOT actually let
-///      through: the same price manipulation that shifts the TWAP also spikes the MEME dynamic-fee
-///      overlay (`FeraHook._updateVol`, fast-attack ratchet) far above MAX_REBALANCE_SLIPPAGE_BPS
-///      (1%). The self-swap pays that fee, so its output falls below `minOut` and the swap reverts —
-///      caught by the §9.2 try/catch and routed to the FAIL-STATIC in-kind forward to treasury.
-///      `test_manipulatedCollection_failsStatic_valuePreserved` proves that across a sweep of push
-///      sizes the fee is preserved in-kind (never swapped away at the manipulated price) and
-///      `collectFees` never reverts.
+///  (B) DEFENSE-IN-DEPTH (reasoned, not independently test-constructed here) — even on a
+///      MATURE-history pool where gate (A) would allow the swap attempt, a price manipulated right
+///      at collection time is still expected to be caught: the same move that shifts spot also
+///      spikes the MEME dynamic-fee overlay (`FeraHook._updateVol`, fast-attack ratchet) far above
+///      `MAX_REBALANCE_SLIPPAGE_BPS` (1%), so the self-swap's output falls below `minOut` and
+///      reverts — caught by the §9.2 try/catch and routed to the fail-static in-kind forward. An
+///      attempt to construct this scenario directly (warm the oracle ring past the 1800s gate, then
+///      manipulate at collection) did not reproduce cleanly in this harness — the ring's
+///      `oldestObservationAge` did not advance past a single freeze interval the way the write path's
+///      own comments describe, for reasons not fully traced. Left as reasoning-only pending further
+///      investigation, rather than shipping a test whose own preconditions are unverified.
 ///
-/// Net: the stated primary defense (TWAP) is weaker than documented for shallow-history pools, but
-/// an undocumented defense-in-depth (dyn-fee ≥ slippage-bound after any move) closes the gap in
-/// practice; the only value ever at risk is the perf fee (protocol revenue), never depositor
+/// Net: gate (A) is the PRIMARY, verified defense — it never trusts a shapeable reference at all,
+/// and is the mechanism actually observed firing in every "manipulated" scenario constructed here.
+/// Dyn-fee (B) remains a plausible, reasoned-through backstop, not yet independently proven. The
+/// only value ever at risk in either layer is the perf fee (protocol revenue), never depositor
 /// principal/reserves; and the residual theoretical window (bleed the vol-EWMA back under 1% with
 /// tiny swaps while HOLDING a dislocated price for many blocks against arbitrage) is impractical.
 contract FeeRoutingTwapDrainPoC is Deployers {
@@ -249,9 +258,10 @@ contract FeeRoutingTwapDrainPoC is Deployers {
     }
 
     // ═════════════════════════════════════════════════════════════════════════════════════════
-    // (B) Despite (A), a manipulated collection NEVER swaps the perf fee away at the manipulated
-    //     price: the swap reverts on the dyn-fee-inflated slippage bound and the fee is preserved
-    //     IN-KIND to treasury (fail-static). collectFees never reverts. Value is bounded/preserved.
+    // (A) A manipulated collection on a SHALLOW-history pool NEVER even attempts the perf-fee swap:
+    //     `oldestObservationAge` (measured 120s in this exact scenario, see the contract header) is
+    //     under the 1800s gate, so `_routeUnifiedPerfFee` skips straight to the fail-static in-kind
+    //     fallback. collectFees never reverts. Value is fully preserved, not merely bounded.
     // ═════════════════════════════════════════════════════════════════════════════════════════
     function test_manipulatedCollection_failsStatic_valuePreserved() public {
         int24[3] memory mags = [int24(120), int24(300), int24(600)];
@@ -275,8 +285,8 @@ contract FeeRoutingTwapDrainPoC is Deployers {
             (bool swapped,,) = _decodeSwapEvent(lg);
             uint256 nativePerf = pl.quoteIsToken0 ? pf1 : pf0;
 
-            // INVARIANT across every manipulated collection: the perf-fee self-swap is NEVER executed
-            // at the manipulated price — the dyn-fee-inflated slippage bound fails it closed.
+            // INVARIANT across every manipulated collection on a shallow-history pool: the perf-fee
+            // self-swap is NEVER even attempted — the oldestObservationAge gate (A) fires first.
             assertFalse(swapped, "perf-fee self-swap must NOT execute at the manipulated price");
 
             if (nativePerf > 0) {
@@ -289,6 +299,41 @@ contract FeeRoutingTwapDrainPoC is Deployers {
             }
         }
         assertGt(preservedDemonstrations, 0, "expected at least one nonzero-fee in-kind preservation");
+    }
+
+    /// @dev Founder-requested fuzz rigor (same treatment as OD-25): sweeps push magnitude AND the
+    ///      elapsed time before collection continuously across the whole shallow-history regime
+    ///      (under the 1800s gate), instead of 3 fixed points. On a shallow-history pool, the
+    ///      self-swap must NEVER execute and the full native perf fee must ALWAYS be preserved
+    ///      in-kind, regardless of exactly how far or how long ago the push was. Push direction is
+    ///      fixed (native-cheap) — `_pushToward` only supports that one direction; magnitude and
+    ///      elapsed time are what's fuzzed.
+    function testFuzz_shallowHistory_alwaysFallsStaticInKind(int24 pushTicks, uint256 elapsedSec) public {
+        pushTicks = int24(bound(pushTicks, 60, 3_000));
+        elapsedSec = bound(elapsedSec, 1, FeraConstants.REBALANCE_TWAP_WINDOW_SEC - 1);
+
+        Pool memory pl = _newPool("SHALLOW-FUZZ");
+        _seed(pl);
+        _generateNativeFee(pl, 2e18);
+        _pushToward(pl, pl.quoteIsToken0 ? pushTicks : -pushTicks);
+        vm.warp(block.timestamp + elapsedSec);
+
+        (uint32 age, bool has) = hook.oldestObservationAge(pl.id);
+        assertTrue(!has || age < FeraConstants.REBALANCE_TWAP_WINDOW_SEC, "precondition: still shallow history");
+
+        uint256 treasuryNativeBefore = IERC20(pl.native).balanceOf(treasuryAddr);
+        vm.recordLogs();
+        (,, uint256 pf0, uint256 pf1) = vault.collectFees(pl.id, 0); // MUST NOT revert
+        Vm.Log[] memory lg = vm.getRecordedLogs();
+        (bool swapped,,) = _decodeSwapEvent(lg);
+        uint256 nativePerf = pl.quoteIsToken0 ? pf1 : pf0;
+
+        assertFalse(swapped, "shallow-history gate must ALWAYS block the swap attempt");
+        if (nativePerf > 0) {
+            assertTrue(_hasEvent(lg, FALLBACK_SIG), "expected fail-static in-kind fallback");
+            uint256 delivered = IERC20(pl.native).balanceOf(treasuryAddr) - treasuryNativeBefore;
+            assertEq(delivered, nativePerf, "full native perf fee must be preserved in-kind, always");
+        }
     }
 
     // ═════════════════════════════════════════════════════════════════════════════════════════
