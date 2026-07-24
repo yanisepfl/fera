@@ -150,8 +150,15 @@ contract VaultHardeningV3Test is Deployers {
 
         // A few more post-boundary observations so the read differences two (post-wrap) cumulatives —
         // exercises the `cumNow - anchorCum` wrapping delta directly. None may revert.
+        // NB: an identical `vm.warp(block.timestamp + K)` expression repeated verbatim across loop
+        // iterations gets CSE'd by this repo's extreme optimizer_runs — the compiler treats the
+        // TIMESTAMP read as loop-invariant (true for a real transaction, false for vm.warp's cheat),
+        // so every iteration after the first computes the SAME target instead of advancing further.
+        // Track time explicitly instead of re-reading block.timestamp at the same call site.
+        uint256 ts = block.timestamp;
         for (uint256 i; i < 4; ++i) {
-            vm.warp(block.timestamp + 100);
+            ts += 100;
+            vm.warp(ts);
             swap(memeKey, i % 2 == 0, -1e15, "");
             (tw, ready) = hook.consultTwapTick(memeId, FeraConstants.REBALANCE_TWAP_WINDOW_SEC);
         }
@@ -221,9 +228,15 @@ contract VaultHardeningV3Test is Deployers {
 
         uint256 recenters;
         int24 target = 2_000;
+        // NB: an identical `vm.warp(block.timestamp + K)` expression repeated verbatim across loop
+        // iterations gets CSE'd by this repo's extreme optimizer_runs — every iteration after the
+        // first was computing the SAME target instead of advancing, so this loop was silently
+        // simulating far less than the claimed 24h real span. Track time explicitly instead.
+        uint256 ts = block.timestamp;
         for (uint256 i; i < 48; ++i) {
             // 48 * 30min = 24h. Escalate the trend each step so the base is repeatedly challenged.
-            vm.warp(block.timestamp + 1_800);
+            ts += 1_800;
+            vm.warp(ts);
             target += 600;
             _pushToTick(memeKey, target);
             swap(memeKey, true, -1e14, ""); // keep the TWAP head fresh

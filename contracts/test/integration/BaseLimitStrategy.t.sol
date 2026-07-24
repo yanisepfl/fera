@@ -522,6 +522,12 @@ contract BaseLimitStrategyTest is Deployers {
 
         uint256 fIn;
         uint256 fOut;
+        // Track elapsed time explicitly rather than re-reading `block.timestamp` at these two call
+        // sites — an identical `vm.warp(block.timestamp + K)` expression hit more than once across
+        // loop iterations (both branches are revisitable, since `op` is fuzzed) can get CSE'd under
+        // this repo's extreme optimizer_runs, silently freezing time instead of advancing it after
+        // the first hit (confirmed, isolated repro: VaultHardeningV3_PoC.t.sol).
+        uint256 ts = block.timestamp;
         for (uint256 i; i < seeds.length; ++i) {
             uint256 op = seeds[i] % 4;
             if (op == 0) {
@@ -534,10 +540,12 @@ contract BaseLimitStrategyTest is Deployers {
             } else if (op == 1) {
                 try vault.skimIdle(memeId, 1) {} catch {}
             } else if (op == 2) {
-                vm.warp(block.timestamp + FeraConstants.MEME_MIN_REBALANCE_INTERVAL_SEC + 1);
+                ts += FeraConstants.MEME_MIN_REBALANCE_INTERVAL_SEC + 1;
+                vm.warp(ts);
                 try vault.rebalanceLimit(memeId, 1) {} catch {}
             } else {
-                vm.warp(block.timestamp + COOLDOWN + 1);
+                ts += COOLDOWN + 1;
+                vm.warp(ts);
                 uint256 fb = IERC20(vault.shareToken(memeId, 1)).balanceOf(fon);
                 if (fb != 0) {
                     (uint256 fbb0, uint256 fbb1) = _bal(fon);
@@ -550,7 +558,8 @@ contract BaseLimitStrategyTest is Deployers {
             }
         }
 
-        vm.warp(block.timestamp + COOLDOWN + 1);
+        ts += COOLDOWN + 1;
+        vm.warp(ts);
         (uint256 rs0, uint256 rs1) = _bal(ref);
         vm.prank(ref);
         vault.withdraw(memeId, 1, sh, 0, 0);

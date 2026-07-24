@@ -54,24 +54,28 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 ///      shallow-history pool, `swapped` is ALWAYS false and the full fee is ALWAYS preserved in-kind,
 ///      across a fuzzed sweep of push magnitudes and elapsed times under the window.
 ///
-///  (B) DEFENSE-IN-DEPTH (reasoned, not independently test-constructed here) — even on a
-///      MATURE-history pool where gate (A) would allow the swap attempt, a price manipulated right
-///      at collection time is still expected to be caught: the same move that shifts spot also
-///      spikes the MEME dynamic-fee overlay (`FeraHook._updateVol`, fast-attack ratchet) far above
-///      `MAX_REBALANCE_SLIPPAGE_BPS` (1%), so the self-swap's output falls below `minOut` and
-///      reverts — caught by the §9.2 try/catch and routed to the fail-static in-kind forward. An
-///      attempt to construct this scenario directly (warm the oracle ring past the 1800s gate, then
-///      manipulate at collection) did not reproduce cleanly in this harness — the ring's
-///      `oldestObservationAge` did not advance past a single freeze interval the way the write path's
-///      own comments describe, for reasons not fully traced. Left as reasoning-only pending further
-///      investigation, rather than shipping a test whose own preconditions are unverified.
+///  (B) DEFENSE-IN-DEPTH, SEPARATELY VERIFIED — even on a MATURE-history pool where gate (A) would
+///      allow the swap attempt, a price manipulated right at collection time is still caught: the
+///      same move that shifts spot also spikes the MEME dynamic-fee overlay (`FeraHook._updateVol`,
+///      fast-attack ratchet) far above `MAX_REBALANCE_SLIPPAGE_BPS` (1%), so the self-swap's output
+///      falls below `minOut` and reverts — caught by the §9.2 try/catch and routed to the
+///      fail-static in-kind forward. Constructing this scenario directly (warm the oracle ring past
+///      the 1800s gate, then manipulate at collection) initially failed to reproduce: an identical
+///      `vm.warp(block.timestamp + K)` expression repeated verbatim across a warm-up loop's
+///      iterations gets CSE'd by this repo's extreme `optimizer_runs` — the compiler treats the
+///      TIMESTAMP read as loop-invariant (true for a real transaction, false for vm.warp's cheat),
+///      so every iteration after the first computed the SAME target instead of advancing, silently
+///      freezing the ring's warm-up. Fixed by tracking elapsed time in an explicit local variable
+///      instead of re-reading `block.timestamp` at the same call site — confirmed via an isolated
+///      minimal repro before being applied here. Now proven by
+///      `test_matureHistory_manipulatedAtCollection_stillFailsStatic`.
 ///
-/// Net: gate (A) is the PRIMARY, verified defense — it never trusts a shapeable reference at all,
-/// and is the mechanism actually observed firing in every "manipulated" scenario constructed here.
-/// Dyn-fee (B) remains a plausible, reasoned-through backstop, not yet independently proven. The
-/// only value ever at risk in either layer is the perf fee (protocol revenue), never depositor
-/// principal/reserves; and the residual theoretical window (bleed the vol-EWMA back under 1% with
-/// tiny swaps while HOLDING a dislocated price for many blocks against arbitrage) is impractical.
+/// Net: TWO independent, verified layers — gate (A) is the primary defense (never trusts a
+/// shapeable reference at all), dyn-fee (B) is a genuine, separately-triggerable backstop for the
+/// case gate (A) doesn't cover. The only value ever at risk in either layer is the perf fee
+/// (protocol revenue), never depositor principal/reserves; and the residual theoretical window
+/// (bleed the vol-EWMA back under 1% with tiny swaps while HOLDING a dislocated price for many
+/// blocks against arbitrage) is impractical.
 contract FeeRoutingTwapDrainPoC is Deployers {
     using StateLibrary for IPoolManager;
 
@@ -274,7 +278,13 @@ contract FeeRoutingTwapDrainPoC is Deployers {
             // long idle gap before the push (that path trips an UNRELATED hook oracle-math overflow;
             // see the memo's secondary flag).
             _pushToward(pl, pl.quoteIsToken0 ? mags[k] : -mags[k]);
-            vm.warp(block.timestamp + 120);
+            // Defensive: an identical `vm.warp(block.timestamp + K)` repeated verbatim across loop
+            // iterations can get CSE'd under this repo's extreme optimizer_runs (see
+            // VaultHardeningV3_PoC.t.sol for the confirmed, isolated repro). A fresh `pl` each
+            // iteration means this specific loop's correctness doesn't depend on it, but a distinct
+            // local avoids relying on that.
+            uint256 tsK = block.timestamp + 120;
+            vm.warp(tsK);
 
             uint256 treasuryNativeBefore = IERC20(pl.native).balanceOf(treasuryAddr);
 
@@ -333,6 +343,54 @@ contract FeeRoutingTwapDrainPoC is Deployers {
             assertTrue(_hasEvent(lg, FALLBACK_SIG), "expected fail-static in-kind fallback");
             uint256 delivered = IERC20(pl.native).balanceOf(treasuryAddr) - treasuryNativeBefore;
             assertEq(delivered, nativePerf, "full native perf fee must be preserved in-kind, always");
+        }
+    }
+
+    /// @dev Warms the oracle ring with real, spaced-out swaps (respecting TWAP_OBS_SPACING_SEC=90s)
+    ///      until `oldestObservationAge` genuinely exceeds the window — a real history, not the
+    ///      pre-freeze floating head this file's other helpers deliberately stay under. Tracks
+    ///      elapsed time in a local variable rather than repeating `vm.warp(block.timestamp + 100)`
+    ///      verbatim every iteration (see the contract header — that pattern gets CSE'd under this
+    ///      repo's optimizer profile and silently stops advancing after the first iteration).
+    function _matureHistory(Pool memory pl) internal {
+        uint256 ts = block.timestamp;
+        for (uint256 i; i < 22; ++i) {
+            _swap(pl, true, 1e12); // negligible size — builds TIME-based history, not drift
+            ts += 100;
+            vm.warp(ts);
+        }
+    }
+
+    /// @notice Proves defense-in-depth (B) for REAL: a MATURE-history pool (gate (A) allows the
+    ///         swap attempt) manipulated right at collection time is STILL caught — by the
+    ///         dyn-fee-inflated slippage bound, not by gate (A). No pre-existing test constructed
+    ///         this scenario; the two "manipulated" tests above both hit gate (A) first (proven by
+    ///         direct oldestObservationAge measurement, see contract header).
+    function test_matureHistory_manipulatedAtCollection_stillFailsStatic() public {
+        Pool memory pl = _newPool("MATURE-MANIP");
+        _seed(pl);
+        _matureHistory(pl);
+        _generateNativeFee(pl, 2e18);
+
+        (uint32 age, bool has) = hook.oldestObservationAge(pl.id);
+        assertTrue(has && age >= FeraConstants.REBALANCE_TWAP_WINDOW_SEC, "precondition: history must be genuinely mature");
+
+        // NOW manipulate, same block, and collect immediately — gate (A) is satisfied (mature
+        // history), so this exercises the SEPARATE dyn-fee defense (B), not the gate.
+        _pushToward(pl, pl.quoteIsToken0 ? int24(600) : int24(-600));
+
+        uint256 treasuryNativeBefore = IERC20(pl.native).balanceOf(treasuryAddr);
+        vm.recordLogs();
+        (,, uint256 pf0, uint256 pf1) = vault.collectFees(pl.id, 0); // MUST NOT revert
+        Vm.Log[] memory lg = vm.getRecordedLogs();
+        (bool swapped,,) = _decodeSwapEvent(lg);
+        uint256 nativePerf = pl.quoteIsToken0 ? pf1 : pf0;
+
+        assertFalse(swapped, "dyn-fee defense must block the swap even on a mature-history pool");
+        if (nativePerf > 0) {
+            assertTrue(_hasEvent(lg, FALLBACK_SIG), "expected fail-static in-kind fallback");
+            uint256 delivered = IERC20(pl.native).balanceOf(treasuryAddr) - treasuryNativeBefore;
+            assertEq(delivered, nativePerf, "full native perf fee preserved in-kind (mature-history defense-in-depth)");
         }
     }
 
